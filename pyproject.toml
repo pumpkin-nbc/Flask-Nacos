@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flask-nacos"
+version = "0.1.0"
+description = "A Flask extension for integrating with Nacos service discovery and configuration center."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Pumpkin", email = "a760329881@gmail.com" }
+]
+keywords = [
+  "flask",
+  "nacos",
+  "service-discovery",
+  "configuration",
+  "microservices"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: Flask",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: WSGI",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+  "Flask>=1.0,<4.0",
+  "nacos-sdk-python>=2.0.0,<3.0.0"
+]
+
+[project.optional-dependencies]
+yaml = [
+  "PyYAML>=6.0"
+]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.5.0",
+  "mypy>=1.0",
+  "build>=1.2.0",
+  "twine>=5.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/flask-nacos"
+Repository = "https://github.com/your-org/flask-nacos"
+Issues = "https://github.com/your-org/flask-nacos/issues"
+Changelog = "https://github.com/your-org/flask-nacos/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["flask_nacos"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/flask_nacos",
+  "/tests",
+  "/examples",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["B904"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true

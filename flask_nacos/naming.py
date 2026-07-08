@@ -1,0 +1,138 @@
+"""Service registration, deregistration and discovery helpers.
+
+Each helper operates on a plain ``(client, config)`` pair and raises the
+relevant :mod:`flask_nacos.exceptions` error on failure. Fail-fast versus
+log-only handling is decided by the caller (the extension).
+"""
+
+import logging
+from typing import Any, Dict, List, Optional
+
+from .config import validate_registration_config
+from .exceptions import NacosDiscoveryError, NacosRegistrationError
+from .utils import get_host_ip
+
+logger = logging.getLogger("flask_nacos")
+
+
+def resolve_instance_identity(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the service name/ip/port/group used to identify this instance."""
+    validate_registration_config(config)
+    ip = config.get("NACOS_SERVICE_IP") or get_host_ip()
+    return {
+        "service_name": config["NACOS_SERVICE_NAME"],
+        "ip": ip,
+        "port": int(config["NACOS_SERVICE_PORT"]),
+        "cluster_name": config.get("NACOS_SERVICE_CLUSTER") or "DEFAULT",
+        "group_name": config.get("NACOS_SERVICE_GROUP") or "DEFAULT_GROUP",
+    }
+
+
+def register_instance(client: Any, config: Dict[str, Any]) -> bool:
+    """Register the current service instance with Nacos."""
+    identity = resolve_instance_identity(config)
+    try:
+        client.add_naming_instance(
+            identity["service_name"],
+            identity["ip"],
+            identity["port"],
+            cluster_name=identity["cluster_name"],
+            weight=config.get("NACOS_SERVICE_WEIGHT", 1.0),
+            metadata=config.get("NACOS_SERVICE_METADATA") or {},
+            enable=config.get("NACOS_SERVICE_ENABLED", True),
+            healthy=config.get("NACOS_SERVICE_HEALTHY", True),
+            ephemeral=config.get("NACOS_SERVICE_EPHEMERAL", True),
+            group_name=identity["group_name"],
+        )
+    except Exception as exc:
+        raise NacosRegistrationError(
+            f"Failed to register service instance {identity['service_name']}"
+        ) from exc
+
+    logger.info(
+        "Service registered (service=%s, ip=%s, port=%s, group=%s)",
+        identity["service_name"],
+        identity["ip"],
+        identity["port"],
+        identity["group_name"],
+    )
+    return True
+
+
+def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
+    """Deregister the current service instance from Nacos."""
+    identity = resolve_instance_identity(config)
+    try:
+        client.remove_naming_instance(
+            identity["service_name"],
+            identity["ip"],
+            identity["port"],
+            cluster_name=identity["cluster_name"],
+            ephemeral=config.get("NACOS_SERVICE_EPHEMERAL", True),
+            group_name=identity["group_name"],
+        )
+    except Exception as exc:
+        raise NacosRegistrationError(
+            f"Failed to deregister service instance {identity['service_name']}"
+        ) from exc
+
+    logger.info(
+        "Service deregistered (service=%s, ip=%s, port=%s, group=%s)",
+        identity["service_name"],
+        identity["ip"],
+        identity["port"],
+        identity["group_name"],
+    )
+    return True
+
+
+def list_instances(
+    client: Any,
+    config: Dict[str, Any],
+    service_name: str,
+    group: Optional[str] = None,
+    healthy_only: bool = True,
+) -> List[Dict[str, Any]]:
+    """Return the list of instances for ``service_name``."""
+    group_name = group or config.get("NACOS_GROUP_NAME") or "DEFAULT_GROUP"
+    try:
+        result = client.list_naming_instance(
+            service_name,
+            group_name=group_name,
+            healthy_only=healthy_only,
+        )
+    except Exception as exc:
+        logger.error("Service discovery failed for %s", service_name)
+        raise NacosDiscoveryError(
+            f"Failed to list instances for {service_name}"
+        ) from exc
+
+    if isinstance(result, dict):
+        return list(result.get("hosts", []) or [])
+    if isinstance(result, list):
+        return result
+    return []
+
+
+def get_one_healthy_instance(
+    client: Any,
+    config: Dict[str, Any],
+    service_name: str,
+    group: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Return a single healthy instance for ``service_name`` (or ``None``)."""
+    instances = list_instances(
+        client, config, service_name, group=group, healthy_only=True
+    )
+    if not instances:
+        return None
+    return instances[0]
+
+
+__all__ = [
+    "resolve_instance_identity",
+    "register_instance",
+    "deregister_instance",
+    "list_instances",
+    "get_one_healthy_instance",
+]
