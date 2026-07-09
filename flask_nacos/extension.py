@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from . import config as config_module
-from . import config_center, naming
+from . import config_center, discovery, lifecycle, naming
 from .client import create_client
 from .exceptions import FlaskNacosError
 from .health import register_health_route
@@ -32,6 +32,8 @@ class FlaskNacos:
         self._config: Optional[Dict[str, Any]] = None
         self._registered = False
         self._deregistered = False
+        self._registered_pid: Optional[int] = None
+        self._atexit_registered = False
         if app is not None:
             self.init_app(app)
 
@@ -63,6 +65,7 @@ class FlaskNacos:
         self._client = None
         self._registered = False
         self._deregistered = False
+        self._registered_pid = None
 
         def _maybe_register_health_route() -> None:
             if cfg.get("NACOS_HEALTH_CHECK_ENABLED"):
@@ -96,8 +99,15 @@ class FlaskNacos:
                     "(NACOS_AUTO_REGISTER_ON_INIT=False)"
                 )
 
-        if cfg["NACOS_AUTO_DEREGISTER"]:
+        if cfg["NACOS_AUTO_DEREGISTER"] and cfg.get("NACOS_DEREGISTER_ON_EXIT", True):
             self._register_atexit()
+        else:
+            logger.info(
+                "atexit auto-deregister disabled by configuration "
+                "(NACOS_AUTO_DEREGISTER=%s, NACOS_DEREGISTER_ON_EXIT=%s)",
+                cfg["NACOS_AUTO_DEREGISTER"],
+                cfg.get("NACOS_DEREGISTER_ON_EXIT", True),
+            )
 
     def _configure_logging(self, cfg: Dict[str, Any]) -> None:
         level_name = str(cfg.get("NACOS_LOG_LEVEL") or "INFO").upper()
@@ -117,14 +127,19 @@ class FlaskNacos:
             logger.debug("Nacos client init error suppressed: %s", exc)
             return None
 
-    def _register_atexit(self) -> None:
-        def _deregister_on_exit() -> None:
-            try:
-                self.deregister_instance()
-            except Exception:  # pragma: no cover - best effort on shutdown
-                logger.warning("Failed to deregister service instance on exit")
+    def _atexit_handler(self) -> None:
+        try:
+            self.deregister_instance()
+        except Exception:  # pragma: no cover - best effort on shutdown
+            logger.warning("Failed to deregister service instance on exit")
 
-        atexit.register(_deregister_on_exit)
+    def _register_atexit(self) -> None:
+        if self._atexit_registered:
+            logger.info("atexit deregister handler already registered; skipping")
+            return
+        atexit.register(self._atexit_handler)
+        self._atexit_registered = True
+        logger.info("atexit deregister handler registered")
 
     # -- Public API ---------------------------------------------------------
 
@@ -133,12 +148,38 @@ class FlaskNacos:
         return self._client
 
     def register_instance(self) -> bool:
-        """Register the current service instance with Nacos (idempotent)."""
+        """Register the current service instance with Nacos.
+
+        Registration is idempotent per process: when
+        ``NACOS_REGISTER_ONCE_PER_PROCESS`` is enabled, a repeated call from the
+        same process is skipped. A changed process id (e.g. a forked
+        Gunicorn/uWSGI worker) is allowed to register its own instance.
+        """
         client, cfg = self._require_client()
-        if self._registered:
-            logger.info("Service instance already registered; skipping re-registration")
+        current = lifecycle.current_pid()
+
+        if lifecycle.should_skip_register(
+            self._registered,
+            self._registered_pid,
+            current,
+            cfg.get("NACOS_REGISTER_ONCE_PER_PROCESS", True),
+        ):
+            logger.info(
+                "Service instance already registered in process %s; "
+                "skipping re-registration",
+                current,
+            )
             return True
 
+        if self._registered and self._registered_pid != current:
+            logger.info(
+                "Process id changed (registered_pid=%s, current_pid=%s); "
+                "re-registering service instance",
+                self._registered_pid,
+                current,
+            )
+
+        logger.info("Process %s registering service instance", current)
         result = self._safe(
             lambda: naming.register_instance(client, cfg),
             cfg,
@@ -147,16 +188,30 @@ class FlaskNacos:
         )
         if result:
             self._registered = True
+            self._registered_pid = current
             self._deregistered = False
+            logger.info("Process %s registered service instance", current)
             return True
         return False
 
     def deregister_instance(self) -> bool:
-        """Deregister the current service instance from Nacos (idempotent)."""
+        """Deregister the current service instance from Nacos.
+
+        Only the instance registered by the current process is deregistered: if
+        the recorded registration pid differs from the current process, the call
+        is logged and skipped so another process's instance is not affected.
+        """
         client, cfg = self._require_client()
+        current = lifecycle.current_pid()
+
         if self._deregistered:
             logger.info("Service instance already deregistered; skipping")
             return True
+
+        skip, reason = lifecycle.should_skip_deregister(self._registered_pid, current)
+        if skip:
+            logger.info("Skipping deregistration: %s", reason)
+            return False
 
         result = self._safe(
             lambda: naming.deregister_instance(client, cfg),
@@ -166,6 +221,7 @@ class FlaskNacos:
         )
         if result:
             self._registered = False
+            self._registered_pid = None
             self._deregistered = True
             return True
         return False
@@ -175,12 +231,29 @@ class FlaskNacos:
         service_name: str,
         group: Optional[str] = None,
         healthy_only: bool = True,
+        cluster: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Return the list of instances for ``service_name``."""
+        """Return the list of instances for ``service_name``.
+
+        ``cluster`` falls back to ``NACOS_DISCOVERY_CLUSTER`` and ``metadata`` to
+        ``NACOS_DISCOVERY_METADATA`` when not provided.
+        """
         client, cfg = self._require_client()
+        if cluster is None:
+            cluster = cfg.get("NACOS_DISCOVERY_CLUSTER")
+        if not metadata:
+            metadata = cfg.get("NACOS_DISCOVERY_METADATA") or {}
+
         result = self._safe(
             lambda: naming.list_instances(
-                client, cfg, service_name, group=group, healthy_only=healthy_only
+                client,
+                cfg,
+                service_name,
+                group=group,
+                healthy_only=healthy_only,
+                cluster=cluster,
+                metadata=metadata,
             ),
             cfg,
             "Service discovery failed",
@@ -192,15 +265,49 @@ class FlaskNacos:
         self,
         service_name: str,
         group: Optional[str] = None,
+        strategy: Optional[str] = None,
+        cluster: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Return a single healthy instance for ``service_name`` (or ``None``)."""
-        client, cfg = self._require_client()
-        return self._safe(
-            lambda: naming.get_one_healthy_instance(client, cfg, service_name, group=group),
-            cfg,
-            "Service discovery failed",
-            default=None,
+        """Return a single healthy instance for ``service_name`` (or ``None``).
+
+        Selection uses ``strategy`` (falling back to ``NACOS_DISCOVERY_STRATEGY``):
+        ``first``, ``random`` or ``weight``.
+        """
+        cfg = self._config or {}
+        instances = self.list_instances(
+            service_name,
+            group=group,
+            healthy_only=True,
+            cluster=cluster,
+            metadata=metadata,
         )
+        strategy_name = strategy or cfg.get("NACOS_DISCOVERY_STRATEGY", "first")
+        logger.info(
+            "Selecting one healthy instance (service=%s, strategy=%s, candidates=%d)",
+            service_name,
+            strategy_name,
+            len(instances),
+        )
+        return self._safe(
+            lambda: discovery.select_instance(instances, strategy_name),
+            cfg,
+            "Failed to select a healthy instance",
+            default=None,
+            retry=False,
+        )
+
+    def normalize_instance(self, instance: Any) -> Optional[Dict[str, Any]]:
+        """Convert a Nacos SDK instance into a standard dict (or ``None``).
+
+        Never raises: on failure it logs and returns ``None`` so a single bad
+        instance cannot break the caller.
+        """
+        try:
+            return discovery.normalize_instance(instance)
+        except Exception as exc:
+            logger.warning("Instance normalization failed: %s", exc)
+            return None
 
     def get_config(self, data_id: str, group: Optional[str] = None) -> Optional[str]:
         """Fetch the raw content of a config item from Nacos."""
@@ -228,6 +335,16 @@ class FlaskNacos:
             "service_port": cfg.get("NACOS_SERVICE_PORT"),
             "server_addr": cfg.get("NACOS_SERVER_ADDR"),
             "namespace_id": cfg.get("NACOS_NAMESPACE_ID", ""),
+            "current_pid": lifecycle.current_pid(),
+            "registered_pid": self._registered_pid,
+            "register_once_per_process": bool(
+                cfg.get("NACOS_REGISTER_ONCE_PER_PROCESS", True)
+            ),
+            "deregister_on_exit": bool(cfg.get("NACOS_DEREGISTER_ON_EXIT", True)),
+            "discovery_strategy": cfg.get("NACOS_DISCOVERY_STRATEGY", "first"),
+            "instance_normalize": bool(cfg.get("NACOS_INSTANCE_NORMALIZE", True)),
+            "health_check_enabled": bool(cfg.get("NACOS_HEALTH_CHECK_ENABLED", False)),
+            "health_check_path": cfg.get("NACOS_HEALTH_CHECK_PATH", "/health/nacos"),
         }
 
     # -- Internal helpers ---------------------------------------------------

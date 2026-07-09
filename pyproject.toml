@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flask-nacos"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Flask extension for integrating with Nacos service discovery and configuration center."
 readme = "README.md"
 requires-python = ">=3.8"

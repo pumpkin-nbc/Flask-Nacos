@@ -20,6 +20,8 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 - Standard `logging` integration that never logs secrets.
 - Unified retry for Nacos operations, an optional health-check route, and a
   `get_status()` runtime inspector (0.3.0).
+- Per-process registration lifecycle, safe deregistration, instance
+  normalization, and `first`/`random`/`weight` discovery strategies (0.4.0).
 
 ## Installation
 
@@ -144,9 +146,9 @@ instance = nacos.get_one_healthy_instance("user-service")
 - `healthy_only=True` (default) returns only healthy instances; `healthy_only=False`
   returns all instances.
 - An empty result is returned as an empty list (not an error).
-- `get_one_healthy_instance()` currently returns the first healthy instance.
-  Random, round-robin, and weighted load-balancing strategies are planned for a
-  later release.
+- `get_one_healthy_instance()` supports pluggable selection strategies
+  (`first`, `random`, `weight`) and optional cluster/metadata filtering. See
+  "Service Discovery Enhancements (0.4.0)" below.
 
 ## Configuration Center
 
@@ -280,6 +282,152 @@ implicitly at import/init time.
 In production, always set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 `NACOS_SERVICE_PORT` explicitly rather than relying on auto-detection.
 
+## Production Deployment & Service Discovery (0.4.0)
+
+Version 0.4.0 focuses on multi-worker deployment safety and richer service
+discovery: per-process registration lifecycle, safe deregistration, instance
+normalization, discovery filtering, and pluggable selection strategies.
+
+### Multi-worker Registration (Gunicorn / uWSGI)
+
+Under Gunicorn or uWSGI, the master process forks multiple workers and each
+worker runs `init_app`. flask-nacos tracks the process id that performed the
+registration:
+
+- `NACOS_REGISTER_ONCE_PER_PROCESS` (default `True`): within the same process,
+  once `register_instance()` succeeds, repeated calls are skipped. When a worker
+  is forked and the process id changes, the new worker is allowed to register
+  its own instance.
+- On shutdown, `deregister_instance()` only deregisters the instance registered
+  by the current process. If the recorded registration pid differs from the
+  current process (for example the master vs a worker), deregistration is logged
+  and skipped so another process's instance is not removed by mistake.
+
+Gunicorn example (register per worker, deregister on worker exit):
+
+```python
+# wsgi.py
+from myapp import create_app
+
+app = create_app()  # init_app runs here; each forked worker registers itself
+```
+
+```bash
+gunicorn -w 4 wsgi:app
+```
+
+uWSGI behaves the same way; each worker process registers and deregisters its
+own instance. If you prefer to control registration explicitly, set
+`NACOS_AUTO_REGISTER_ON_INIT = False` and call `nacos.register_instance()` from a
+post-fork hook.
+
+### Deregistration on Exit
+
+- `NACOS_DEREGISTER_ON_EXIT` (default `True`): whether an `atexit` handler is
+  registered to deregister on process exit.
+- The `atexit` handler is only registered when both `NACOS_AUTO_DEREGISTER` and
+  `NACOS_DEREGISTER_ON_EXIT` are `True`, and it is registered at most once per
+  extension instance (repeated `init_app(app)` calls do not add duplicates).
+
+### Instance Normalization
+
+- `NACOS_INSTANCE_NORMALIZE` (default `True`): when enabled, `list_instances()`
+  returns a list of standard dicts. When disabled, the raw SDK instances are
+  returned unchanged.
+
+```python
+instance = nacos.normalize_instance(raw_sdk_instance)
+```
+
+The standard dict shape:
+
+```python
+{
+    "ip": "127.0.0.1",
+    "port": 5000,
+    "service_name": "user-service",
+    "cluster_name": "DEFAULT",
+    "weight": 1.0,
+    "healthy": True,
+    "enabled": True,
+    "ephemeral": True,
+    "metadata": {},
+}
+```
+
+`normalize_instance()` accepts dict or attribute-style instances, fills missing
+fields with sensible defaults, and never raises for a single bad instance (it
+logs and returns `None`). During discovery a single instance that fails
+normalization is skipped rather than failing the whole call.
+
+### Discovery Filtering
+
+`list_instances()` accepts optional `cluster` and `metadata` filters:
+
+```python
+nacos.list_instances("user-service", cluster="CANARY")
+nacos.list_instances("user-service", metadata={"version": "v1"})
+```
+
+- `cluster` falls back to `NACOS_DISCOVERY_CLUSTER` when not provided.
+- `metadata` falls back to `NACOS_DISCOVERY_METADATA` when not provided.
+- When `cluster` is set, only instances in that cluster are returned.
+- When `metadata` is set, only instances whose metadata contains all the given
+  key/value pairs are returned.
+- An empty result after filtering is returned as an empty list.
+
+### Selection Strategies
+
+`get_one_healthy_instance()` accepts an optional `strategy` (falling back to
+`NACOS_DISCOVERY_STRATEGY`, default `first`), plus the same `cluster`/`metadata`
+filters:
+
+```python
+# first (default): return the first healthy instance
+nacos.get_one_healthy_instance("user-service", strategy="first")
+
+# random: pick a random healthy instance
+nacos.get_one_healthy_instance("user-service", strategy="random")
+
+# weight: weighted-random selection using each instance's weight
+nacos.get_one_healthy_instance("user-service", strategy="weight")
+```
+
+Currently supported strategies: `first`, `random`, `weight`.
+
+- `first`: returns the first healthy instance.
+- `random`: returns a uniformly random healthy instance.
+- `weight`: weighted-random selection using each instance's `weight` (missing
+  weight defaults to `1.0`; instances with weight `<= 0` are ignored; if all
+  weights are `<= 0` the strategy degrades to `first`).
+- When there are no healthy instances, `None` is returned.
+- An unsupported strategy follows the `NACOS_FAIL_FAST` rule (`None` when
+  `False`, raises when `True`).
+
+### Runtime Status (new fields)
+
+`get_status()` now also reports process and discovery information (still
+secret-free and without calling Nacos):
+
+```python
+{
+    # ... existing fields ...
+    "current_pid": 12345,
+    "registered_pid": 12345,
+    "register_once_per_process": True,
+    "deregister_on_exit": True,
+    "discovery_strategy": "first",
+    "instance_normalize": True,
+    "health_check_enabled": True,
+    "health_check_path": "/health/nacos",
+}
+```
+
+### Configuration Center (unchanged)
+
+`get_config()` still returns the raw config content from Nacos as-is; no YAML,
+JSON, or dict parsing is performed.
+
 ## Configuration Reference
 
 | Key | Default | Description |
@@ -316,6 +464,12 @@ In production, always set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Path of the health-check route. |
 | `NACOS_STATUS_ENABLED` | `True` | Enable runtime status querying. |
 | `NACOS_AUTO_REGISTER_ON_INIT` | `True` | Auto register during `init_app` (with `NACOS_AUTO_REGISTER`). |
+| `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | Register only once per process; a forked worker (new pid) may re-register. |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | Register an `atexit` handler to deregister on process exit. |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | Default strategy for `get_one_healthy_instance` (`first`/`random`/`weight`). |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | Default cluster filter for discovery. |
+| `NACOS_DISCOVERY_METADATA` | `{}` | Default metadata filter for discovery. |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | Return normalized instance dicts from `list_instances`. |
 | `NACOS_FAIL_FAST` | `False` | Raise on Nacos errors when `True`. |
 | `NACOS_LOG_LEVEL` | `"INFO"` | Logging level for `flask_nacos`. |
 

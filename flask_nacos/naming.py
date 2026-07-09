@@ -8,6 +8,7 @@ log-only handling is decided by the caller (the extension).
 import logging
 from typing import Any, Dict, List, Optional
 
+from . import discovery
 from .config import validate_registration_config
 from .exceptions import (
     NacosDeregistrationError,
@@ -119,8 +120,16 @@ def list_instances(
     service_name: str,
     group: Optional[str] = None,
     healthy_only: bool = True,
+    cluster: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """Return the list of instances for ``service_name``."""
+    """Return the list of instances for ``service_name``.
+
+    The raw SDK hosts are filtered by ``cluster``/``metadata`` (when provided)
+    and, when ``NACOS_INSTANCE_NORMALIZE`` is enabled, each surviving instance is
+    converted to a standard dict. A single instance that fails normalization is
+    logged and skipped rather than failing the whole discovery call.
+    """
     if not service_name:
         logger.error("Service discovery failed: service_name is required")
         raise NacosValidationError("service_name is required for discovery")
@@ -145,14 +154,29 @@ def list_instances(
     else:
         instances = []
 
+    filtered = discovery.filter_instances(instances, cluster, metadata)
+
+    if config.get("NACOS_INSTANCE_NORMALIZE", True):
+        normalized: List[Dict[str, Any]] = []
+        for inst in filtered:
+            try:
+                normalized.append(discovery.normalize_instance(inst))
+            except Exception as exc:
+                logger.warning("Skipping instance; normalization failed: %s", exc)
+        output: List[Any] = normalized
+    else:
+        output = filtered
+
     logger.info(
-        "Service discovery succeeded (service=%s, group=%s, healthy_only=%s, count=%d)",
+        "Service discovery succeeded (service=%s, group=%s, healthy_only=%s, "
+        "cluster=%s, count=%d)",
         service_name,
         group_name,
         healthy_only,
-        len(instances),
+        cluster,
+        len(output),
     )
-    return instances
+    return output
 
 
 def get_one_healthy_instance(

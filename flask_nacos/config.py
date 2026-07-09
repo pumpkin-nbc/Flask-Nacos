@@ -58,6 +58,16 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_STATUS_ENABLED": True,
     # Auto-registration control (0.3.0).
     "NACOS_AUTO_REGISTER_ON_INIT": True,
+    # Lifecycle control (0.4.0).
+    "NACOS_REGISTER_ONCE_PER_PROCESS": True,
+    "NACOS_DEREGISTER_ON_EXIT": True,
+    # Service discovery selection strategy (0.4.0).
+    "NACOS_DISCOVERY_STRATEGY": "first",
+    # Service discovery filtering (0.4.0).
+    "NACOS_DISCOVERY_CLUSTER": None,
+    "NACOS_DISCOVERY_METADATA": {},
+    # Instance normalization (0.4.0).
+    "NACOS_INSTANCE_NORMALIZE": True,
     # Behavior control.
     "NACOS_FAIL_FAST": False,
     "NACOS_LOG_LEVEL": "INFO",
@@ -90,6 +100,9 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_HEALTH_CHECK_ENABLED",
         "NACOS_STATUS_ENABLED",
         "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_REGISTER_ONCE_PER_PROCESS",
+        "NACOS_DEREGISTER_ON_EXIT",
+        "NACOS_INSTANCE_NORMALIZE",
         "NACOS_FAIL_FAST",
     )
     for key in bool_keys:

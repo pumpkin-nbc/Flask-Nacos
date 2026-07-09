@@ -23,8 +23,22 @@ def fake_client():
     client.remove_naming_instance.return_value = True
     client.list_naming_instance.return_value = {
         "hosts": [
-            {"ip": "127.0.0.1", "port": 8000, "healthy": True, "weight": 1.0},
-            {"ip": "127.0.0.1", "port": 8001, "healthy": True, "weight": 1.0},
+            {
+                "ip": "127.0.0.1",
+                "port": 8000,
+                "healthy": True,
+                "weight": 1.0,
+                "clusterName": "DEFAULT",
+                "metadata": {"version": "v1"},
+            },
+            {
+                "ip": "127.0.0.1",
+                "port": 8001,
+                "healthy": True,
+                "weight": 1.0,
+                "clusterName": "CANARY",
+                "metadata": {"version": "v2"},
+            },
         ]
     }
     client.get_config.return_value = "server:\n  port: 8000\n"

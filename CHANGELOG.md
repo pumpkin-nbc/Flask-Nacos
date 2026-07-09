@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.0
+
+### Added
+
+- Added per-process registration lifecycle control.
+- Added deregistration-on-exit control.
+- Added service instance normalization.
+- Added service discovery filtering by cluster and metadata.
+- Added service discovery strategies: `first`, `random`, and `weight`.
+- Added additional runtime status fields for process and discovery information.
+
+### Changed
+
+- Improved service registration behavior for multi-worker deployments.
+- Improved deregistration behavior to avoid deregistering instances from other processes.
+- Improved README documentation for Gunicorn/uWSGI deployment scenarios.
+- Improved test coverage for lifecycle and discovery strategy behavior.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 0.3.0
 
 ### Added

@@ -92,3 +92,35 @@ def test_request_timeout_readable():
     cfg = load_config(app)
 
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 7.5
+
+
+def test_new_040_config_defaults():
+    app = Flask(__name__)
+    cfg = load_config(app)
+
+    assert cfg["NACOS_REGISTER_ONCE_PER_PROCESS"] is True
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
+    assert cfg["NACOS_DISCOVERY_STRATEGY"] == "first"
+    assert cfg["NACOS_DISCOVERY_CLUSTER"] is None
+    assert cfg["NACOS_DISCOVERY_METADATA"] == {}
+    assert cfg["NACOS_INSTANCE_NORMALIZE"] is True
+
+
+def test_new_040_config_overrides():
+    app = Flask(__name__)
+    app.config.update(
+        NACOS_REGISTER_ONCE_PER_PROCESS="false",
+        NACOS_DEREGISTER_ON_EXIT="false",
+        NACOS_DISCOVERY_STRATEGY="weight",
+        NACOS_DISCOVERY_CLUSTER="CANARY",
+        NACOS_DISCOVERY_METADATA={"version": "v1"},
+        NACOS_INSTANCE_NORMALIZE="false",
+    )
+    cfg = load_config(app)
+
+    assert cfg["NACOS_REGISTER_ONCE_PER_PROCESS"] is False
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is False
+    assert cfg["NACOS_DISCOVERY_STRATEGY"] == "weight"
+    assert cfg["NACOS_DISCOVERY_CLUSTER"] == "CANARY"
+    assert cfg["NACOS_DISCOVERY_METADATA"] == {"version": "v1"}
+    assert cfg["NACOS_INSTANCE_NORMALIZE"] is False

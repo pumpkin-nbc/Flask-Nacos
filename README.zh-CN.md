@@ -17,6 +17,8 @@
 - 可配置的 fail-fast 行为，并提供专用异常类型体系。
 - 基于标准 `logging`，且日志中不会输出敏感信息（密码、AccessKey、SecretKey）。
 - Nacos 操作统一重试、可选健康检查路由，以及 `get_status()` 运行状态查询（0.3.0）。
+- 按进程的注册生命周期、安全注销、实例标准化，以及 `first`/`random`/`weight` 服务发现
+  策略（0.4.0）。
 
 ## 安装
 
@@ -135,8 +137,8 @@ instance = nacos.get_one_healthy_instance("user-service")
 - 省略 `group` 时使用默认 group（`NACOS_GROUP_NAME`）。
 - `healthy_only=True`（默认）只返回健康实例；`healthy_only=False` 返回全部实例。
 - 查询结果为空时返回空列表，而不是抛出异常。
-- `get_one_healthy_instance()` 当前返回第一个健康实例。随机、轮询、权重负载均衡等
-  策略将在后续版本支持。
+- `get_one_healthy_instance()` 支持可插拔的选择策略（`first`、`random`、`weight`）以及
+  可选的 cluster / metadata 过滤，详见下方"生产部署与服务发现增强（0.4.0）"。
 
 ## 配置中心
 
@@ -261,6 +263,136 @@ nacos.register_instance()
 生产环境请务必显式配置 `NACOS_SERVICE_NAME`、`NACOS_SERVICE_IP`、
 `NACOS_SERVICE_PORT`，不要依赖自动识别。
 
+## 生产部署与服务发现增强（0.4.0）
+
+0.4.0 版本聚焦多 worker 部署安全与更丰富的服务发现：按进程的注册生命周期、安全注销、
+实例标准化、服务发现过滤，以及可插拔的选择策略。
+
+### 多 worker 注册（Gunicorn / uWSGI）
+
+在 Gunicorn / uWSGI 下，主进程会 fork 出多个 worker，每个 worker 都会执行 `init_app`。
+flask-nacos 会记录执行注册的进程 ID：
+
+- `NACOS_REGISTER_ONCE_PER_PROCESS`（默认 `True`）：同一进程内，`register_instance()`
+  成功后重复调用会被跳过。当 fork 出新 worker（进程 ID 变化）时，新 worker 允许注册
+  自己的实例。
+- 退出时，`deregister_instance()` 只注销当前进程注册的实例。如果记录的注册进程 ID 与
+  当前进程不一致（例如主进程与 worker），会记录日志并跳过注销，避免误删其他进程的实例。
+
+Gunicorn 示例（每个 worker 各自注册，退出时各自注销）：
+
+```python
+# wsgi.py
+from myapp import create_app
+
+app = create_app()  # 此处执行 init_app；每个 fork 出的 worker 各自注册
+```
+
+```bash
+gunicorn -w 4 wsgi:app
+```
+
+uWSGI 行为相同，每个 worker 进程各自注册和注销自己的实例。如果希望显式控制注册，可将
+`NACOS_AUTO_REGISTER_ON_INIT` 设为 `False`，并在 post-fork 钩子中调用
+`nacos.register_instance()`。
+
+### 退出时注销
+
+- `NACOS_DEREGISTER_ON_EXIT`（默认 `True`）：是否注册 `atexit` 处理器在进程退出时注销。
+- 仅当 `NACOS_AUTO_DEREGISTER` 与 `NACOS_DEREGISTER_ON_EXIT` 都为 `True` 时才注册
+  `atexit` 处理器，且每个扩展实例最多注册一次（重复调用 `init_app(app)` 不会重复注册）。
+
+### 实例标准化
+
+- `NACOS_INSTANCE_NORMALIZE`（默认 `True`）：启用时 `list_instances()` 返回标准 dict
+  列表；关闭时返回 SDK 原始实例。
+
+```python
+instance = nacos.normalize_instance(raw_sdk_instance)
+```
+
+标准 dict 结构：
+
+```python
+{
+    "ip": "127.0.0.1",
+    "port": 5000,
+    "service_name": "user-service",
+    "cluster_name": "DEFAULT",
+    "weight": 1.0,
+    "healthy": True,
+    "enabled": True,
+    "ephemeral": True,
+    "metadata": {},
+}
+```
+
+`normalize_instance()` 兼容 dict 与对象属性形式的实例，缺失字段使用合理默认值，且不会
+因单个实例异常而抛错（记录日志并返回 `None`）。服务发现时，单个标准化失败的实例会被
+跳过，而不会导致整个发现失败。
+
+### 服务发现过滤
+
+`list_instances()` 支持可选的 `cluster` 与 `metadata` 过滤：
+
+```python
+nacos.list_instances("user-service", cluster="CANARY")
+nacos.list_instances("user-service", metadata={"version": "v1"})
+```
+
+- `cluster` 未提供时回退到 `NACOS_DISCOVERY_CLUSTER`。
+- `metadata` 未提供时回退到 `NACOS_DISCOVERY_METADATA`。
+- 设置 `cluster` 时只返回该 cluster 的实例。
+- 设置 `metadata` 时只返回 metadata 包含全部指定键值对的实例。
+- 过滤后无实例时返回空列表。
+
+### 选择策略
+
+`get_one_healthy_instance()` 支持可选的 `strategy`（未提供时回退到
+`NACOS_DISCOVERY_STRATEGY`，默认 `first`），并支持相同的 `cluster` / `metadata` 过滤：
+
+```python
+# first（默认）：返回第一个健康实例
+nacos.get_one_healthy_instance("user-service", strategy="first")
+
+# random：随机返回一个健康实例
+nacos.get_one_healthy_instance("user-service", strategy="random")
+
+# weight：按实例权重进行加权随机选择
+nacos.get_one_healthy_instance("user-service", strategy="weight")
+```
+
+当前支持的策略：`first`、`random`、`weight`。
+
+- `first`：返回第一个健康实例。
+- `random`：从健康实例中均匀随机返回一个。
+- `weight`：按实例 `weight` 加权随机选择（缺失权重默认 `1.0`；权重 `<= 0` 的实例被忽略；
+  若所有权重都 `<= 0`，退化为 `first` 策略）。
+- 没有健康实例时返回 `None`。
+- 不支持的策略遵循 `NACOS_FAIL_FAST` 规则（`False` 时返回 `None`，`True` 时抛异常）。
+
+### 运行状态（新增字段）
+
+`get_status()` 新增进程与服务发现相关字段（仍不含敏感信息，也不会请求 Nacos）：
+
+```python
+{
+    # ... 已有字段 ...
+    "current_pid": 12345,
+    "registered_pid": 12345,
+    "register_once_per_process": True,
+    "deregister_on_exit": True,
+    "discovery_strategy": "first",
+    "instance_normalize": True,
+    "health_check_enabled": True,
+    "health_check_path": "/health/nacos",
+}
+```
+
+### 配置中心（保持不变）
+
+`get_config()` 仍然只返回 Nacos 配置的原始内容，不做任何 YAML、JSON、dict 解析。
+
 ## 配置项说明
 
 | 配置项 | 默认值 | 说明 |
@@ -297,6 +429,12 @@ nacos.register_instance()
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
 | `NACOS_STATUS_ENABLED` | `True` | 是否启用运行状态查询能力。 |
 | `NACOS_AUTO_REGISTER_ON_INIT` | `True` | 是否在 `init_app` 阶段自动注册（配合 `NACOS_AUTO_REGISTER`）。 |
+| `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | 同一进程内只注册一次；fork 出的新 worker（新 pid）可重新注册。 |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | 是否注册 `atexit` 处理器在进程退出时注销。 |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | `get_one_healthy_instance` 的默认策略（`first`/`random`/`weight`）。 |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | 服务发现默认 cluster 过滤。 |
+| `NACOS_DISCOVERY_METADATA` | `{}` | 服务发现默认 metadata 过滤。 |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | `list_instances` 是否返回标准化实例 dict。 |
 | `NACOS_FAIL_FAST` | `False` | 为 `True` 时 Nacos 异常会抛出。 |
 | `NACOS_LOG_LEVEL` | `"INFO"` | `flask_nacos` 的日志级别。 |
 

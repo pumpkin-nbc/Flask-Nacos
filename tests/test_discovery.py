@@ -86,3 +86,75 @@ def test_list_instances_empty_service_name_raises_when_fail_fast(
 
     with pytest.raises(NacosValidationError):
         nacos.list_instances("")
+
+
+def test_list_instances_normalized_returns_standard_dicts(
+    make_app, patched_create_client
+):
+    app = make_app({"NACOS_INSTANCE_NORMALIZE": True})
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service")
+    assert len(instances) == 2
+    for inst in instances:
+        assert set(inst.keys()) == {
+            "ip",
+            "port",
+            "service_name",
+            "cluster_name",
+            "weight",
+            "healthy",
+            "enabled",
+            "ephemeral",
+            "metadata",
+        }
+
+
+def test_list_instances_raw_when_normalize_disabled(
+    make_app, patched_create_client
+):
+    app = make_app({"NACOS_INSTANCE_NORMALIZE": False})
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service")
+    assert len(instances) == 2
+    # Raw SDK dicts keep the original camelCase keys and no normalization.
+    assert "clusterName" in instances[0]
+    assert "cluster_name" not in instances[0]
+
+
+def test_list_instances_filter_by_cluster(make_app, patched_create_client):
+    app = make_app()
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service", cluster="CANARY")
+    assert len(instances) == 1
+    assert instances[0]["port"] == 8001
+    assert instances[0]["cluster_name"] == "CANARY"
+
+
+def test_list_instances_filter_by_metadata(make_app, patched_create_client):
+    app = make_app()
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service", metadata={"version": "v1"})
+    assert len(instances) == 1
+    assert instances[0]["port"] == 8000
+    assert instances[0]["metadata"]["version"] == "v1"
+
+
+def test_list_instances_filter_empty_result(make_app, patched_create_client):
+    app = make_app()
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service", metadata={"version": "nope"})
+    assert instances == []
+
+
+def test_list_instances_cluster_defaults_from_config(make_app, patched_create_client):
+    app = make_app({"NACOS_DISCOVERY_CLUSTER": "CANARY"})
+    nacos = FlaskNacos(app)
+
+    instances = nacos.list_instances("user-service")
+    assert len(instances) == 1
+    assert instances[0]["port"] == 8001
