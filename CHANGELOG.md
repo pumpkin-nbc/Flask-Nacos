@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.0
+
+### Added
+
+- Added quickstart documentation.
+- Added full configuration reference documentation.
+- Added API reference documentation.
+- Added service registration documentation.
+- Added service discovery documentation.
+- Added health check documentation.
+- Added production deployment documentation.
+- Added troubleshooting documentation.
+- Added local Nacos Docker Compose example.
+- Added documentation link and unsupported-feature checks.
+
+### Changed
+
+- Improved README structure for PyPI display.
+- Improved examples for common Flask-Nacos usage scenarios.
+- Improved CI to validate documentation consistency.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 0.6.0
 
 ### Added

@@ -27,6 +27,8 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 - Release tooling: version-consistency, package-content, and sensitive-info
   check scripts, a one-shot `release_check.sh`, expanded CI checks, and a
   manual TestPyPI/PyPI release workflow (0.6.0).
+- Full documentation set under [`docs/`](docs/), enhanced examples, a local
+  Nacos Docker Compose file, and a documentation-consistency check (0.7.0).
 
 ## Installation
 
@@ -59,6 +61,21 @@ nacos = FlaskNacos(app)
 
 After initialization the extension instance is available at
 `app.extensions["nacos"]`.
+
+## Documentation
+
+Full documentation lives under [`docs/`](docs/):
+
+- [Quickstart](docs/quickstart.md) - install and first app.
+- [Configuration](docs/configuration.md) - every config key, grouped.
+- [API Reference](docs/api-reference.md) - public methods and error behavior.
+- [Service Registration](docs/service-registration.md) - register/deregister.
+- [Service Discovery](docs/service-discovery.md) - listing and strategies.
+- [Health Check](docs/health-check.md) - the optional health route.
+- [Production](docs/production.md) - Gunicorn/uWSGI/Docker deployment.
+- [Troubleshooting](docs/troubleshooting.md) - common issues and fixes.
+- [Release Guide](docs/release.md) - publishing to TestPyPI/PyPI.
+- [Changelog](docs/changelog.md) - links to the full changelog.
 
 ## Flask Standard Mode
 
@@ -536,13 +553,25 @@ Runnable examples live in the [`examples/`](examples/) directory:
   `FlaskNacos(app)`.
 - [`examples/factory_app.py`](examples/factory_app.py) — Flask application
   factory mode with `nacos.init_app(app)`.
+- [`examples/service_registration.py`](examples/service_registration.py) —
+  manual and automatic registration and deregistration.
 - [`examples/service_discovery.py`](examples/service_discovery.py) — listing
   instances, cluster/metadata filtering, and `get_one_healthy_instance()`.
 - [`examples/health_check_app.py`](examples/health_check_app.py) — enabling the
   health-check route via `NACOS_HEALTH_CHECK_ENABLED` / `NACOS_HEALTH_CHECK_PATH`.
+- [`examples/production_config.py`](examples/production_config.py) — env-var
+  driven configuration for multi-worker deployments.
+- [`examples/docker-compose-nacos.yml`](examples/docker-compose-nacos.yml) — a
+  local Nacos for manual testing (local use only).
 
 The examples use `127.0.0.1:8848` and the local demo credentials `nacos/nacos`;
 replace them with your own configuration (preferably via environment variables).
+
+Start a local Nacos for manual testing:
+
+```bash
+docker compose -f examples/docker-compose-nacos.yml up -d
+```
 
 ## Local Development & Testing
 

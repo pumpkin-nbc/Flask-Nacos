@@ -28,28 +28,31 @@ fi
 
 echo "==> Using Python: ${PY}"
 
-echo "==> [1/8] Ruff lint"
+echo "==> [1/9] Ruff lint"
 "${PY}" -m ruff check .
 
-echo "==> [2/8] Mypy type check"
+echo "==> [2/9] Mypy type check"
 "${PY}" -m mypy flask_nacos
 
-echo "==> [3/8] Pytest"
+echo "==> [3/9] Pytest"
 "${PY}" -m pytest
 
-echo "==> [4/8] Version consistency"
+echo "==> [4/9] Version consistency"
 "${PY}" scripts/check_version.py
 
-echo "==> [5/8] Sensitive information scan"
+echo "==> [5/9] Sensitive information scan"
 "${PY}" scripts/check_sensitive_info.py
 
-echo "==> [6/8] Clean previous build artifacts"
+echo "==> [6/9] Documentation checks"
+"${PY}" scripts/check_docs.py
+
+echo "==> [7/9] Clean previous build artifacts"
 rm -rf dist build ./*.egg-info
 
-echo "==> [7/8] Build distributions"
+echo "==> [8/9] Build distributions"
 "${PY}" -m build
 
-echo "==> [8/8] Twine check + package content check"
+echo "==> [9/9] Twine check + package content check"
 "${PY}" -m twine check dist/*
 "${PY}" scripts/check_package.py
 

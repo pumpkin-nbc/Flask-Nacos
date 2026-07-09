@@ -1,0 +1,66 @@
+# 服务注册
+
+[English](service-registration.md) | 简体中文
+
+flask-nacos 如何注册与注销服务实例。
+
+另请参阅：[配置项](configuration.zh-CN.md) - [API 参考](api-reference.zh-CN.md) -
+[生产部署](production.zh-CN.md)。
+
+## 自动注册
+
+当 `NACOS_REGISTER_ENABLED`、`NACOS_AUTO_REGISTER` 与
+`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 期间注册服务。
+
+## 手动注册
+
+```python
+nacos.register_instance()
+```
+
+## 注册参数
+
+注册前会校验以下参数；非法值遵循 `NACOS_FAIL_FAST` 规则：
+
+- `NACOS_SERVICE_NAME` —— 必填，不能为空。
+- `NACOS_SERVICE_PORT` —— 必填，`1-65535` 范围内的整数。
+- `NACOS_SERVICE_WEIGHT` —— 大于 `0` 的数字。
+- `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
+- `NACOS_SERVICE_EPHEMERAL` —— 必须是 `bool`。
+
+## IP 自动识别
+
+若未设置 `NACOS_SERVICE_IP`，扩展会尝试识别本机出口 IP。识别失败时，行为遵循
+`NACOS_FAIL_FAST`。
+
+生产建议：显式配置 `NACOS_SERVICE_IP`。在容器、多网卡主机或 NAT 环境下，自动识别到
+的地址可能无法被其他服务访问。同时请显式设置 `NACOS_SERVICE_NAME` 与
+`NACOS_SERVICE_PORT`。
+
+## 幂等注册
+
+注册是幂等的。当 `NACOS_REGISTER_ONCE_PER_PROCESS=True` 时，同一进程内一旦
+`register_instance()` 成功，后续调用即为 no-op。当 fork 出新 worker（进程 ID 变化）
+时，新 worker 可注册自己的实例。
+
+## 多进程注册（Gunicorn / uWSGI）
+
+在 Gunicorn / uWSGI 下，主进程会 fork 多个 worker，每个 worker 都会执行 `init_app`
+并注册自己的实例。flask-nacos 会记录执行注册的进程 ID，因此某个 worker 只会注销它
+自己注册的实例。部署建议见[生产部署](production.zh-CN.md)。
+
+如果希望显式控制，可设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 post-fork 钩子中
+调用 `nacos.register_instance()`。
+
+## 注销
+
+```python
+nacos.deregister_instance()
+```
+
+注销是幂等的，注销后再次调用不会报错。
+
+## 自动注销
+
+当 `NACOS_AUTO_DEREGISTER` 与 `NACOS_DEREGISTER_ON_EXIT` 都为 `True` 时，会通过
+`atexit` 处理器在进程退出时注销实例。每个扩展实例最多注册一次该处理器。

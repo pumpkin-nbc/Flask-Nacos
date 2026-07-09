@@ -45,6 +45,9 @@ jobs:
       - name: Scan for sensitive information
         run: python scripts/check_sensitive_info.py
 
+      - name: Check docs
+        run: python scripts/check_docs.py
+
       - name: Test
         run: pytest
 

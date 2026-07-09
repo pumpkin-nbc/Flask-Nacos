@@ -23,6 +23,8 @@
   （0.5.0）。
 - 发布工具链：版本一致性、包内容、敏感信息检查脚本，一键 `release_check.sh`、
   扩展的 CI 检查，以及手动触发的 TestPyPI/PyPI 发布工作流（0.6.0）。
+- 完整的 [`docs/`](docs/) 文档集、增强的示例、本地 Nacos Docker Compose 文件，
+  以及文档一致性检查（0.7.0）。
 
 ## 安装
 
@@ -54,6 +56,21 @@ nacos = FlaskNacos(app)
 ```
 
 初始化完成后，扩展实例可通过 `app.extensions["nacos"]` 获取。
+
+## 文档
+
+完整文档位于 [`docs/`](docs/)（每篇均有中英文版本）：
+
+- [快速开始](docs/quickstart.zh-CN.md) —— 安装与第一个应用。
+- [配置项](docs/configuration.zh-CN.md) —— 全部配置项分组说明。
+- [API 参考](docs/api-reference.zh-CN.md) —— 公开方法与异常行为。
+- [服务注册](docs/service-registration.zh-CN.md) —— 注册/注销。
+- [服务发现](docs/service-discovery.zh-CN.md) —— 实例查询与策略。
+- [健康检查](docs/health-check.zh-CN.md) —— 可选健康检查路由。
+- [生产部署](docs/production.zh-CN.md) —— Gunicorn/uWSGI/Docker 部署。
+- [错误排查](docs/troubleshooting.zh-CN.md) —— 常见问题与解决。
+- [发布指南](docs/release.zh-CN.md) —— 发布到 TestPyPI/PyPI。
+- [更新日志](docs/changelog.zh-CN.md) —— 指向完整更新日志。
 
 ## Flask 普通模式
 
@@ -496,13 +513,25 @@ from flask_nacos import (
   `FlaskNacos(app)`。
 - [`examples/factory_app.py`](examples/factory_app.py) —— Flask 工厂模式，使用
   `nacos.init_app(app)`。
+- [`examples/service_registration.py`](examples/service_registration.py) ——
+  手动与自动注册、注销。
 - [`examples/service_discovery.py`](examples/service_discovery.py) —— 列举实例、
   cluster / metadata 过滤，以及 `get_one_healthy_instance()`。
 - [`examples/health_check_app.py`](examples/health_check_app.py) —— 通过
   `NACOS_HEALTH_CHECK_ENABLED` / `NACOS_HEALTH_CHECK_PATH` 启用健康检查路由。
+- [`examples/production_config.py`](examples/production_config.py) —— 面向多
+  worker 部署、基于环境变量的配置。
+- [`examples/docker-compose-nacos.yml`](examples/docker-compose-nacos.yml) ——
+  本地手动测试用的 Nacos（仅限本地使用）。
 
 示例使用 `127.0.0.1:8848` 与本地演示账号 `nacos/nacos`，请替换为你自己的配置
 （建议通过环境变量传入）。
+
+启动本地 Nacos 进行手动测试：
+
+```bash
+docker compose -f examples/docker-compose-nacos.yml up -d
+```
 
 ## 本地开发与测试
 
