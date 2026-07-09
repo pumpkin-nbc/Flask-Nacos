@@ -8,10 +8,28 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    name: py${{ matrix.python-version }}${{ matrix.flask && format(' / {0}', matrix.flask) || ' / latest Flask' }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        # Layered Python x Flask compatibility matrix. Flask 1.x is only
+        # exercised on Python 3.8 (its old Werkzeug pin is incompatible with
+        # newer Python versions).
+        include:
+          - python-version: "3.8"
+            flask: "Flask>=1.0,<2.0"
+          - python-version: "3.8"
+            flask: "Flask>=2.0,<3.0"
+          - python-version: "3.8"
+            flask: "Flask>=3.0,<4.0"
+          - python-version: "3.9"
+            flask: ""
+          - python-version: "3.10"
+            flask: ""
+          - python-version: "3.11"
+            flask: ""
+          - python-version: "3.12"
+            flask: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +43,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+
+      - name: Install specific Flask version
+        if: ${{ matrix.flask != '' }}
+        run: pip install "${{ matrix.flask }}"
 
       - name: Lint
         run: ruff check .
@@ -40,6 +62,9 @@ jobs:
 
       - name: Check docs
         run: python scripts/check_docs.py
+
+      - name: Check compatibility
+        run: python scripts/check_compatibility.py
 
       - name: Test
         run: pytest

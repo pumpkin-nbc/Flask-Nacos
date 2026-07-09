@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.8.0
+
+### Added
+
+- Added compatibility checks for Python 3.8 syntax support.
+- Added compatibility documentation.
+- Added Nacos SDK response extraction compatibility helpers.
+- Added tests for multiple Nacos instance response structures.
+- Added CI compatibility validation.
+
+### Changed
+
+- Improved service discovery compatibility with different Nacos SDK response shapes.
+- Improved instance normalization for camelCase and snake_case fields.
+- Improved README compatibility documentation.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 0.7.0
 
 ### Added

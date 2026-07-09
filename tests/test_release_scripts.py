@@ -33,26 +33,37 @@ def check_docs():
     return importlib.import_module("check_docs")
 
 
+@pytest.fixture(scope="module")
+def check_compatibility():
+    return importlib.import_module("check_compatibility")
+
+
 def test_scripts_are_import_safe(
-    check_version, check_package, check_sensitive_info, check_docs
+    check_version, check_package, check_sensitive_info, check_docs, check_compatibility
 ):
     assert check_version is not None
     assert check_package is not None
     assert check_sensitive_info is not None
     assert check_docs is not None
+    assert check_compatibility is not None
 
 
-def test_version_check_passes_with_070(check_version):
+def test_version_check_passes_with_080(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message
-    assert versions["pyproject.toml"] == "0.7.0"
-    assert versions["flask_nacos/__init__.py"] == "0.7.0"
-    assert versions["CHANGELOG.md"] == "0.7.0"
+    assert versions["pyproject.toml"] == "0.8.0"
+    assert versions["flask_nacos/__init__.py"] == "0.8.0"
+    assert versions["CHANGELOG.md"] == "0.8.0"
 
 
 def test_docs_check_is_clean(check_docs):
     problems = check_docs.scan(ROOT)
     assert problems == [], f"unexpected doc problems: {problems}"
+
+
+def test_compatibility_check_is_clean(check_compatibility):
+    problems = check_compatibility.scan(ROOT)
+    assert problems == [], f"unexpected compatibility problems: {problems}"
 
 
 def test_sensitive_scan_is_clean(check_sensitive_info):

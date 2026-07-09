@@ -17,6 +17,54 @@ SUPPORTED_STRATEGIES = ("first", "random", "weight")
 
 _MISSING = object()
 
+# Keys that may hold the list of instances in a Nacos SDK response dict.
+_HOSTS_KEYS = ("hosts", "instances")
+
+
+def extract_instances(response: Any) -> List[Any]:
+    """Extract the list of instances from a Nacos SDK response.
+
+    Different SDK versions/shapes are tolerated:
+
+    - ``None`` or an empty list -> ``[]``
+    - a ``list`` -> returned as-is
+    - a ``dict`` with ``hosts`` or ``instances`` -> that list
+    - a ``dict`` with ``data`` holding either a list, or a nested dict with
+      ``hosts``/``instances`` -> that list
+
+    Raises :class:`NacosDiscoveryError` for a fundamentally unrecognized shape
+    so the caller can honor ``NACOS_FAIL_FAST``.
+    """
+    if response is None:
+        return []
+
+    if isinstance(response, list):
+        return response
+
+    if isinstance(response, dict):
+        for key in _HOSTS_KEYS:
+            value = response.get(key)
+            if isinstance(value, list):
+                return value
+
+        data = response.get("data")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in _HOSTS_KEYS:
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+
+        # An empty/instance-less dict (e.g. {} or {"hosts": None}) is treated as
+        # "no instances" rather than an error.
+        if not response or any(k in response for k in _HOSTS_KEYS + ("data",)):
+            return []
+
+    raise NacosDiscoveryError(
+        f"Unrecognized Nacos discovery response shape: {type(response).__name__}"
+    )
+
 
 def _get_field(instance: Any, keys, default: Any = None) -> Any:
     """Read a field from a dict or an attribute-style object.
@@ -163,6 +211,7 @@ def select_instance(
 
 
 __all__ = [
+    "extract_instances",
     "normalize_instance",
     "filter_instances",
     "select_instance",

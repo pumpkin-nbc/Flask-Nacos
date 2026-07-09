@@ -29,6 +29,20 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
   manual TestPyPI/PyPI release workflow (0.6.0).
 - Full documentation set under [`docs/`](docs/), enhanced examples, a local
   Nacos Docker Compose file, and a documentation-consistency check (0.7.0).
+- Broad compatibility: Python 3.8-3.12 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
+  tolerant handling of different Nacos SDK response shapes, a Python-3.8
+  compatibility checker, and a Python x Flask CI matrix (0.8.0).
+
+## Compatibility
+
+- Python: 3.8 - 3.12.
+- Flask: `>=1.0, <4.0` (Flask 1.x, 2.x, and 3.x).
+- Nacos: server 2.x with the synchronous `nacos-sdk-python` client.
+- Service discovery tolerates different SDK response shapes (plain list,
+  `hosts`/`instances`, or a nested `data` wrapper) and both camelCase and
+  snake_case instance fields.
+
+See [Compatibility](docs/compatibility.md) for details.
 
 ## Installation
 
@@ -74,6 +88,7 @@ Full documentation lives under [`docs/`](docs/):
 - [Health Check](docs/health-check.md) - the optional health route.
 - [Production](docs/production.md) - Gunicorn/uWSGI/Docker deployment.
 - [Troubleshooting](docs/troubleshooting.md) - common issues and fixes.
+- [Compatibility](docs/compatibility.md) - supported Python/Flask/Nacos versions.
 - [Release Guide](docs/release.md) - publishing to TestPyPI/PyPI.
 - [Changelog](docs/changelog.md) - links to the full changelog.
 

@@ -24,6 +24,21 @@ ROOT = Path(__file__).resolve().parent.parent
 
 FORBIDDEN_IDENTIFIERS = ("get_config_as_dict", "load_config_to_flask")
 
+# A forbidden identifier is allowed on a line that clearly states it is NOT
+# provided (so the compatibility doc can document the absence of the feature).
+NEGATION_MARKERS = (
+    "not ",
+    "no ",
+    "without",
+    "unsupported",
+    "never",
+    "does not",
+    "doesn't",
+    "不",
+    "没有",
+    "无",
+)
+
 _LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _EXAMPLE_REF_RE = re.compile(r"examples/[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|ya?ml)")
 
@@ -101,8 +116,10 @@ def check_forbidden(root: Path = ROOT) -> List[Problem]:
     for doc in _doc_files(root):
         text = doc.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
+            lowered = line.lower()
+            has_negation = any(marker in lowered for marker in NEGATION_MARKERS)
             for identifier in FORBIDDEN_IDENTIFIERS:
-                if identifier in line:
+                if identifier in line and not has_negation:
                     rel = doc.relative_to(root).as_posix()
                     problems.append(
                         Problem(

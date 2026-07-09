@@ -48,6 +48,9 @@ jobs:
       - name: Check docs
         run: python scripts/check_docs.py
 
+      - name: Check compatibility
+        run: python scripts/check_compatibility.py
+
       - name: Test
         run: pytest
 

@@ -25,6 +25,19 @@
   扩展的 CI 检查，以及手动触发的 TestPyPI/PyPI 发布工作流（0.6.0）。
 - 完整的 [`docs/`](docs/) 文档集、增强的示例、本地 Nacos Docker Compose 文件，
   以及文档一致性检查（0.7.0）。
+- 广泛的兼容性：Python 3.8-3.12 与 Flask `>=1.0,<4.0`（1.x/2.x/3.x），兼容不同
+  Nacos SDK 返回结构，提供 Python 3.8 兼容性检查脚本以及 Python x Flask CI 矩阵
+  （0.8.0）。
+
+## 兼容性
+
+- Python：3.8 - 3.12。
+- Flask：`>=1.0, <4.0`（Flask 1.x、2.x、3.x）。
+- Nacos：服务端 2.x，使用同步的 `nacos-sdk-python` 客户端。
+- 服务发现兼容不同的 SDK 返回结构（普通列表、`hosts`/`instances`，或带 `data`
+  包装的嵌套结构），并同时兼容 camelCase 与 snake_case 实例字段。
+
+详见[兼容性](docs/compatibility.zh-CN.md)。
 
 ## 安装
 
@@ -69,6 +82,7 @@ nacos = FlaskNacos(app)
 - [健康检查](docs/health-check.zh-CN.md) —— 可选健康检查路由。
 - [生产部署](docs/production.zh-CN.md) —— Gunicorn/uWSGI/Docker 部署。
 - [错误排查](docs/troubleshooting.zh-CN.md) —— 常见问题与解决。
+- [兼容性](docs/compatibility.zh-CN.md) —— 支持的 Python/Flask/Nacos 版本。
 - [发布指南](docs/release.zh-CN.md) —— 发布到 TestPyPI/PyPI。
 - [更新日志](docs/changelog.zh-CN.md) —— 指向完整更新日志。
 

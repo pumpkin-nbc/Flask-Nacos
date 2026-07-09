@@ -22,6 +22,7 @@ EXPECTED_DOCS = [
     "health-check.md",
     "production.md",
     "troubleshooting.md",
+    "compatibility.md",
     "release.md",
     "changelog.md",
 ]

@@ -147,12 +147,7 @@ def list_instances(
             f"Failed to list instances for {service_name}"
         ) from exc
 
-    if isinstance(result, dict):
-        instances = list(result.get("hosts", []) or [])
-    elif isinstance(result, list):
-        instances = result
-    else:
-        instances = []
+    instances = discovery.extract_instances(result)
 
     filtered = discovery.filter_instances(instances, cluster, metadata)
 
