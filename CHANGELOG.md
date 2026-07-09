@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.0
+
+### Added
+
+- Added `scripts/check_version.py` to verify version consistency across
+  `pyproject.toml`, `__version__`, and `CHANGELOG.md`.
+- Added `scripts/check_package.py` to inspect built distributions and verify the
+  wheel ships `py.typed` and core modules while excluding tests and caches.
+- Added `scripts/check_sensitive_info.py` to scan for hardcoded secrets, private
+  IPs, internal domains, and stray `.env` files.
+- Added `scripts/release_check.sh` one-shot pre-release check script.
+- Added a manual TestPyPI/PyPI release workflow (`.github/workflows/release.yml`).
+- Added `docs/release.md` release guide.
+
+### Changed
+
+- Extended the CI workflow with version-consistency, sensitive-information, and
+  package-content checks.
+- Included `/scripts` and `/docs` in the sdist build.
+- Updated README (English and Chinese) with release, development, and security
+  sections.
+
+### Notes
+
+- No library API changes; runtime behavior is unchanged.
+- `get_config()` continues to return raw config content only.
+- Publishing to PyPI is never automated on push; release uploads are manual and
+  require explicitly choosing the target index.
+
 ## 0.5.0
 
 ### Added

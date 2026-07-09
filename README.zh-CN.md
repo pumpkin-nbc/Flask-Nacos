@@ -21,6 +21,8 @@
   策略（0.4.0）。
 - 完整类型提示与 `py.typed`（PEP 561），并提供 ruff/mypy/pytest/coverage 配置与 CI
   （0.5.0）。
+- 发布工具链：版本一致性、包内容、敏感信息检查脚本，一键 `release_check.sh`、
+  扩展的 CI 检查，以及手动触发的 TestPyPI/PyPI 发布工作流（0.6.0）。
 
 ## 安装
 
@@ -483,6 +485,8 @@ from flask_nacos import (
 - 切勿提交真实账号密码、公司内部 Nacos 地址或内部 IP。建议通过环境变量传入
   `NACOS_USERNAME` / `NACOS_PASSWORD`。
 - 敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`）不会写入日志。
+- CI 中会运行敏感信息扫描（`scripts/check_sensitive_info.py`），防止误提交密钥、
+  内部 IP 或 `.env` 文件。
 
 ## 示例
 
@@ -532,16 +536,28 @@ from flask_nacos import (
 
 ## PyPI 发布准备
 
-在发布版本前，请在本地完成构建校验：
+在发布版本前，请在仓库根目录运行一键预发布检查：
 
-1. 更新 [`pyproject.toml`](pyproject.toml) 与 [`flask_nacos/__init__.py`](flask_nacos/__init__.py) 中的版本号。
-2. 更新 [`CHANGELOG.md`](CHANGELOG.md)。
-3. 运行 `ruff check .`、`mypy flask_nacos`、`pytest`。
-4. 构建分发包：`python -m build`。
-5. 校验元数据：`twine check dist/*`。
-6. 确认 `flask_nacos/py.typed` 已包含在构建出的 wheel 中。
+```bash
+bash scripts/release_check.sh
+```
 
-CI 有意不自动发布到 PyPI，仅执行代码检查、类型检查、测试与构建。
+该脚本依次执行 `ruff`、`mypy`、`pytest`、版本一致性检查、敏感信息扫描、干净的
+`python -m build`、`twine check` 以及包内容检查，且不会上传任何内容。各脚本分别为：
+
+- [`scripts/check_version.py`](scripts/check_version.py) —— 校验 `pyproject.toml`、
+  `__version__`、`CHANGELOG.md` 三处版本号一致。
+- [`scripts/check_sensitive_info.py`](scripts/check_sensitive_info.py) —— 扫描硬编码
+  密钥、内部 IP、内部域名与 `.env` 文件。
+- [`scripts/check_package.py`](scripts/check_package.py) —— 检查构建出的 wheel，确认
+  包含 `py.typed` 与核心模块，且不含测试 / 缓存。
+
+手动触发的 `Release` 工作流（[`.github/workflows/release.yml`](.github/workflows/release.yml)）
+会重跑上述检查，并上传到 TestPyPI（默认）或 PyPI（需显式选择）。完整发布流程、
+TestPyPI/PyPI 步骤以及 GitHub Secrets 配置（`TEST_PYPI_API_TOKEN`、`PYPI_API_TOKEN`）
+详见 [`docs/release.md`](docs/release.md)。
+
+推送时绝不会自动发布到 PyPI；CI 仅执行代码检查、类型检查、测试、构建以及发布检查脚本。
 
 ## 版本兼容说明
 

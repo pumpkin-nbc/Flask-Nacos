@@ -32,11 +32,20 @@ jobs:
       - name: Type check
         run: mypy flask_nacos
 
+      - name: Check version consistency
+        run: python scripts/check_version.py
+
+      - name: Scan for sensitive information
+        run: python scripts/check_sensitive_info.py
+
       - name: Test
         run: pytest
 
       - name: Build
         run: python -m build
 
-      - name: Check package
+      - name: Check package (twine)
         run: twine check dist/*
+
+      - name: Check package contents
+        run: python scripts/check_package.py

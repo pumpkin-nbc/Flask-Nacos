@@ -1,0 +1,88 @@
+"""Tests for the release-tooling scripts in scripts/."""
+
+import importlib
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = ROOT / "scripts"
+
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+
+@pytest.fixture(scope="module")
+def check_version():
+    return importlib.import_module("check_version")
+
+
+@pytest.fixture(scope="module")
+def check_package():
+    return importlib.import_module("check_package")
+
+
+@pytest.fixture(scope="module")
+def check_sensitive_info():
+    return importlib.import_module("check_sensitive_info")
+
+
+def test_scripts_are_import_safe(check_version, check_package, check_sensitive_info):
+    assert check_version is not None
+    assert check_package is not None
+    assert check_sensitive_info is not None
+
+
+def test_version_check_passes_with_060(check_version):
+    ok, versions, message = check_version.check(ROOT)
+    assert ok, message
+    assert versions["pyproject.toml"] == "0.6.0"
+    assert versions["flask_nacos/__init__.py"] == "0.6.0"
+    assert versions["CHANGELOG.md"] == "0.6.0"
+
+
+def test_sensitive_scan_is_clean(check_sensitive_info):
+    findings = check_sensitive_info.scan_repo(ROOT)
+    assert findings == [], f"unexpected findings: {findings}"
+
+
+def test_validate_wheel_names_accepts_good_wheel(check_package):
+    good = [
+        "flask_nacos/__init__.py",
+        "flask_nacos/extension.py",
+        "flask_nacos/py.typed",
+        "flask_nacos-0.6.0.dist-info/METADATA",
+    ]
+    assert check_package.validate_wheel_names(good) == []
+
+
+def test_validate_wheel_names_rejects_tests(check_package):
+    names = [
+        "flask_nacos/__init__.py",
+        "flask_nacos/extension.py",
+        "flask_nacos/py.typed",
+        "tests/test_packaging.py",
+    ]
+    problems = check_package.validate_wheel_names(names)
+    assert any("tests" in problem for problem in problems)
+
+
+def test_validate_wheel_names_rejects_env_file(check_package):
+    names = [
+        "flask_nacos/__init__.py",
+        "flask_nacos/extension.py",
+        "flask_nacos/py.typed",
+        ".env",
+    ]
+    problems = check_package.validate_wheel_names(names)
+    assert any(".env" in problem for problem in problems)
+
+
+def test_validate_wheel_names_requires_py_typed(check_package):
+    names = [
+        "flask_nacos/__init__.py",
+        "flask_nacos/extension.py",
+    ]
+    problems = check_package.validate_wheel_names(names)
+    assert any("py.typed" in problem for problem in problems)

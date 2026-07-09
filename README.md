@@ -24,6 +24,9 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
   normalization, and `first`/`random`/`weight` discovery strategies (0.4.0).
 - Full type hints with `py.typed` (PEP 561), plus ruff/mypy/pytest/coverage
   configuration and CI (0.5.0).
+- Release tooling: version-consistency, package-content, and sensitive-info
+  check scripts, a one-shot `release_check.sh`, expanded CI checks, and a
+  manual TestPyPI/PyPI release workflow (0.6.0).
 
 ## Installation
 
@@ -522,6 +525,8 @@ from flask_nacos import (
   Prefer environment variables for `NACOS_USERNAME` / `NACOS_PASSWORD`.
 - Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never
   written to logs.
+- A sensitive-information scan (`scripts/check_sensitive_info.py`) runs in CI to
+  guard against accidentally committed secrets, private IPs, or `.env` files.
 
 ## Examples
 
@@ -574,18 +579,31 @@ it is installed — no separate stub package is needed.
 
 ## PyPI Release Preparation
 
-Before publishing a release, verify the build locally:
+Before publishing a release, run the one-shot pre-release checks from the
+repository root:
 
-1. Bump the version in [`pyproject.toml`](pyproject.toml) and
-   [`flask_nacos/__init__.py`](flask_nacos/__init__.py).
-2. Update [`CHANGELOG.md`](CHANGELOG.md).
-3. Run `ruff check .`, `mypy flask_nacos`, and `pytest`.
-4. Build the distributions: `python -m build`.
-5. Validate metadata: `twine check dist/*`.
-6. Confirm `flask_nacos/py.typed` is present inside the built wheel.
+```bash
+bash scripts/release_check.sh
+```
 
-Publishing to PyPI is intentionally not automated in CI; CI only lints, type
-checks, tests, and builds.
+This runs `ruff`, `mypy`, `pytest`, the version-consistency check, the
+sensitive-information scan, a clean `python -m build`, `twine check`, and the
+package-content check — without uploading anything. The individual scripts are:
+
+- [`scripts/check_version.py`](scripts/check_version.py) — verifies the version
+  is consistent across `pyproject.toml`, `__version__`, and `CHANGELOG.md`.
+- [`scripts/check_sensitive_info.py`](scripts/check_sensitive_info.py) — scans
+  for hardcoded secrets, private IPs, internal domains, and `.env` files.
+- [`scripts/check_package.py`](scripts/check_package.py) — inspects the built
+  wheel to confirm `py.typed` and core modules ship and tests/caches do not.
+
+The manual `Release` workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml))
+reruns these checks and uploads to TestPyPI (default) or PyPI (explicit). See
+[`docs/release.md`](docs/release.md) for the full release procedure, TestPyPI/PyPI
+flow, and GitHub Secrets setup (`TEST_PYPI_API_TOKEN`, `PYPI_API_TOKEN`).
+
+Publishing to PyPI is never automated on push; CI only lints, type checks,
+tests, builds, and runs the release-check scripts.
 
 ## Compatibility
 
