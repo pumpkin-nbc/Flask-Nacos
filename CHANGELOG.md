@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.5.0
+
+### Added
+
+- Added type hints for public APIs and core internal methods.
+- Added `py.typed` for PEP 561 typing support.
+- Added ruff configuration.
+- Added mypy configuration.
+- Added pytest and coverage configuration.
+- Added GitHub Actions CI workflow.
+- Added additional example applications.
+- Added PyPI release preparation documentation.
+
+### Changed
+
+- Improved package metadata in `pyproject.toml`.
+- Improved README documentation for local development, testing, and production usage.
+- Improved code style and import organization.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 0.4.0
 
 ### Added

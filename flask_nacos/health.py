@@ -5,16 +5,21 @@ the Nacos server, so it stays fast and cannot be slowed down by Nacos latency.
 """
 
 import logging
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
 from flask import jsonify
+
+if TYPE_CHECKING:
+    from flask import Flask
+
+    from .extension import FlaskNacos
 
 logger = logging.getLogger("flask_nacos")
 
 HEALTH_ENDPOINT = "flask_nacos_health"
 
 
-def build_health_payload(extension) -> Dict[str, Any]:
+def build_health_payload(extension: "FlaskNacos") -> Dict[str, Any]:
     """Build the health-check response body from the extension state."""
     status = extension.get_status()
 
@@ -44,7 +49,7 @@ def build_health_payload(extension) -> Dict[str, Any]:
     return payload
 
 
-def register_health_route(app, extension) -> bool:
+def register_health_route(app: "Flask", extension: "FlaskNacos") -> bool:
     """Register the health-check route on ``app`` (idempotent).
 
     Returns ``True`` when the route was registered, ``False`` when it already

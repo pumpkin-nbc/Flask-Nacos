@@ -19,6 +19,8 @@
 - Nacos 操作统一重试、可选健康检查路由，以及 `get_status()` 运行状态查询（0.3.0）。
 - 按进程的注册生命周期、安全注销、实例标准化，以及 `first`/`random`/`weight` 服务发现
   策略（0.4.0）。
+- 完整类型提示与 `py.typed`（PEP 561），并提供 ruff/mypy/pytest/coverage 配置与 CI
+  （0.5.0）。
 
 ## 安装
 
@@ -26,10 +28,10 @@
 pip install flask-nacos
 ```
 
-可选的 YAML 支持（为后续配置解析能力预留）：
+本地开发（测试、代码检查、类型检查、构建）：
 
 ```bash
-pip install "flask-nacos[yaml]"
+pip install -e ".[dev]"
 ```
 
 ## 快速开始
@@ -481,6 +483,65 @@ from flask_nacos import (
 - 切勿提交真实账号密码、公司内部 Nacos 地址或内部 IP。建议通过环境变量传入
   `NACOS_USERNAME` / `NACOS_PASSWORD`。
 - 敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`）不会写入日志。
+
+## 示例
+
+可直接运行的示例位于 [`examples/`](examples/) 目录：
+
+- [`examples/basic_app.py`](examples/basic_app.py) —— Flask 普通模式，使用
+  `FlaskNacos(app)`。
+- [`examples/factory_app.py`](examples/factory_app.py) —— Flask 工厂模式，使用
+  `nacos.init_app(app)`。
+- [`examples/service_discovery.py`](examples/service_discovery.py) —— 列举实例、
+  cluster / metadata 过滤，以及 `get_one_healthy_instance()`。
+- [`examples/health_check_app.py`](examples/health_check_app.py) —— 通过
+  `NACOS_HEALTH_CHECK_ENABLED` / `NACOS_HEALTH_CHECK_PATH` 启用健康检查路由。
+
+示例使用 `127.0.0.1:8848` 与本地演示账号 `nacos/nacos`，请替换为你自己的配置
+（建议通过环境变量传入）。
+
+## 本地开发与测试
+
+将 dev 依赖安装到虚拟环境后运行相关工具。测试套件中所有 Nacos 交互均使用 mock，
+无需真实 Nacos 服务。
+
+```bash
+# Linux / macOS
+.venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy flask_nacos
+.venv/bin/python -m build
+.venv/bin/python -m twine check dist/*
+```
+
+```powershell
+# Windows (PowerShell)
+.venv\Scripts\python -m pytest
+.venv\Scripts\python -m ruff check .
+.venv\Scripts\python -m mypy flask_nacos
+.venv\Scripts\python -m build
+.venv\Scripts\python -m twine check dist/*
+```
+
+覆盖率会自动统计（`--cov=flask_nacos`），且未设置硬性阈值，不会阻塞开发。
+
+## 类型提示
+
+`flask-nacos` 内置类型提示并附带 `py.typed` 标记（PEP 561）。安装后，mypy、Pyright
+等类型检查工具会自动识别本包的类型信息，无需额外的 stub 包。
+
+## PyPI 发布准备
+
+在发布版本前，请在本地完成构建校验：
+
+1. 更新 [`pyproject.toml`](pyproject.toml) 与 [`flask_nacos/__init__.py`](flask_nacos/__init__.py) 中的版本号。
+2. 更新 [`CHANGELOG.md`](CHANGELOG.md)。
+3. 运行 `ruff check .`、`mypy flask_nacos`、`pytest`。
+4. 构建分发包：`python -m build`。
+5. 校验元数据：`twine check dist/*`。
+6. 确认 `flask_nacos/py.typed` 已包含在构建出的 wheel 中。
+
+CI 有意不自动发布到 PyPI，仅执行代码检查、类型检查、测试与构建。
 
 ## 版本兼容说明
 

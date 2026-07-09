@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flask-nacos"
-version = "0.4.0"
+version = "0.5.0"
 description = "A Flask extension for integrating with Nacos service discovery and configuration center."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -41,9 +41,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-yaml = [
-  "PyYAML>=6.0"
-]
 dev = [
   "pytest>=7.0",
   "pytest-cov>=4.0",
@@ -54,10 +51,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/flask-nacos"
-Repository = "https://github.com/your-org/flask-nacos"
-Issues = "https://github.com/your-org/flask-nacos/issues"
-Changelog = "https://github.com/your-org/flask-nacos/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/pumpkin-nbc/Flask-Nacos"
+Repository = "https://github.com/pumpkin-nbc/Flask-Nacos"
+Issues = "https://github.com/pumpkin-nbc/Flask-Nacos/issues"
+Changelog = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["flask_nacos"]
@@ -82,8 +79,20 @@ ignore = ["B904"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-q --cov=flask_nacos --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+source = ["flask_nacos"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [tool.mypy]
 python_version = "3.8"
 ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+strict = false

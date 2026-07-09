@@ -17,7 +17,7 @@ def create_client(config: Dict[str, Any]) -> Any:
     extension only deals with a plain client object.
     """
     try:
-        import nacos  # type: ignore
+        import nacos
     except ImportError as exc:  # pragma: no cover - exercised only without the SDK
         raise NacosConfigError(
             "nacos-sdk-python is required. Install it with 'pip install nacos-sdk-python'."

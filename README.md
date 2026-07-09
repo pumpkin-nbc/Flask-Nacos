@@ -22,6 +22,8 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
   `get_status()` runtime inspector (0.3.0).
 - Per-process registration lifecycle, safe deregistration, instance
   normalization, and `first`/`random`/`weight` discovery strategies (0.4.0).
+- Full type hints with `py.typed` (PEP 561), plus ruff/mypy/pytest/coverage
+  configuration and CI (0.5.0).
 
 ## Installation
 
@@ -29,10 +31,10 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 pip install flask-nacos
 ```
 
-Optional YAML support (reserved for future config parsing helpers):
+For local development (tests, linting, type checking, building):
 
 ```bash
-pip install "flask-nacos[yaml]"
+pip install -e ".[dev]"
 ```
 
 ## Quick Start
@@ -520,6 +522,70 @@ from flask_nacos import (
   Prefer environment variables for `NACOS_USERNAME` / `NACOS_PASSWORD`.
 - Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never
   written to logs.
+
+## Examples
+
+Runnable examples live in the [`examples/`](examples/) directory:
+
+- [`examples/basic_app.py`](examples/basic_app.py) — Flask standard mode with
+  `FlaskNacos(app)`.
+- [`examples/factory_app.py`](examples/factory_app.py) — Flask application
+  factory mode with `nacos.init_app(app)`.
+- [`examples/service_discovery.py`](examples/service_discovery.py) — listing
+  instances, cluster/metadata filtering, and `get_one_healthy_instance()`.
+- [`examples/health_check_app.py`](examples/health_check_app.py) — enabling the
+  health-check route via `NACOS_HEALTH_CHECK_ENABLED` / `NACOS_HEALTH_CHECK_PATH`.
+
+The examples use `127.0.0.1:8848` and the local demo credentials `nacos/nacos`;
+replace them with your own configuration (preferably via environment variables).
+
+## Local Development & Testing
+
+Install the dev extras into your virtual environment, then run the tooling. All
+Nacos interactions in the test suite are mocked, so no real Nacos server is
+required.
+
+```bash
+# Linux / macOS
+.venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy flask_nacos
+.venv/bin/python -m build
+.venv/bin/python -m twine check dist/*
+```
+
+```powershell
+# Windows (PowerShell)
+.venv\Scripts\python -m pytest
+.venv\Scripts\python -m ruff check .
+.venv\Scripts\python -m mypy flask_nacos
+.venv\Scripts\python -m build
+.venv\Scripts\python -m twine check dist/*
+```
+
+Test coverage is reported automatically (`--cov=flask_nacos`); there is no hard
+coverage threshold, so it never blocks development.
+
+## Type Hints
+
+`flask-nacos` ships inline type hints and a `py.typed` marker (PEP 561), so type
+checkers such as mypy and Pyright pick up the package's types automatically once
+it is installed — no separate stub package is needed.
+
+## PyPI Release Preparation
+
+Before publishing a release, verify the build locally:
+
+1. Bump the version in [`pyproject.toml`](pyproject.toml) and
+   [`flask_nacos/__init__.py`](flask_nacos/__init__.py).
+2. Update [`CHANGELOG.md`](CHANGELOG.md).
+3. Run `ruff check .`, `mypy flask_nacos`, and `pytest`.
+4. Build the distributions: `python -m build`.
+5. Validate metadata: `twine check dist/*`.
+6. Confirm `flask_nacos/py.typed` is present inside the built wheel.
+
+Publishing to PyPI is intentionally not automated in CI; CI only lints, type
+checks, tests, and builds.
 
 ## Compatibility
 

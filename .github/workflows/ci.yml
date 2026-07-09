@@ -29,6 +29,9 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: Type check
+        run: mypy flask_nacos
+
       - name: Test
         run: pytest
 
