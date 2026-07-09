@@ -1,9 +1,20 @@
 """Default configuration and configuration parsing for flask-nacos."""
 
+import logging
 from typing import Any, Dict
 
-from .exceptions import NacosConfigError
-from .utils import to_bool, to_float, to_int, validate_metadata
+from .exceptions import NacosConfigError, NacosValidationError
+from .utils import (
+    is_bool,
+    to_bool,
+    to_float,
+    to_int,
+    validate_metadata,
+    validate_port,
+    validate_weight,
+)
+
+logger = logging.getLogger("flask_nacos")
 
 DEFAULTS: Dict[str, Any] = {
     # Whether Nacos is enabled at all.
@@ -52,12 +63,13 @@ def load_config(app) -> Dict[str, Any]:
         if key in app.config:
             merged[key] = app.config[key]
 
+    # NACOS_SERVICE_EPHEMERAL is intentionally excluded: it must be a genuine
+    # bool and is validated strictly at registration time.
     bool_keys = (
         "NACOS_ENABLED",
         "NACOS_REGISTER_ENABLED",
         "NACOS_AUTO_REGISTER",
         "NACOS_AUTO_DEREGISTER",
-        "NACOS_SERVICE_EPHEMERAL",
         "NACOS_SERVICE_HEALTHY",
         "NACOS_SERVICE_ENABLED",
         "NACOS_CONFIG_ENABLED",
@@ -66,12 +78,18 @@ def load_config(app) -> Dict[str, Any]:
     for key in bool_keys:
         merged[key] = to_bool(merged[key], DEFAULTS[key])
 
-    merged["NACOS_SERVICE_WEIGHT"] = to_float(
-        merged["NACOS_SERVICE_WEIGHT"], DEFAULTS["NACOS_SERVICE_WEIGHT"]
-    )
-    merged["NACOS_SERVICE_PORT"] = to_int(merged["NACOS_SERVICE_PORT"], None)
-    merged["NACOS_SERVICE_METADATA"] = validate_metadata(merged["NACOS_SERVICE_METADATA"])
+    # Coerce valid string numbers (e.g. from env vars) but keep the original
+    # value when coercion fails so that validation can report it clearly.
+    weight_coerced = to_float(merged["NACOS_SERVICE_WEIGHT"], None)
+    if weight_coerced is not None:
+        merged["NACOS_SERVICE_WEIGHT"] = weight_coerced
 
+    port_coerced = to_int(merged["NACOS_SERVICE_PORT"], None)
+    if port_coerced is not None:
+        merged["NACOS_SERVICE_PORT"] = port_coerced
+
+    # Metadata validation is deferred to registration so a bad value honors
+    # NACOS_FAIL_FAST rather than crashing init_app unconditionally.
     return merged
 
 
@@ -82,13 +100,29 @@ def validate_connection_config(config: Dict[str, Any]) -> None:
 
 
 def validate_registration_config(config: Dict[str, Any]) -> None:
-    """Validate the settings required to register a service instance."""
+    """Validate the settings required to register a service instance.
+
+    Raises :class:`NacosValidationError` (a subclass of ``NacosConfigError``)
+    when a required field is missing or a value is invalid.
+    """
     if not config.get("NACOS_SERVICE_NAME"):
-        raise NacosConfigError("NACOS_SERVICE_NAME is required to register a service")
+        logger.error("Service registration failed: NACOS_SERVICE_NAME is required")
+        raise NacosValidationError("NACOS_SERVICE_NAME is required to register a service")
+
     if config.get("NACOS_SERVICE_PORT") is None:
-        raise NacosConfigError(
+        logger.error("Service registration failed: NACOS_SERVICE_PORT is required")
+        raise NacosValidationError(
             "NACOS_SERVICE_PORT is required to register a service and cannot be guessed"
         )
+
+    # Raises NacosValidationError on illegal port / weight / metadata values.
+    validate_port(config["NACOS_SERVICE_PORT"])
+    validate_weight(config.get("NACOS_SERVICE_WEIGHT", 1.0))
+    validate_metadata(config.get("NACOS_SERVICE_METADATA"))
+
+    if not is_bool(config.get("NACOS_SERVICE_EPHEMERAL")):
+        logger.error("Service registration failed: NACOS_SERVICE_EPHEMERAL must be a bool")
+        raise NacosValidationError("NACOS_SERVICE_EPHEMERAL must be a bool")
 
 
 __all__ = [

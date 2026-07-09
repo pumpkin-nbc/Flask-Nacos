@@ -88,9 +88,29 @@ register manually:
 nacos.register_instance()
 ```
 
-`NACOS_SERVICE_NAME` and `NACOS_SERVICE_PORT` are required. If
-`NACOS_SERVICE_IP` is not provided, the local host IP is detected
-automatically.
+### Registration Parameter Rules
+
+The following are validated before an instance is registered. Invalid values
+follow the `NACOS_FAIL_FAST` rule (see [Exception Handling](#exception-handling)):
+
+- `NACOS_SERVICE_NAME` - required, must be non-empty.
+- `NACOS_SERVICE_PORT` - required, must be an integer in the range `1-65535`.
+- `NACOS_SERVICE_WEIGHT` - must be a number greater than `0`.
+- `NACOS_SERVICE_METADATA` - must be a `dict`.
+- `NACOS_SERVICE_EPHEMERAL` - must be a `bool`.
+
+Registration is idempotent: calling `register_instance()` multiple times on the
+same extension instance registers only once (subsequent calls are no-ops).
+
+### Service IP Auto-detection
+
+If `NACOS_SERVICE_IP` is not provided, the extension attempts to detect the
+local outbound IP via the `get_local_ip()` helper. If detection fails, the
+behavior follows the `NACOS_FAIL_FAST` rule.
+
+> Production recommendation: explicitly configure `NACOS_SERVICE_IP` rather than
+> relying on auto-detection. In containers, multi-NIC hosts, or behind NAT the
+> auto-detected address may not be the one you want other services to reach.
 
 ## Service Deregistration
 
@@ -100,6 +120,9 @@ exit via `atexit`. You can also deregister manually:
 ```python
 nacos.deregister_instance()
 ```
+
+Deregistration is idempotent: once an instance has been deregistered, further
+`deregister_instance()` calls are no-ops and never raise.
 
 ## Service Discovery
 
@@ -114,6 +137,15 @@ instances = nacos.list_instances("user-service", group="DEFAULT_GROUP", healthy_
 instance = nacos.get_one_healthy_instance("user-service")
 ```
 
+- `service_name` is required; an empty value follows the `NACOS_FAIL_FAST` rule.
+- `group` falls back to `NACOS_GROUP_NAME` when omitted.
+- `healthy_only=True` (default) returns only healthy instances; `healthy_only=False`
+  returns all instances.
+- An empty result is returned as an empty list (not an error).
+- `get_one_healthy_instance()` currently returns the first healthy instance.
+  Random, round-robin, and weighted load-balancing strategies are planned for a
+  later release.
+
 ## Configuration Center
 
 ```python
@@ -121,7 +153,8 @@ content = nacos.get_config("application.yaml")
 ```
 
 `data_id` is required. `group` falls back to `NACOS_CONFIG_GROUP` (and then to
-`NACOS_GROUP_NAME`) when omitted. The raw content string is returned.
+`NACOS_GROUP_NAME`) when omitted. The raw content string from Nacos is returned
+as-is; no YAML, JSON, or dict parsing is performed.
 
 ## Configuration Reference
 
@@ -156,11 +189,17 @@ content = nacos.get_config("application.yaml")
 
 ## Exception Handling
 
-The behavior on failure is controlled by `NACOS_FAIL_FAST`:
+The behavior on failure is controlled by `NACOS_FAIL_FAST`. This covers Nacos
+client initialization, registration, deregistration, discovery, registration
+parameter validation, and local IP auto-detection:
 
-- `NACOS_FAIL_FAST = False` (default): Nacos initialization, registration, and
-  config-read failures are logged and do not prevent the Flask app from
-  starting. Discovery/config helpers return safe defaults (`None` / `[]`).
+- `NACOS_FAIL_FAST = False` (default): failures are logged and do not prevent
+  the Flask app from starting. Methods return safe defaults:
+  - `register_instance()` -> `False`
+  - `deregister_instance()` -> `False`
+  - `list_instances()` -> `[]`
+  - `get_one_healthy_instance()` -> `None`
+  - `get_config()` -> `None`
 - `NACOS_FAIL_FAST = True`: failures raise an exception.
 
 Exception hierarchy:
@@ -169,14 +208,21 @@ Exception hierarchy:
 from flask_nacos import (
     FlaskNacosError,
     NacosConfigError,
+    NacosClientError,
+    NacosValidationError,
     NacosRegistrationError,
+    NacosDeregistrationError,
     NacosDiscoveryError,
 )
 ```
 
 - `FlaskNacosError` — base class.
 - `NacosConfigError` — invalid config or config-read failures.
-- `NacosRegistrationError` — registration/deregistration failures.
+- `NacosClientError` — Nacos client creation/usage failures.
+- `NacosValidationError` — registration parameter validation failures (subclass
+  of `NacosConfigError`).
+- `NacosRegistrationError` — service registration failures.
+- `NacosDeregistrationError` — service deregistration failures.
 - `NacosDiscoveryError` — discovery failures.
 
 ## Production Notes

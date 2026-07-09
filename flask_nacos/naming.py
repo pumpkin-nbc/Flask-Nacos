@@ -9,8 +9,13 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .config import validate_registration_config
-from .exceptions import NacosDiscoveryError, NacosRegistrationError
-from .utils import get_host_ip
+from .exceptions import (
+    NacosDeregistrationError,
+    NacosDiscoveryError,
+    NacosRegistrationError,
+    NacosValidationError,
+)
+from .utils import get_local_ip
 
 logger = logging.getLogger("flask_nacos")
 
@@ -18,7 +23,15 @@ logger = logging.getLogger("flask_nacos")
 def resolve_instance_identity(config: Dict[str, Any]) -> Dict[str, Any]:
     """Resolve the service name/ip/port/group used to identify this instance."""
     validate_registration_config(config)
-    ip = config.get("NACOS_SERVICE_IP") or get_host_ip()
+
+    ip = config.get("NACOS_SERVICE_IP")
+    if not ip:
+        ip = get_local_ip()
+        if not ip:
+            raise NacosValidationError(
+                "NACOS_SERVICE_IP is not set and local IP auto-detection failed"
+            )
+
     return {
         "service_name": config["NACOS_SERVICE_NAME"],
         "ip": ip,
@@ -31,6 +44,13 @@ def resolve_instance_identity(config: Dict[str, Any]) -> Dict[str, Any]:
 def register_instance(client: Any, config: Dict[str, Any]) -> bool:
     """Register the current service instance with Nacos."""
     identity = resolve_instance_identity(config)
+    logger.info(
+        "Registering service instance (service=%s, ip=%s, port=%s, group=%s)",
+        identity["service_name"],
+        identity["ip"],
+        identity["port"],
+        identity["group_name"],
+    )
     try:
         client.add_naming_instance(
             identity["service_name"],
@@ -62,6 +82,13 @@ def register_instance(client: Any, config: Dict[str, Any]) -> bool:
 def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
     """Deregister the current service instance from Nacos."""
     identity = resolve_instance_identity(config)
+    logger.info(
+        "Deregistering service instance (service=%s, ip=%s, port=%s, group=%s)",
+        identity["service_name"],
+        identity["ip"],
+        identity["port"],
+        identity["group_name"],
+    )
     try:
         client.remove_naming_instance(
             identity["service_name"],
@@ -72,7 +99,7 @@ def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
             group_name=identity["group_name"],
         )
     except Exception as exc:
-        raise NacosRegistrationError(
+        raise NacosDeregistrationError(
             f"Failed to deregister service instance {identity['service_name']}"
         ) from exc
 
@@ -94,6 +121,10 @@ def list_instances(
     healthy_only: bool = True,
 ) -> List[Dict[str, Any]]:
     """Return the list of instances for ``service_name``."""
+    if not service_name:
+        logger.error("Service discovery failed: service_name is required")
+        raise NacosValidationError("service_name is required for discovery")
+
     group_name = group or config.get("NACOS_GROUP_NAME") or "DEFAULT_GROUP"
     try:
         result = client.list_naming_instance(
@@ -108,10 +139,20 @@ def list_instances(
         ) from exc
 
     if isinstance(result, dict):
-        return list(result.get("hosts", []) or [])
-    if isinstance(result, list):
-        return result
-    return []
+        instances = list(result.get("hosts", []) or [])
+    elif isinstance(result, list):
+        instances = result
+    else:
+        instances = []
+
+    logger.info(
+        "Service discovery succeeded (service=%s, group=%s, healthy_only=%s, count=%d)",
+        service_name,
+        group_name,
+        healthy_only,
+        len(instances),
+    )
+    return instances
 
 
 def get_one_healthy_instance(

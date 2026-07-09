@@ -81,6 +81,7 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
         nacos = FlaskNacos(app)
         nacos.get_config("application.yaml")
         nacos.list_instances("user-service")
+        nacos.deregister_instance()
 
     combined = "\n".join(record.getMessage() for record in caplog.records)
     assert secret_pw not in combined

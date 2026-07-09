@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.2.0
+
+### Added
+
+- Added stronger validation for service registration parameters.
+- Added local IP auto-detection helper for service registration.
+- Added idempotent handling for service registration.
+- Added idempotent handling for service deregistration.
+- Added improved service discovery behavior.
+- Added clearer fail-fast behavior for registration, deregistration, and discovery.
+- Added additional tests for service registration and discovery.
+
+### Changed
+
+- Improved logging for Nacos client initialization, service registration, deregistration, and discovery.
+- Improved README documentation for service registration and discovery.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+
 ## [0.1.0] - 2026-07-08
 
 ### Added

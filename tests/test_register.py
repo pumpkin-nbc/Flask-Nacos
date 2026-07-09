@@ -59,7 +59,7 @@ def test_missing_port_fails_fast(make_app, patched_create_client):
 def test_auto_detect_ip_when_unset(make_app, patched_create_client, fake_client, monkeypatch):
     import flask_nacos.naming as naming_module
 
-    monkeypatch.setattr(naming_module, "get_host_ip", lambda: "192.168.1.50")
+    monkeypatch.setattr(naming_module, "get_local_ip", lambda: "192.168.1.50")
     app = make_app({"NACOS_SERVICE_IP": None})
     nacos = FlaskNacos(app)
     nacos.register_instance()

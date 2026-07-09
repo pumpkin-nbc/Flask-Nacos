@@ -28,6 +28,8 @@ class FlaskNacos:
         self._app = None
         self._client: Any = None
         self._config: Optional[Dict[str, Any]] = None
+        self._registered = False
+        self._deregistered = False
         if app is not None:
             self.init_app(app)
 
@@ -57,6 +59,8 @@ class FlaskNacos:
         self._app = app
         self._config = cfg
         self._client = None
+        self._registered = False
+        self._deregistered = False
 
         if not cfg["NACOS_ENABLED"]:
             logger.info("Nacos is disabled (NACOS_ENABLED=False); skipping initialization")
@@ -70,14 +74,10 @@ class FlaskNacos:
             return
 
         if cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
-            self._safe(
-                lambda: naming.register_instance(client, cfg),
-                cfg,
-                "Failed to register service instance",
-            )
+            self.register_instance()
 
         if cfg["NACOS_AUTO_DEREGISTER"]:
-            self._register_atexit(client, cfg)
+            self._register_atexit()
 
     def _configure_logging(self, cfg: Dict[str, Any]) -> None:
         level_name = str(cfg.get("NACOS_LOG_LEVEL") or "INFO").upper()
@@ -97,15 +97,10 @@ class FlaskNacos:
             logger.debug("Nacos client init error suppressed: %s", exc)
             return None
 
-    def _register_atexit(self, client: Any, cfg: Dict[str, Any]) -> None:
-        registered = {"done": False}
-
+    def _register_atexit(self) -> None:
         def _deregister_on_exit() -> None:
-            if registered["done"]:
-                return
-            registered["done"] = True
             try:
-                naming.deregister_instance(client, cfg)
+                self.deregister_instance()
             except Exception:  # pragma: no cover - best effort on shutdown
                 logger.warning("Failed to deregister service instance on exit")
 
@@ -118,28 +113,42 @@ class FlaskNacos:
         return self._client
 
     def register_instance(self) -> bool:
-        """Register the current service instance with Nacos."""
+        """Register the current service instance with Nacos (idempotent)."""
         client, cfg = self._require_client()
-        return bool(
-            self._safe(
-                lambda: naming.register_instance(client, cfg),
-                cfg,
-                "Failed to register service instance",
-                default=False,
-            )
+        if self._registered:
+            logger.info("Service instance already registered; skipping re-registration")
+            return True
+
+        result = self._safe(
+            lambda: naming.register_instance(client, cfg),
+            cfg,
+            "Failed to register service instance",
+            default=False,
         )
+        if result:
+            self._registered = True
+            self._deregistered = False
+            return True
+        return False
 
     def deregister_instance(self) -> bool:
-        """Deregister the current service instance from Nacos."""
+        """Deregister the current service instance from Nacos (idempotent)."""
         client, cfg = self._require_client()
-        return bool(
-            self._safe(
-                lambda: naming.deregister_instance(client, cfg),
-                cfg,
-                "Failed to deregister service instance",
-                default=False,
-            )
+        if self._deregistered:
+            logger.info("Service instance already deregistered; skipping")
+            return True
+
+        result = self._safe(
+            lambda: naming.deregister_instance(client, cfg),
+            cfg,
+            "Failed to deregister service instance",
+            default=False,
         )
+        if result:
+            self._registered = False
+            self._deregistered = True
+            return True
+        return False
 
     def list_instances(
         self,
