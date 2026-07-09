@@ -8,19 +8,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: py${{ matrix.python-version }}${{ matrix.flask && format(' / {0}', matrix.flask) || ' / latest Flask' }}
+    name: py${{ matrix.python-version }} / ${{ matrix.label || 'latest Flask' }}
     strategy:
       fail-fast: false
       matrix:
         # Layered Python x Flask compatibility matrix. Flask 1.x is only
         # exercised on Python 3.8 (its old Werkzeug pin is incompatible with
-        # newer Python versions).
+        # newer Python versions). Flask 1.x needs its whole transitive stack
+        # pinned (Werkzeug/Jinja2/markupsafe/itsdangerous), otherwise newer
+        # markupsafe removes ``soft_unicode`` and Jinja2 2.x fails to import.
         include:
           - python-version: "3.8"
-            flask: "Flask>=1.0,<2.0"
+            label: "Flask 1.x"
+            flask: "Flask>=1.0,<2.0 Werkzeug<2.0 Jinja2<3.0 markupsafe<2.1 itsdangerous<2.0 click<8.0"
           - python-version: "3.8"
+            label: "Flask 2.x"
             flask: "Flask>=2.0,<3.0"
           - python-version: "3.8"
+            label: "Flask 3.x"
             flask: "Flask>=3.0,<4.0"
           - python-version: "3.9"
             flask: ""
@@ -46,7 +51,11 @@ jobs:
 
       - name: Install specific Flask version
         if: ${{ matrix.flask != '' }}
-        run: pip install "${{ matrix.flask }}"
+        env:
+          # Passed via env so pip receives each spec as a separate word and the
+          # '<' in version bounds is not interpreted as a shell redirect.
+          FLASK_SPEC: ${{ matrix.flask }}
+        run: pip install $FLASK_SPEC
 
       - name: Lint
         run: ruff check .
