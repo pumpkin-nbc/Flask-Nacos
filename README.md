@@ -18,6 +18,8 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 - Configuration-center read support (`get_config`).
 - Configurable fail-fast behavior with a dedicated exception hierarchy.
 - Standard `logging` integration that never logs secrets.
+- Unified retry for Nacos operations, an optional health-check route, and a
+  `get_status()` runtime inspector (0.3.0).
 
 ## Installation
 
@@ -156,6 +158,128 @@ content = nacos.get_config("application.yaml")
 `NACOS_GROUP_NAME`) when omitted. The raw content string from Nacos is returned
 as-is; no YAML, JSON, or dict parsing is performed.
 
+## Production Readiness (0.3.0)
+
+Version 0.3.0 adds features aimed at production use: retries, a request-timeout
+setting, an optional health-check route, a runtime status inspector, and finer
+control over auto-registration.
+
+### Retry
+
+`register_instance()`, `deregister_instance()`, `list_instances()`, and
+`get_config()` are wrapped in a unified retry helper.
+
+- `NACOS_RETRY_ENABLED` (default `True`): enable retries. When `False`, each
+  operation runs exactly once.
+- `NACOS_RETRY_TIMES` (default `3`): maximum number of attempts (not extra
+  retries). `3` means the operation is attempted up to 3 times.
+- `NACOS_RETRY_INTERVAL` (default `1.0`): seconds to wait between attempts.
+
+Each failed attempt is logged at `warning` level. After the final failure the
+`NACOS_FAIL_FAST` rule decides whether to raise or return a safe default.
+
+### Request Timeout
+
+- `NACOS_REQUEST_TIMEOUT` (default `5.0`).
+
+> Reserved setting: the bundled synchronous `nacos-sdk-python` (2.x) client does
+> not expose a reliable per-request timeout, so this value is read and exposed
+> via `get_status()`/config but is not currently applied to SDK calls. It is
+> reserved so applications can configure it today and have it take effect in a
+> future release without config changes.
+
+### Health Check Route
+
+When `NACOS_HEALTH_CHECK_ENABLED` is `True`, a Flask route is registered at
+`NACOS_HEALTH_CHECK_PATH` (default `/health/nacos`). It reports only the
+extension's internal state and never calls the Nacos server, so it stays fast.
+
+```json
+{
+  "status": "ok",
+  "nacos_enabled": true,
+  "client_initialized": true,
+  "registered": true,
+  "service_name": "fund-service",
+  "service_ip": "127.0.0.1",
+  "service_port": 5000
+}
+```
+
+When Nacos is disabled:
+
+```json
+{
+  "status": "disabled",
+  "nacos_enabled": false,
+  "client_initialized": false,
+  "registered": false
+}
+```
+
+When client initialization failed:
+
+```json
+{
+  "status": "error",
+  "nacos_enabled": true,
+  "client_initialized": false,
+  "registered": false
+}
+```
+
+The route is registered idempotently: repeated `init_app(app)` calls or a
+pre-existing route will not cause Flask to raise.
+
+### Runtime Status
+
+```python
+status = nacos.get_status()
+```
+
+Returns the extension's internal state and non-sensitive configuration only. It
+never calls Nacos and never includes `NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, or
+`NACOS_SECRET_KEY`:
+
+```python
+{
+    "nacos_enabled": True,
+    "client_initialized": True,
+    "registered": True,
+    "service_name": "fund-service",
+    "service_ip": "127.0.0.1",
+    "service_port": 5000,
+    "server_addr": "127.0.0.1:8848",
+    "namespace_id": "",
+}
+```
+
+### Auto-registration Control
+
+Two switches control init-time registration:
+
+- `NACOS_AUTO_REGISTER` (default `True`): master switch for auto-registration.
+- `NACOS_AUTO_REGISTER_ON_INIT` (default `True`): whether `init_app(app)`
+  performs the auto-registration.
+
+The service is auto-registered during `init_app(app)` only when both are `True`
+(and `NACOS_REGISTER_ENABLED` is `True`). You can always register manually:
+
+```python
+nacos.register_instance()
+```
+
+### Gunicorn / Multi-worker Deployment
+
+Under Gunicorn/uWSGI each worker process runs `init_app` and would register its
+own instance. For more predictable behavior consider setting
+`NACOS_AUTO_REGISTER_ON_INIT = False` and registering explicitly from a defined
+startup hook (for example a post-fork hook or a management command) instead of
+implicitly at import/init time.
+
+In production, always set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
+`NACOS_SERVICE_PORT` explicitly rather than relying on auto-detection.
+
 ## Configuration Reference
 
 | Key | Default | Description |
@@ -184,6 +308,14 @@ as-is; no YAML, JSON, or dict parsing is performed.
 | `NACOS_CONFIG_ENABLED` | `True` | Enable config-center features. |
 | `NACOS_CONFIG_DATA_ID` | `None` | Default config data id. |
 | `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | Default config group. |
+| `NACOS_RETRY_ENABLED` | `True` | Enable retries for Nacos operations. |
+| `NACOS_RETRY_TIMES` | `3` | Maximum number of attempts per operation. |
+| `NACOS_RETRY_INTERVAL` | `1.0` | Seconds between retry attempts. |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | Request timeout (reserved; see Production Readiness). |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | Register the Flask health-check route. |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Path of the health-check route. |
+| `NACOS_STATUS_ENABLED` | `True` | Enable runtime status querying. |
+| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | Auto register during `init_app` (with `NACOS_AUTO_REGISTER`). |
 | `NACOS_FAIL_FAST` | `False` | Raise on Nacos errors when `True`. |
 | `NACOS_LOG_LEVEL` | `"INFO"` | Logging level for `flask_nacos`. |
 

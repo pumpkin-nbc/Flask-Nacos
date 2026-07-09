@@ -45,6 +45,19 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_CONFIG_ENABLED": True,
     "NACOS_CONFIG_DATA_ID": None,
     "NACOS_CONFIG_GROUP": "DEFAULT_GROUP",
+    # Retry (0.3.0).
+    "NACOS_RETRY_ENABLED": True,
+    "NACOS_RETRY_TIMES": 3,
+    "NACOS_RETRY_INTERVAL": 1.0,
+    # Request timeout (0.3.0, reserved - see README).
+    "NACOS_REQUEST_TIMEOUT": 5.0,
+    # Health check route (0.3.0).
+    "NACOS_HEALTH_CHECK_ENABLED": False,
+    "NACOS_HEALTH_CHECK_PATH": "/health/nacos",
+    # Runtime status (0.3.0).
+    "NACOS_STATUS_ENABLED": True,
+    # Auto-registration control (0.3.0).
+    "NACOS_AUTO_REGISTER_ON_INIT": True,
     # Behavior control.
     "NACOS_FAIL_FAST": False,
     "NACOS_LOG_LEVEL": "INFO",
@@ -73,10 +86,24 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_SERVICE_HEALTHY",
         "NACOS_SERVICE_ENABLED",
         "NACOS_CONFIG_ENABLED",
+        "NACOS_RETRY_ENABLED",
+        "NACOS_HEALTH_CHECK_ENABLED",
+        "NACOS_STATUS_ENABLED",
+        "NACOS_AUTO_REGISTER_ON_INIT",
         "NACOS_FAIL_FAST",
     )
     for key in bool_keys:
         merged[key] = to_bool(merged[key], DEFAULTS[key])
+
+    merged["NACOS_RETRY_TIMES"] = to_int(
+        merged["NACOS_RETRY_TIMES"], DEFAULTS["NACOS_RETRY_TIMES"]
+    )
+    merged["NACOS_RETRY_INTERVAL"] = to_float(
+        merged["NACOS_RETRY_INTERVAL"], DEFAULTS["NACOS_RETRY_INTERVAL"]
+    )
+    merged["NACOS_REQUEST_TIMEOUT"] = to_float(
+        merged["NACOS_REQUEST_TIMEOUT"], DEFAULTS["NACOS_REQUEST_TIMEOUT"]
+    )
 
     # Coerce valid string numbers (e.g. from env vars) but keep the original
     # value when coercion fails so that validation can report it clearly.

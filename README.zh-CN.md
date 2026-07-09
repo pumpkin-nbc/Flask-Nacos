@@ -16,6 +16,7 @@
 - 配置中心读取能力（`get_config`）。
 - 可配置的 fail-fast 行为，并提供专用异常类型体系。
 - 基于标准 `logging`，且日志中不会输出敏感信息（密码、AccessKey、SecretKey）。
+- Nacos 操作统一重试、可选健康检查路由，以及 `get_status()` 运行状态查询（0.3.0）。
 
 ## 安装
 
@@ -147,6 +148,119 @@ content = nacos.get_config("application.yaml")
 `NACOS_GROUP_NAME`）。直接返回 Nacos 配置的原始字符串内容，不做任何 YAML、JSON、
 dict 解析。
 
+## 生产可用性增强（0.3.0）
+
+0.3.0 版本面向生产环境增强：重试、请求超时配置、可选健康检查路由、运行状态查询，
+以及更精细的自动注册控制。
+
+### 重试
+
+`register_instance()`、`deregister_instance()`、`list_instances()`、
+`get_config()` 均接入统一的重试机制。
+
+- `NACOS_RETRY_ENABLED`（默认 `True`）：是否启用重试。为 `False` 时每个操作只执行一次。
+- `NACOS_RETRY_TIMES`（默认 `3`）：最大尝试次数（不是额外重试次数）。`3` 表示最多尝试
+  3 次。
+- `NACOS_RETRY_INTERVAL`（默认 `1.0`）：每次尝试之间的等待秒数。
+
+每次失败都会记录 `warning` 日志。最终失败后由 `NACOS_FAIL_FAST` 决定抛出异常还是返回
+安全默认值。
+
+### 请求超时
+
+- `NACOS_REQUEST_TIMEOUT`（默认 `5.0`）。
+
+> 预留配置：当前内置的同步 `nacos-sdk-python`（2.x）客户端未提供可靠的单次请求超时，
+> 因此该值会被读取并通过 `get_status()` / 配置暴露，但暂不会应用到 SDK 调用。保留该
+> 配置项以便应用现在即可配置，未来版本无需改配置即可生效。
+
+### 健康检查路由
+
+当 `NACOS_HEALTH_CHECK_ENABLED` 为 `True` 时，会在 `NACOS_HEALTH_CHECK_PATH`
+（默认 `/health/nacos`）注册一个 Flask 路由。它只反映扩展内部状态，不会请求 Nacos
+服务端，因此接口不会变慢。
+
+```json
+{
+  "status": "ok",
+  "nacos_enabled": true,
+  "client_initialized": true,
+  "registered": true,
+  "service_name": "fund-service",
+  "service_ip": "127.0.0.1",
+  "service_port": 5000
+}
+```
+
+当 Nacos 未启用时：
+
+```json
+{
+  "status": "disabled",
+  "nacos_enabled": false,
+  "client_initialized": false,
+  "registered": false
+}
+```
+
+当 client 初始化失败时：
+
+```json
+{
+  "status": "error",
+  "nacos_enabled": true,
+  "client_initialized": false,
+  "registered": false
+}
+```
+
+该路由的注册是幂等的：重复调用 `init_app(app)` 或路由已存在时都不会导致 Flask 报错。
+
+### 运行状态查询
+
+```python
+status = nacos.get_status()
+```
+
+只返回扩展内部状态与非敏感配置，不会请求 Nacos，也不会包含 `NACOS_PASSWORD`、
+`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`：
+
+```python
+{
+    "nacos_enabled": True,
+    "client_initialized": True,
+    "registered": True,
+    "service_name": "fund-service",
+    "service_ip": "127.0.0.1",
+    "service_port": 5000,
+    "server_addr": "127.0.0.1:8848",
+    "namespace_id": "",
+}
+```
+
+### 自动注册控制
+
+两个开关共同控制初始化阶段的注册：
+
+- `NACOS_AUTO_REGISTER`（默认 `True`）：自动注册总开关。
+- `NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）：`init_app(app)` 是否执行自动注册。
+
+只有两者都为 `True`（且 `NACOS_REGISTER_ENABLED` 为 `True`）时，才会在
+`init_app(app)` 期间自动注册。你始终可以手动注册：
+
+```python
+nacos.register_instance()
+```
+
+### Gunicorn / 多 worker 部署
+
+在 Gunicorn / uWSGI 下，每个 worker 进程都会执行 `init_app` 并各自注册实例。为获得更
+可控的行为，建议将 `NACOS_AUTO_REGISTER_ON_INIT` 设为 `False`，改为在明确的启动流程
+（例如 post-fork 钩子或管理命令）中显式调用注册，而不是在导入 / 初始化阶段隐式注册。
+
+生产环境请务必显式配置 `NACOS_SERVICE_NAME`、`NACOS_SERVICE_IP`、
+`NACOS_SERVICE_PORT`，不要依赖自动识别。
+
 ## 配置项说明
 
 | 配置项 | 默认值 | 说明 |
@@ -175,6 +289,14 @@ dict 解析。
 | `NACOS_CONFIG_ENABLED` | `True` | 是否启用配置中心能力。 |
 | `NACOS_CONFIG_DATA_ID` | `None` | 默认配置 data id。 |
 | `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | 默认配置 group。 |
+| `NACOS_RETRY_ENABLED` | `True` | 是否为 Nacos 操作启用重试。 |
+| `NACOS_RETRY_TIMES` | `3` | 每个操作的最大尝试次数。 |
+| `NACOS_RETRY_INTERVAL` | `1.0` | 每次重试之间的等待秒数。 |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | 请求超时（预留；参见生产可用性增强）。 |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | 是否注册 Flask 健康检查路由。 |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
+| `NACOS_STATUS_ENABLED` | `True` | 是否启用运行状态查询能力。 |
+| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | 是否在 `init_app` 阶段自动注册（配合 `NACOS_AUTO_REGISTER`）。 |
 | `NACOS_FAIL_FAST` | `False` | 为 `True` 时 Nacos 异常会抛出。 |
 | `NACOS_LOG_LEVEL` | `"INFO"` | `flask_nacos` 的日志级别。 |
 

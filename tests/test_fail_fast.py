@@ -76,14 +76,38 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
                 "NACOS_ACCESS_KEY": secret_ak,
                 "NACOS_SECRET_KEY": secret_sk,
                 "NACOS_AUTO_REGISTER": True,
+                "NACOS_HEALTH_CHECK_ENABLED": True,
             }
         )
         nacos = FlaskNacos(app)
         nacos.get_config("application.yaml")
         nacos.list_instances("user-service")
         nacos.deregister_instance()
+        nacos.get_status()
+        app.test_client().get("/health/nacos")
 
     combined = "\n".join(record.getMessage() for record in caplog.records)
     assert secret_pw not in combined
     assert secret_ak not in combined
     assert secret_sk not in combined
+
+
+def test_retry_final_failure_logs_no_secrets(
+    make_app, patched_create_client, fake_client, caplog
+):
+    secret_pw = "another-secret-pw"
+    fake_client.add_naming_instance.side_effect = RuntimeError("boom")
+
+    with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
+        app = make_app(
+            {
+                "NACOS_PASSWORD": secret_pw,
+                "NACOS_AUTO_REGISTER": True,
+                "NACOS_RETRY_TIMES": 3,
+                "NACOS_FAIL_FAST": False,
+            }
+        )
+        FlaskNacos(app)
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert secret_pw not in combined

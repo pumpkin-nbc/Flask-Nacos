@@ -6,6 +6,13 @@ import pytest
 from flask import Flask
 
 import flask_nacos.extension as extension_module
+import flask_nacos.retry as retry_module
+
+
+@pytest.fixture(autouse=True)
+def no_sleep(monkeypatch):
+    """Make retry backoff instant across the whole test suite."""
+    monkeypatch.setattr(retry_module, "_sleep", lambda *a, **k: None)
 
 
 @pytest.fixture

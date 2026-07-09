@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0
+
+### Added
+
+- Added retry support for Nacos operations.
+- Added retry configuration options.
+- Added request timeout configuration.
+- Added optional Flask health check route.
+- Added `get_status()` for inspecting extension runtime status.
+- Added `NACOS_AUTO_REGISTER_ON_INIT` for finer auto-registration control.
+
+### Changed
+
+- Improved production deployment documentation.
+- Improved logging around retry, health check, and auto-registration behavior.
+- Improved test coverage for retry and health check behavior.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 0.2.0
 
 ### Added

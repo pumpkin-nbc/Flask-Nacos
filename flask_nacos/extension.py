@@ -8,6 +8,8 @@ from . import config as config_module
 from . import config_center, naming
 from .client import create_client
 from .exceptions import FlaskNacosError
+from .health import register_health_route
+from .retry import run_with_retry
 
 logger = logging.getLogger("flask_nacos")
 
@@ -62,19 +64,37 @@ class FlaskNacos:
         self._registered = False
         self._deregistered = False
 
+        def _maybe_register_health_route() -> None:
+            if cfg.get("NACOS_HEALTH_CHECK_ENABLED"):
+                self._safe(
+                    lambda: register_health_route(app, self),
+                    cfg,
+                    "Failed to register health check route",
+                    retry=False,
+                )
+
         if not cfg["NACOS_ENABLED"]:
             logger.info("Nacos is disabled (NACOS_ENABLED=False); skipping initialization")
+            _maybe_register_health_route()
             return
 
         client = self._init_client(cfg)
         state["client"] = client
         self._client = client
 
+        _maybe_register_health_route()
+
         if client is None:
             return
 
         if cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
-            self.register_instance()
+            if cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
+                self.register_instance()
+            else:
+                logger.info(
+                    "Auto registration on init disabled by configuration "
+                    "(NACOS_AUTO_REGISTER_ON_INIT=False)"
+                )
 
         if cfg["NACOS_AUTO_DEREGISTER"]:
             self._register_atexit()
@@ -192,6 +212,24 @@ class FlaskNacos:
             default=None,
         )
 
+    def get_status(self) -> Dict[str, Any]:
+        """Return the extension's runtime status (no Nacos call, no secrets).
+
+        Reflects only internal state and non-sensitive configuration. Never
+        includes ``NACOS_PASSWORD`` / ``NACOS_ACCESS_KEY`` / ``NACOS_SECRET_KEY``.
+        """
+        cfg = self._config or {}
+        return {
+            "nacos_enabled": bool(cfg.get("NACOS_ENABLED", False)),
+            "client_initialized": self._client is not None,
+            "registered": self._registered,
+            "service_name": cfg.get("NACOS_SERVICE_NAME"),
+            "service_ip": cfg.get("NACOS_SERVICE_IP"),
+            "service_port": cfg.get("NACOS_SERVICE_PORT"),
+            "server_addr": cfg.get("NACOS_SERVER_ADDR"),
+            "namespace_id": cfg.get("NACOS_NAMESPACE_ID", ""),
+        }
+
     # -- Internal helpers ---------------------------------------------------
 
     def _require_client(self):
@@ -204,9 +242,22 @@ class FlaskNacos:
             )
         return self._client, cfg
 
-    def _safe(self, func, cfg: Dict[str, Any], message: str, default: Any = None) -> Any:
-        """Run ``func`` honoring the ``NACOS_FAIL_FAST`` behavior."""
+    def _safe(
+        self,
+        func,
+        cfg: Dict[str, Any],
+        message: str,
+        default: Any = None,
+        retry: bool = True,
+    ) -> Any:
+        """Run ``func`` with optional retry, honoring ``NACOS_FAIL_FAST``.
+
+        Retry (when enabled via config) is applied first; if all attempts fail
+        the fail-fast setting decides whether to raise or return ``default``.
+        """
         try:
+            if retry:
+                return run_with_retry(func, message, cfg)
             return func()
         except Exception as exc:
             logger.error(message)

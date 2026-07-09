@@ -66,3 +66,27 @@ def test_auto_detect_ip_when_unset(make_app, patched_create_client, fake_client,
 
     args, _ = fake_client.add_naming_instance.call_args
     assert args[1] == "192.168.1.50"
+
+
+def test_no_auto_register_when_auto_register_false(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_AUTO_REGISTER": False, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    nacos = FlaskNacos(app)
+
+    fake_client.add_naming_instance.assert_not_called()
+    # Manual registration still works.
+    assert nacos.register_instance() is True
+    fake_client.add_naming_instance.assert_called_once()
+
+
+def test_no_auto_register_when_on_init_false(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": False})
+    nacos = FlaskNacos(app)
+
+    fake_client.add_naming_instance.assert_not_called()
+    # Manual registration still works.
+    assert nacos.register_instance() is True
+    fake_client.add_naming_instance.assert_called_once()
