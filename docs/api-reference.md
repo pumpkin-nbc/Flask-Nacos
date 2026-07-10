@@ -7,7 +7,35 @@ Public API of the `FlaskNacos` extension. All error behavior is governed by
 failures are logged and a safe default is returned; when `True` an exception is
 raised.
 
-See also: [Quickstart](quickstart.md) - [Configuration](configuration.md).
+See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
+[1.0.0 Checklist](1.0-checklist.md).
+
+## API freeze (1.0.0 candidate)
+
+Starting with `0.9.0`, the public API below is frozen as the `1.0.0` candidate.
+Method names, existing parameters, and return contracts will not change before
+`1.0.0`; any new parameters will be added with defaults so existing calls keep
+working. The frozen surface is:
+
+```python
+FlaskNacos(app=None)
+init_app(app)
+get_client()
+register_instance()
+deregister_instance()
+list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
+get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
+get_config(data_id, group=None)
+get_status()
+normalize_instance(instance)
+```
+
+`get_config()` returns the raw Nacos config content only.
+
+- This package does not provide `get_config_as_dict()`.
+- This package does not provide `load_config_to_flask()`.
+
+The snapshot is enforced by `scripts/check_api_snapshot.py`.
 
 ## `FlaskNacos(app=None)`
 

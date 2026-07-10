@@ -6,7 +6,33 @@
 [配置项](configuration.zh-CN.md)）：为 `False`（默认）时失败会被记录并返回安全默认
 值；为 `True` 时抛出异常。
 
-另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md)。
+另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md) -
+[1.0.0 验收清单](1.0-checklist.zh-CN.md)。
+
+## API 冻结（1.0.0 候选）
+
+从 `0.9.0` 起，以下公开 API 作为 `1.0.0` 候选被冻结。在 `1.0.0` 之前不会修改方法名称、
+已有参数含义与返回值约定；新增参数一律带默认值，不破坏已有调用。冻结的 API 如下：
+
+```python
+FlaskNacos(app=None)
+init_app(app)
+get_client()
+register_instance()
+deregister_instance()
+list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
+get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
+get_config(data_id, group=None)
+get_status()
+normalize_instance(instance)
+```
+
+`get_config()` 只返回 Nacos 配置的原始内容。
+
+- 不提供 `get_config_as_dict()`。
+- 不提供 `load_config_to_flask()`。
+
+该快照由 `scripts/check_api_snapshot.py` 强制校验。
 
 ## `FlaskNacos(app=None)`
 

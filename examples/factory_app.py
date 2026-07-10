@@ -29,7 +29,7 @@ def create_app():
 
     @app.route("/config")
     def config():
-        content = nacos.get_config("application.yaml")
+        content = nacos.get_config("application.properties")
         return content or ""
 
     @app.route("/instances")

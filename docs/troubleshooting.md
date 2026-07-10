@@ -107,3 +107,16 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: inspect the returned value type.
 - Fix: parse the content in your application code as needed. flask-nacos does
   not perform YAML, JSON, or dict parsing and does not write into `app.config`.
+
+## 14. Reading the failure reason from error messages
+
+- Symptom: a Nacos operation raised an exception and you need the exact cause.
+- Cause: registration, discovery, and config errors wrap the underlying SDK
+  failure with a specific message.
+- Investigate: read the exception message. Registration/deregistration errors
+  name the service, ip, port, and group; discovery errors state whether the
+  service name was empty, the SDK query failed, or the instance shape was
+  unrecognized; config errors state whether the client was unavailable or the
+  SDK call failed.
+- Fix: address the specific cause reported. Error messages never contain
+  passwords, access keys, or secret keys.

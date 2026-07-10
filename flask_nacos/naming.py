@@ -67,7 +67,9 @@ def register_instance(client: Any, config: Dict[str, Any]) -> bool:
         )
     except Exception as exc:
         raise NacosRegistrationError(
-            f"Failed to register service instance {identity['service_name']}"
+            "Failed to register service instance: Nacos SDK add_naming_instance "
+            f"call failed (service={identity['service_name']}, ip={identity['ip']}, "
+            f"port={identity['port']}, group={identity['group_name']})"
         ) from exc
 
     logger.info(
@@ -101,7 +103,9 @@ def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
         )
     except Exception as exc:
         raise NacosDeregistrationError(
-            f"Failed to deregister service instance {identity['service_name']}"
+            "Failed to deregister service instance: Nacos SDK remove_naming_instance "
+            f"call failed (service={identity['service_name']}, ip={identity['ip']}, "
+            f"port={identity['port']}, group={identity['group_name']})"
         ) from exc
 
     logger.info(
@@ -132,7 +136,10 @@ def list_instances(
     """
     if not service_name:
         logger.error("Service discovery failed: service_name is required")
-        raise NacosValidationError("service_name is required for discovery")
+        raise NacosValidationError(
+            "Service discovery failed: service_name is empty (a non-empty "
+            "service name is required)"
+        )
 
     group_name = group or config.get("NACOS_GROUP_NAME") or "DEFAULT_GROUP"
     try:
@@ -144,7 +151,8 @@ def list_instances(
     except Exception as exc:
         logger.error("Service discovery failed for %s", service_name)
         raise NacosDiscoveryError(
-            f"Failed to list instances for {service_name}"
+            "Service discovery failed: Nacos SDK list_naming_instance call failed "
+            f"(service={service_name}, group={group_name})"
         ) from exc
 
     instances = discovery.extract_instances(result)

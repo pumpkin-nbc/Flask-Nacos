@@ -32,6 +32,21 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 - Broad compatibility: Python 3.8-3.12 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
   tolerant handling of different Nacos SDK response shapes, a Python-3.8
   compatibility checker, and a Python x Flask CI matrix (0.8.0).
+- Release Candidate preparation: frozen public API with an API-snapshot check,
+  backward-compatibility tests, an examples validator, a package smoke test, and
+  a 1.0.0 acceptance checklist (0.9.0).
+
+## Release Candidate status
+
+`0.9.0` is the Release Candidate preparation version before `1.0.0`. The current
+public API is frozen as the `1.0.0` candidate: method names, existing
+parameters, and return contracts will not change before `1.0.0`.
+
+- `get_config()` returns the raw Nacos config content only; it does not perform
+  YAML, JSON, or dict parsing.
+- Nacos configuration is never written into Flask `app.config` automatically.
+- See the full pre-release verification in
+  [docs/1.0-checklist.md](docs/1.0-checklist.md).
 
 ## Compatibility
 
@@ -89,6 +104,7 @@ Full documentation lives under [`docs/`](docs/):
 - [Production](docs/production.md) - Gunicorn/uWSGI/Docker deployment.
 - [Troubleshooting](docs/troubleshooting.md) - common issues and fixes.
 - [Compatibility](docs/compatibility.md) - supported Python/Flask/Nacos versions.
+- [1.0.0 Checklist](docs/1.0-checklist.md) - release-candidate acceptance list.
 - [Release Guide](docs/release.md) - publishing to TestPyPI/PyPI.
 - [Changelog](docs/changelog.md) - links to the full changelog.
 

@@ -22,6 +22,12 @@ def get_config(
     if not data_id:
         raise NacosConfigError("data_id is required to fetch config from Nacos")
 
+    if client is None:
+        raise NacosConfigError(
+            "Cannot get config: Nacos client is not available "
+            "(NACOS_ENABLED=False or client initialization failed)"
+        )
+
     group_name = (
         group
         or config.get("NACOS_CONFIG_GROUP")
@@ -33,7 +39,8 @@ def get_config(
     except Exception as exc:
         logger.error("Config read failed (data_id=%s, group=%s)", data_id, group_name)
         raise NacosConfigError(
-            f"Failed to get config from Nacos (data_id={data_id})"
+            f"Failed to get config from Nacos: SDK get_config call failed "
+            f"(data_id={data_id}, group={group_name})"
         ) from exc
 
     logger.info("Config loaded (data_id=%s, group=%s)", data_id, group_name)

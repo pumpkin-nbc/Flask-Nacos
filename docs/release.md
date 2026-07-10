@@ -43,8 +43,10 @@ bash scripts/release_check.sh
 ```
 
 This runs, in order: `ruff`, `mypy`, `pytest`, `check_version.py`,
-`check_sensitive_info.py`, a clean rebuild (`python -m build`),
-`twine check dist/*`, and `check_package.py`. It never uploads anything.
+`check_sensitive_info.py`, `check_docs.py`, `check_compatibility.py`,
+`check_api_snapshot.py`, `check_examples.py`, a clean rebuild
+(`python -m build`), `twine check dist/*`, `check_package.py`, and
+`smoke_test_package.py`. It never uploads anything.
 
 You can also run the steps explicitly:
 
@@ -54,11 +56,20 @@ python -m mypy flask_nacos
 python -m pytest
 python scripts/check_version.py
 python scripts/check_sensitive_info.py
+python scripts/check_docs.py
+python scripts/check_compatibility.py
+python scripts/check_api_snapshot.py
+python scripts/check_examples.py
 rm -rf dist build ./*.egg-info
 python -m build
 python -m twine check dist/*
 python scripts/check_package.py
+python scripts/smoke_test_package.py
 ```
+
+The `smoke_test_package.py` step installs the freshly built wheel into a
+throwaway virtual environment and verifies a minimal offline
+`import`/initialization. It never connects to Nacos and uses no credentials.
 
 ## 5. Publish to TestPyPI
 
@@ -93,7 +104,12 @@ choose the target index:
 - `testpypi` (default) — safe sandbox.
 - `pypi` — real release; must be chosen explicitly.
 
-The workflow reruns all pre-release checks before uploading.
+The workflow reruns all pre-release checks (ruff, mypy, pytest,
+`check_version`, `check_sensitive_info`, `check_docs`, `check_compatibility`,
+`check_api_snapshot`, `check_examples`, build, `twine check`, `check_package`,
+and `smoke_test_package`) before uploading. TestPyPI is the default target so
+each release is validated on the sandbox first; publishing to real PyPI must be
+selected explicitly.
 
 ## 8. GitHub Secrets setup
 

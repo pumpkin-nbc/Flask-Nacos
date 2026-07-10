@@ -28,6 +28,17 @@
 - 广泛的兼容性：Python 3.8-3.12 与 Flask `>=1.0,<4.0`（1.x/2.x/3.x），兼容不同
   Nacos SDK 返回结构，提供 Python 3.8 兼容性检查脚本以及 Python x Flask CI 矩阵
   （0.8.0）。
+- Release Candidate 准备：冻结公开 API 并提供 API 快照检查、向后兼容性测试、示例
+  校验脚本、安装包 smoke test，以及 1.0.0 验收清单（0.9.0）。
+
+## Release Candidate 状态
+
+`0.9.0` 是 `1.0.0` 之前的 Release Candidate 准备版本。当前公开 API 已冻结为 `1.0.0`
+候选：在 `1.0.0` 之前不会修改方法名称、已有参数含义与返回值约定。
+
+- `get_config()` 只返回 Nacos 配置的原始内容，不做 YAML、JSON、dict 解析。
+- 不会自动将 Nacos 配置写入 Flask `app.config`。
+- 完整的发布前验证见 [docs/1.0-checklist.zh-CN.md](docs/1.0-checklist.zh-CN.md)。
 
 ## 兼容性
 
@@ -83,6 +94,7 @@ nacos = FlaskNacos(app)
 - [生产部署](docs/production.zh-CN.md) —— Gunicorn/uWSGI/Docker 部署。
 - [错误排查](docs/troubleshooting.zh-CN.md) —— 常见问题与解决。
 - [兼容性](docs/compatibility.zh-CN.md) —— 支持的 Python/Flask/Nacos 版本。
+- [1.0.0 验收清单](docs/1.0-checklist.zh-CN.md) —— Release Candidate 验收清单。
 - [发布指南](docs/release.zh-CN.md) —— 发布到 TestPyPI/PyPI。
 - [更新日志](docs/changelog.zh-CN.md) —— 指向完整更新日志。
 

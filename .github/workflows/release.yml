@@ -51,6 +51,12 @@ jobs:
       - name: Check compatibility
         run: python scripts/check_compatibility.py
 
+      - name: Check API snapshot
+        run: python scripts/check_api_snapshot.py
+
+      - name: Check examples
+        run: python scripts/check_examples.py
+
       - name: Test
         run: pytest
 
@@ -62,6 +68,9 @@ jobs:
 
       - name: Check package contents
         run: python scripts/check_package.py
+
+      - name: Smoke test package
+        run: python scripts/smoke_test_package.py
 
       - name: Upload to TestPyPI
         if: ${{ github.event.inputs.repository == 'testpypi' }}

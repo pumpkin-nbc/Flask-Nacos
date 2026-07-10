@@ -23,6 +23,7 @@ EXPECTED_DOCS = [
     "production.md",
     "troubleshooting.md",
     "compatibility.md",
+    "1.0-checklist.md",
     "release.md",
     "changelog.md",
 ]

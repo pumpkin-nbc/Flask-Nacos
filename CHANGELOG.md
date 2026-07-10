@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.0
+
+### Added
+
+- Added public API snapshot checks.
+- Added backward compatibility tests.
+- Added package smoke test script.
+- Added examples validation script.
+- Added 1.0.0 release checklist.
+- Added Release Candidate preparation documentation.
+- Added additional CI checks for API stability and example consistency.
+
+### Changed
+
+- Improved error messages and logging consistency.
+- Improved TestPyPI release validation workflow.
+- Improved documentation for API freeze and 1.0.0 preparation.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+- `0.9.0` is intended as the final preparation version before `1.0.0`.
+
 ## 0.8.0
 
 ### Added

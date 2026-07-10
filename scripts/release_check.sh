@@ -28,35 +28,44 @@ fi
 
 echo "==> Using Python: ${PY}"
 
-echo "==> [1/10] Ruff lint"
+echo "==> [1/13] Ruff lint"
 "${PY}" -m ruff check .
 
-echo "==> [2/10] Mypy type check"
+echo "==> [2/13] Mypy type check"
 "${PY}" -m mypy flask_nacos
 
-echo "==> [3/10] Pytest"
+echo "==> [3/13] Pytest"
 "${PY}" -m pytest
 
-echo "==> [4/10] Version consistency"
+echo "==> [4/13] Version consistency"
 "${PY}" scripts/check_version.py
 
-echo "==> [5/10] Sensitive information scan"
+echo "==> [5/13] Sensitive information scan"
 "${PY}" scripts/check_sensitive_info.py
 
-echo "==> [6/10] Documentation checks"
+echo "==> [6/13] Documentation checks"
 "${PY}" scripts/check_docs.py
 
-echo "==> [7/10] Compatibility checks"
+echo "==> [7/13] Compatibility checks"
 "${PY}" scripts/check_compatibility.py
 
-echo "==> [8/10] Clean previous build artifacts"
+echo "==> [8/13] Public API snapshot check"
+"${PY}" scripts/check_api_snapshot.py
+
+echo "==> [9/13] Examples check"
+"${PY}" scripts/check_examples.py
+
+echo "==> [10/13] Clean previous build artifacts"
 rm -rf dist build ./*.egg-info
 
-echo "==> [9/10] Build distributions"
+echo "==> [11/13] Build distributions"
 "${PY}" -m build
 
-echo "==> [10/10] Twine check + package content check"
+echo "==> [12/13] Twine check + package content check"
 "${PY}" -m twine check dist/*
 "${PY}" scripts/check_package.py
+
+echo "==> [13/13] Package smoke test"
+"${PY}" scripts/smoke_test_package.py
 
 echo "==> All pre-release checks passed. Publishing is a separate step (see docs/release.md)."

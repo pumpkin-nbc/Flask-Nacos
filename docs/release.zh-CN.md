@@ -39,8 +39,10 @@ bash scripts/release_check.sh
 ```
 
 它会依次执行：`ruff`、`mypy`、`pytest`、`check_version.py`、
-`check_sensitive_info.py`、干净重建（`python -m build`）、`twine check dist/*`
-以及 `check_package.py`。整个过程不会上传任何内容。
+`check_sensitive_info.py`、`check_docs.py`、`check_compatibility.py`、
+`check_api_snapshot.py`、`check_examples.py`、干净重建（`python -m build`）、
+`twine check dist/*`、`check_package.py` 以及 `smoke_test_package.py`。整个过程
+不会上传任何内容。
 
 你也可以显式逐条执行：
 
@@ -50,11 +52,19 @@ python -m mypy flask_nacos
 python -m pytest
 python scripts/check_version.py
 python scripts/check_sensitive_info.py
+python scripts/check_docs.py
+python scripts/check_compatibility.py
+python scripts/check_api_snapshot.py
+python scripts/check_examples.py
 rm -rf dist build ./*.egg-info
 python -m build
 python -m twine check dist/*
 python scripts/check_package.py
+python scripts/smoke_test_package.py
 ```
+
+`smoke_test_package.py` 会将新构建的 wheel 安装到一个临时的虚拟环境中，并验证最小化的
+离线 `import` 与初始化。它不会连接 Nacos，也不使用任何账号密码。
 
 ## 5. 发布到 TestPyPI
 
@@ -88,7 +98,11 @@ python -m twine upload dist/*
 - `testpypi`（默认）—— 安全的沙箱环境。
 - `pypi` —— 正式发布；必须显式选择。
 
-该工作流会在上传前重新运行全部预发布检查。
+该工作流会在上传前重新运行全部预发布检查（ruff、mypy、pytest、`check_version`、
+`check_sensitive_info`、`check_docs`、`check_compatibility`、`check_api_snapshot`、
+`check_examples`、build、`twine check`、`check_package` 以及
+`smoke_test_package`）。默认目标为 TestPyPI，因此每次发布都会先在沙箱环境验证；发布到
+正式 PyPI 必须显式选择。
 
 ## 8. GitHub Secrets 配置
 

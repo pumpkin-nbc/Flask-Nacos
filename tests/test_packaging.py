@@ -11,8 +11,8 @@ def test_py_typed_marker_present():
     assert (package_dir / "py.typed").is_file()
 
 
-def test_version_is_080():
-    assert flask_nacos.__version__ == "0.8.0"
+def test_version_is_090():
+    assert flask_nacos.__version__ == "0.9.0"
 
 
 def test_no_get_config_as_dict_on_public_surface():
