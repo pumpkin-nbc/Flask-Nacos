@@ -71,26 +71,61 @@ python scripts/smoke_test_package.py
 TestPyPI 是用于验证上传与安装流程的沙箱环境：
 
 ```bash
-python -m twine upload --repository testpypi dist/*
+.venv/bin/python -m twine upload --repository testpypi dist/*
 ```
 
-然后在一个全新的虚拟环境中，验证从 TestPyPI 安装：
+然后在一个全新的虚拟环境中，验证从 TestPyPI 安装（锁定本次发布的确切版本）：
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos
-python -c "import flask_nacos; print(flask_nacos.__version__)"
+python -m pip install --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; print(FlaskNacos)"
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 ## 6. 发布到 PyPI
 
-TestPyPI 验证无误后：
+TestPyPI 验证无误后，发布正式版本：
 
 ```bash
-python -m twine upload dist/*
+.venv/bin/python -m twine upload dist/*
 ```
 
-## 7. 通过 GitHub Actions 发布
+随后在干净环境中验证从 PyPI 安装：
+
+```bash
+python -m pip install flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
+```
+
+## 7. 创建 Git Tag
+
+为发布的提交打 tag 并推送：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+请使用 `vX.Y.Z` 形式的 tag，与本次发布的版本一致。
+
+## 8. 创建 GitHub Release
+
+基于已推送的 tag 创建 GitHub Release：
+
+- 标题：`Flask-Nacos v1.0.0`
+- Tag：`v1.0.0`
+- Release Notes：从 [`CHANGELOG.md`](../CHANGELOG.md) 复制对应的 `## 1.0.0` 段落。
+
+可在 GitHub **Releases** 界面操作，或使用 GitHub CLI：
+
+```bash
+gh release create v1.0.0 --title "Flask-Nacos v1.0.0" --notes-file <notes.md>
+```
+
+不要在 Release 中附带任何 token、账号密码或内部地址。
+
+## 9. 通过 GitHub Actions 发布
 
 `Release` 工作流（`.github/workflows/release.yml`）可以替你完成上传。在 **Actions**
 标签页手动触发（`workflow_dispatch`），并选择目标索引：
@@ -104,7 +139,7 @@ python -m twine upload dist/*
 `smoke_test_package`）。默认目标为 TestPyPI，因此每次发布都会先在沙箱环境验证；发布到
 正式 PyPI 必须显式选择。
 
-## 8. GitHub Secrets 配置
+## 10. GitHub Secrets 配置
 
 将 API token 配置为仓库 Secrets（Settings → Secrets and variables → Actions）：
 
@@ -114,20 +149,20 @@ python -m twine upload dist/*
 token 通过 `TWINE_USERNAME=__token__` 与 `TWINE_PASSWORD=<secret>` 传给 `twine`。
 切勿将 token 硬编码到文件或日志中。
 
-## 9. 失败与回滚说明
+## 11. 失败与回滚说明
 
 - PyPI / TestPyPI 上的版本是**不可变的**，无法覆盖已发布的版本。
 - 如果发布了有问题的产物，可在 PyPI 上对该版本执行 **yank**（这会让它对新的安装不可见，
   同时不破坏已锁定该版本的依赖），随后**提升版本号**并发布修复版本。
 - 不存在“删除后用同一版本号重新上传”的路径 —— 始终以新的版本号向前推进。
 
-## 10. 发布后验证
+## 12. 发布后验证
 
 发布到 PyPI 后，在干净的环境中验证：
 
 ```bash
-pip install flask-nacos
-python -c "import flask_nacos; print(flask_nacos.__version__)"
+python -m pip install flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
-确认输出的版本号与本次发布一致，如流程需要，再为该提交打 tag。
+确认输出的版本号与本次发布一致，并确认 Git tag 与 GitHub Release 均已发布。

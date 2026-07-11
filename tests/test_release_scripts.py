@@ -73,12 +73,12 @@ def test_scripts_are_import_safe(
     assert smoke_test_package is not None
 
 
-def test_version_check_passes_with_090(check_version):
+def test_version_check_passes_with_100(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message
-    assert versions["pyproject.toml"] == "0.9.0"
-    assert versions["flask_nacos/__init__.py"] == "0.9.0"
-    assert versions["CHANGELOG.md"] == "0.9.0"
+    assert versions["pyproject.toml"] == "1.0.0"
+    assert versions["flask_nacos/__init__.py"] == "1.0.0"
+    assert versions["CHANGELOG.md"] == "1.0.0"
 
 
 def test_docs_check_is_clean(check_docs):

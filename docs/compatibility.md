@@ -5,8 +5,8 @@ English | [简体中文](compatibility.zh-CN.md)
 This page documents the supported runtime versions and the compatibility
 guarantees of flask-nacos.
 
-`0.9.0` is the Release Candidate preparation version before `1.0.0`: the public
-API is frozen as the `1.0.0` candidate (see [1.0.0 Checklist](1.0-checklist.md)).
+`1.0.0` is the first stable release: the public API is stable for the 1.0 series
+(see [1.0.0 Checklist](1.0-checklist.md)).
 
 See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
 [Production](production.md).

@@ -10,12 +10,12 @@ raised.
 See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
 [1.0.0 Checklist](1.0-checklist.md).
 
-## API freeze (1.0.0 candidate)
+## Stable API (1.0 series)
 
-Starting with `0.9.0`, the public API below is frozen as the `1.0.0` candidate.
-Method names, existing parameters, and return contracts will not change before
-`1.0.0`; any new parameters will be added with defaults so existing calls keep
-working. The frozen surface is:
+As of `1.0.0`, the public API below is stable. Method names, existing
+parameters, and return contracts will not change without a deprecation cycle;
+any new parameters will be added with defaults so existing calls keep working.
+The stable surface is:
 
 ```python
 FlaskNacos(app=None)

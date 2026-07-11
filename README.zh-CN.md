@@ -30,13 +30,18 @@
   （0.8.0）。
 - Release Candidate 准备：冻结公开 API 并提供 API 快照检查、向后兼容性测试、示例
   校验脚本、安装包 smoke test，以及 1.0.0 验收清单（0.9.0）。
+- 首个稳定版：公开 API 在 1.0 系列中被声明为稳定，并由 API 快照检查与向后兼容性测试
+  保障（1.0.0）。
 
-## Release Candidate 状态
+## 稳定版
 
-`0.9.0` 是 `1.0.0` 之前的 Release Candidate 准备版本。当前公开 API 已冻结为 `1.0.0`
-候选：在 `1.0.0` 之前不会修改方法名称、已有参数含义与返回值约定。
+`1.0.0` 是 Flask-Nacos 的首个稳定版，面向 PyPI 发布。公开 API 在 1.0 系列中保持稳定：
+不会在没有废弃流程的情况下修改方法名称、已有参数含义与返回值约定；新增参数一律带默认值，
+不破坏已有代码。
 
 - `get_config()` 只返回 Nacos 配置的原始内容，不做 YAML、JSON、dict 解析。
+- 当前版本不提供 `get_config_as_dict()`。
+- 当前版本不提供 `load_config_to_flask()`。
 - 不会自动将 Nacos 配置写入 Flask `app.config`。
 - 完整的发布前验证见 [docs/1.0-checklist.zh-CN.md](docs/1.0-checklist.zh-CN.md)。
 

@@ -5,6 +5,44 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0
+
+### Added
+
+- Released the first stable version of Flask-Nacos.
+- Added stable API documentation for the 1.0 series.
+- Added final release checklist for PyPI publishing.
+- Added stable installation and smoke test validation steps.
+
+### Changed
+
+- Marked the public API as stable.
+- Improved README for PyPI display.
+- Improved release documentation for TestPyPI and PyPI publishing.
+- Improved final validation scripts for package release.
+
+### Stable APIs
+
+The following APIs are considered stable in the 1.0 series:
+
+- `FlaskNacos`
+- `init_app(app)`
+- `get_client()`
+- `register_instance()`
+- `deregister_instance()`
+- `list_instances()`
+- `get_one_healthy_instance()`
+- `get_config()`
+- `get_status()`
+- `normalize_instance()`
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported in this version.
+- Loading Nacos config into Flask `app.config` is not supported.
+- This is the first stable release intended for PyPI publishing.
+
 ## 0.9.0
 
 ### Added

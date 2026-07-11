@@ -4,8 +4,8 @@
 
 本页说明 flask-nacos 支持的运行时版本及其兼容性保证。
 
-`0.9.0` 是 `1.0.0` 之前的 Release Candidate 准备版本：公开 API 已冻结为 `1.0.0`
-候选（见 [1.0.0 验收清单](1.0-checklist.zh-CN.md)）。
+`1.0.0` 是首个稳定版：公开 API 在 1.0 系列中保持稳定（见
+[1.0.0 验收清单](1.0-checklist.zh-CN.md)）。
 
 另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md) -
 [生产部署](production.zh-CN.md)。

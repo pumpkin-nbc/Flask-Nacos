@@ -76,26 +76,62 @@ throwaway virtual environment and verifies a minimal offline
 TestPyPI is a sandbox for validating the upload and install flow:
 
 ```bash
-python -m twine upload --repository testpypi dist/*
+.venv/bin/python -m twine upload --repository testpypi dist/*
 ```
 
-Then verify the install from TestPyPI in a fresh virtual environment:
+Then verify the install from TestPyPI in a fresh virtual environment (pin the
+exact version being released):
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos
-python -c "import flask_nacos; print(flask_nacos.__version__)"
+python -m pip install --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; print(FlaskNacos)"
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 ## 6. Publish to PyPI
 
-Once TestPyPI looks good:
+Once TestPyPI looks good, publish the real release:
 
 ```bash
-python -m twine upload dist/*
+.venv/bin/python -m twine upload dist/*
 ```
 
-## 7. Releasing via GitHub Actions
+Then verify the install from PyPI in a clean environment:
+
+```bash
+python -m pip install flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
+```
+
+## 7. Create the Git tag
+
+Tag the released commit and push the tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Use the `vX.Y.Z` tag form to match the version being released.
+
+## 8. Create the GitHub Release
+
+Create a GitHub Release from the pushed tag:
+
+- Title: `Flask-Nacos v1.0.0`
+- Tag: `v1.0.0`
+- Notes: copy the matching `## 1.0.0` section from [`CHANGELOG.md`](../CHANGELOG.md).
+
+You can do this from the GitHub **Releases** UI, or with the GitHub CLI:
+
+```bash
+gh release create v1.0.0 --title "Flask-Nacos v1.0.0" --notes-file <notes.md>
+```
+
+Do not attach any secrets, tokens, or internal addresses to the release.
+
+## 9. Releasing via GitHub Actions
 
 The `Release` workflow (`.github/workflows/release.yml`) can perform the upload
 for you. Trigger it manually from the **Actions** tab (`workflow_dispatch`) and
@@ -111,7 +147,7 @@ and `smoke_test_package`) before uploading. TestPyPI is the default target so
 each release is validated on the sandbox first; publishing to real PyPI must be
 selected explicitly.
 
-## 8. GitHub Secrets setup
+## 10. GitHub Secrets setup
 
 Configure API tokens as repository secrets (Settings → Secrets and variables →
 Actions):
@@ -122,7 +158,7 @@ Actions):
 Tokens are passed to `twine` via `TWINE_USERNAME=__token__` and
 `TWINE_PASSWORD=<secret>`. Never hardcode tokens in files or logs.
 
-## 9. Failure & rollback notes
+## 11. Failure & rollback notes
 
 - Versions on PyPI/TestPyPI are **immutable**. You cannot overwrite a version.
 - If a bad artifact is published, **yank** the release on PyPI (this hides it
@@ -131,14 +167,14 @@ Tokens are passed to `twine` via `TWINE_USERNAME=__token__` and
 - There is no "delete and re-upload the same version" path — always move
   forward with a new version number.
 
-## 10. Post-release verification
+## 12. Post-release verification
 
 After publishing to PyPI, verify from a clean environment:
 
 ```bash
-pip install flask-nacos
-python -c "import flask_nacos; print(flask_nacos.__version__)"
+python -m pip install flask-nacos==1.0.0
+python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
-Confirm the reported version matches the release, then tag the commit if that
-is part of your workflow.
+Confirm the reported version matches the release and that the Git tag and
+GitHub Release are published.

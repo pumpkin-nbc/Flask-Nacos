@@ -55,8 +55,18 @@ def test_readme_references_docs():
     assert "docs/api-reference.md" in readme
 
 
-def test_readme_has_no_forbidden_identifiers():
+def test_readme_only_mentions_forbidden_identifiers_with_negation():
+    # The README may state that these identifiers are NOT provided, but must
+    # never describe them as available capabilities. A forbidden token is only
+    # allowed on a line that also contains a negation marker (same rule as
+    # check_docs.check_forbidden).
     for name in ("README.md", "README.zh-CN.md"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        for token in FORBIDDEN:
-            assert token not in text, f"{name} must not mention {token}"
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            lowered = line.lower()
+            has_negation = any(marker in lowered for marker in check_docs.NEGATION_MARKERS)
+            for token in FORBIDDEN:
+                if token in line:
+                    assert has_negation, (
+                        f"{name}:{lineno} mentions {token} without a negation marker"
+                    )

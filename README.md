@@ -35,15 +35,20 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 - Release Candidate preparation: frozen public API with an API-snapshot check,
   backward-compatibility tests, an examples validator, a package smoke test, and
   a 1.0.0 acceptance checklist (0.9.0).
+- First stable release: the public API is declared stable for the 1.0 series and
+  is verified by an API-snapshot check and backward-compatibility tests (1.0.0).
 
-## Release Candidate status
+## Stable release
 
-`0.9.0` is the Release Candidate preparation version before `1.0.0`. The current
-public API is frozen as the `1.0.0` candidate: method names, existing
-parameters, and return contracts will not change before `1.0.0`.
+`1.0.0` is the first stable release of Flask-Nacos, intended for PyPI. The public
+API is stable for the 1.0 series: method names, existing parameters, and return
+contracts will not change without a deprecation cycle, and any new parameters
+will be added with defaults so existing code keeps working.
 
 - `get_config()` returns the raw Nacos config content only; it does not perform
   YAML, JSON, or dict parsing.
+- This version does not provide `get_config_as_dict()`.
+- This version does not provide `load_config_to_flask()`.
 - Nacos configuration is never written into Flask `app.config` automatically.
 - See the full pre-release verification in
   [docs/1.0-checklist.md](docs/1.0-checklist.md).
