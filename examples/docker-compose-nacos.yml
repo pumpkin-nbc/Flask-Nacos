@@ -1,0 +1,24 @@
+# Local Nacos for development and manual testing ONLY.
+#
+# This is NOT a production configuration. It runs a single standalone Nacos with
+# embedded storage and the default demo credentials (nacos/nacos). Do not use it
+# for anything other than local testing.
+#
+# Usage:
+#   docker compose -f examples/docker-compose-nacos.yml up -d
+#
+# Console: http://127.0.0.1:8848/nacos  (login: nacos / nacos)
+
+services:
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: flask-nacos-local
+    environment:
+      # Single-node standalone mode with embedded storage (no external DB).
+      MODE: standalone
+      # Disable auth for a friction-free local test setup.
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    restart: unless-stopped

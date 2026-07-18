@@ -1,0 +1,110 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flask-nacos"
+version = "1.0.0"
+description = "A Flask extension for integrating with Nacos service discovery and configuration center."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+  { name = "Pumpkin", email = "a760329881@gmail.com" }
+]
+keywords = [
+  "flask",
+  "nacos",
+  "service-discovery",
+  "configuration",
+  "microservices"
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Framework :: Flask",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+  "Topic :: Internet :: WWW/HTTP :: WSGI",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+  "Flask>=1.0,<4.0",
+  "nacos-sdk-python>=2.0.0,<3.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.5.0",
+  "mypy>=1.0",
+  "build>=1.2.0",
+  "twine>=5.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/pumpkin-nbc/Flask-Nacos"
+Repository = "https://github.com/pumpkin-nbc/Flask-Nacos"
+Documentation = "https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs"
+Issues = "https://github.com/pumpkin-nbc/Flask-Nacos/issues"
+Changelog = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"
+Security = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SECURITY.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["flask_nacos"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/flask_nacos",
+  "/tests",
+  "/examples",
+  "/scripts",
+  "/docs",
+  "/README.md",
+  "/README.zh-CN.md",
+  "/CHANGELOG.md",
+  "/SECURITY.md",
+  "/LICENSE",
+  "/NOTICE",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["B904"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --cov=flask_nacos --cov-report=term-missing"
+markers = [
+  "integration: opt-in tests that require an external non-production service",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["flask_nacos"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+strict = false

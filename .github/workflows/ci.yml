@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    name: Quality, docs, and package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy flask_nacos
+
+      - name: Check project consistency
+        run: |
+          python scripts/check_version.py
+          python scripts/check_sensitive_info.py
+          python scripts/check_docs.py
+          python scripts/check_compatibility.py
+          python scripts/check_api_snapshot.py
+          python scripts/check_examples.py
+
+      - name: Build
+        run: python -m build
+
+      - name: Check package (twine)
+        run: twine check dist/*
+
+      - name: Check package contents
+        run: python scripts/check_package.py
+
+      - name: Smoke test package
+        run: python scripts/smoke_test_package.py
+
+  test:
+    runs-on: ubuntu-latest
+    name: py${{ matrix.python-version }} / ${{ matrix.label || 'latest Flask' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Flask 1.x is exercised on Python 3.8 with its transitive stack pinned.
+        include:
+          - python-version: "3.8"
+            label: "Flask 1.x"
+            flask: "Flask>=1.0,<2.0 Werkzeug<2.0 Jinja2<3.0 markupsafe<2.1 itsdangerous<2.0 click<8.0"
+          - python-version: "3.8"
+            label: "Flask 2.x"
+            flask: "Flask>=2.0,<3.0"
+          - python-version: "3.8"
+            label: "Flask 3.x"
+            flask: "Flask>=3.0,<4.0"
+          - python-version: "3.9"
+            flask: ""
+          - python-version: "3.10"
+            flask: ""
+          - python-version: "3.11"
+            flask: ""
+          - python-version: "3.12"
+            flask: ""
+          - python-version: "3.13"
+            flask: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install specific Flask version
+        if: ${{ matrix.flask != '' }}
+        env:
+          FLASK_SPEC: ${{ matrix.flask }}
+        run: pip install $FLASK_SPEC
+
+      - name: Test
+        run: pytest
