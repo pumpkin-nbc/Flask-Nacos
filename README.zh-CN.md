@@ -133,9 +133,10 @@ def create_app():
 
 ## 服务注册
 
-当 `NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时为 `True` 时，会在
-`init_app(app)` 期间自动注册服务。`NACOS_REGISTER_ENABLED` 只控制初始化阶段的
-自动注册，不会禁用显式调用 `register_instance()`：
+当 `NACOS_REGISTER_ENABLED`、`NACOS_AUTO_REGISTER` 与
+`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 中同步校验注册配置
+并自动注册服务。`NACOS_REGISTER_ENABLED` 只控制初始化阶段的自动注册，不会禁用显式
+调用 `register_instance()`：
 
 ```python
 nacos.register_instance()
@@ -146,7 +147,7 @@ nacos.register_instance()
 注册实例前会校验以下参数，非法值的处理遵循 `NACOS_FAIL_FAST` 规则
 （参见[异常处理](#异常处理)）：
 
-- `NACOS_SERVICE_NAME` —— 必填，不能为空。
+- `NACOS_SERVICE_NAME` —— 必填，必须是非空且不能只包含空白字符的字符串。
 - `NACOS_SERVICE_PORT` —— 必填，必须是 `1-65535` 范围内的整数。
 - `NACOS_SERVICE_WEIGHT` —— 必须是大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
@@ -316,6 +317,12 @@ status = nacos.get_status()
 nacos.register_instance()
 ```
 
+启用初始化自动注册时，确定性的注册配置会在创建 SDK client 之前预检。
+`NACOS_FAIL_FAST=True` 时，非法配置会直接从 `FlaskNacos(app)` 或 `init_app(app)` 抛出
+`NacosValidationError`，且不会留下部分初始化的 `app.extensions["nacos"]` 状态。
+关闭 fail-fast 时会记录具体错误、跳过自动注册，但配置中心和服务发现仍可使用。任一自动
+注册开关关闭时，服务名可保持为空，直到显式调用 `register_instance()` 才进行校验。
+
 ### Gunicorn / 多 worker 部署
 
 在 Gunicorn / uWSGI 下，每个 worker 进程都会执行 `init_app` 并各自注册实例。为获得更
@@ -324,6 +331,10 @@ nacos.register_instance()
 
 生产环境请务必显式配置 `NACOS_SERVICE_NAME`、`NACOS_SERVICE_IP`、
 `NACOS_SERVICE_PORT`，不要依赖自动识别。
+
+启动校验从 `FlaskNacos(app)` 或 `init_app(app)` 实际执行时开始。若 WSGI 服务器采用延迟
+加载，Flask app 可能直到第一次请求才创建。需要在接收请求前暴露配置错误时，应启用 eager
+load（例如适用时使用 Gunicorn `--preload`），并在进程启动阶段执行应用工厂。
 
 ## 生产部署与服务发现增强（0.4.0）
 
@@ -518,7 +529,8 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
   - `list_instances()` -> `[]`
   - `get_one_healthy_instance()` -> `None`
   - `get_config()` -> `None`
-- `NACOS_FAIL_FAST = True`：失败时抛出异常。
+- `NACOS_FAIL_FAST = True`：失败时抛出异常；启用自动注册时会在创建 client 和写入扩展
+  状态之前，由 `init_app(app)` 同步完成注册配置预检。
 
 异常类型体系：
 

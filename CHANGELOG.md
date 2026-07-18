@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preflighted active automatic-registration settings during `init_app()`, so
+  fail-fast validation errors occur before client creation or partial extension
+  state is installed, while disabled auto-registration still supports
+  config-center and discovery-only applications without a service name.
 - Treated SDK `False` registration and deregistration results as retryable
   failures without corrupting lifecycle state.
 - Rejected incomplete or mixed authentication credentials and invalid retry or

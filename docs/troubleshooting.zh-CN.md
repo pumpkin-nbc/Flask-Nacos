@@ -116,11 +116,15 @@
 
 ## 12. `NACOS_FAIL_FAST=True` 导致启动失败
 
-- 现象：Nacos 不可达时应用启动崩溃。
-- 可能原因：`NACOS_FAIL_FAST=True` 会把 Nacos 错误变成异常。
-- 排查方法：查看抛出的异常。
+- 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间崩溃，或采用延迟加载的 WSGI
+  服务器直到第一次请求才显示异常。
+- 可能原因：`NACOS_FAIL_FAST=True` 会把 Nacos 错误变成异常。启用自动注册时，会在创建
+  client 前校验缺失或非法的注册配置。
+- 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
+  是非空且不能只包含空白字符的字符串。
 - 解决建议：修复底层 Nacos 问题，或使用 `NACOS_FAIL_FAST=False`（默认），让失败被
-  记录并继续启动。
+  记录并继续启动。如果校验必须在接收流量前完成，请为 WSGI 服务器启用 eager
+  load/preload。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict
 

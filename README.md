@@ -146,10 +146,12 @@ shared `app/extensions.py`, see the [existing extension registry pattern](https:
 
 ## Service Registration
 
-When `NACOS_REGISTER_ENABLED` and `NACOS_AUTO_REGISTER` are both `True`, the
-service is registered automatically during `init_app(app)`. You can also
-register manually. `NACOS_REGISTER_ENABLED` only controls init-time automatic
-registration; it does not disable an explicit `register_instance()` call:
+When `NACOS_REGISTER_ENABLED`, `NACOS_AUTO_REGISTER`, and
+`NACOS_AUTO_REGISTER_ON_INIT` are all `True`, registration settings are
+validated and the service is registered synchronously during `init_app(app)`.
+You can also register manually. `NACOS_REGISTER_ENABLED` only controls
+init-time automatic registration; it does not disable an explicit
+`register_instance()` call:
 
 ```python
 nacos.register_instance()
@@ -160,7 +162,7 @@ nacos.register_instance()
 The following are validated before an instance is registered. Invalid values
 follow the `NACOS_FAIL_FAST` rule (see [Exception Handling](#exception-handling)):
 
-- `NACOS_SERVICE_NAME` - required, must be non-empty.
+- `NACOS_SERVICE_NAME` - required, must be a non-empty, non-whitespace string.
 - `NACOS_SERVICE_PORT` - required, must be an integer in the range `1-65535`.
 - `NACOS_SERVICE_WEIGHT` - must be a finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - must be a `dict`.
@@ -347,6 +349,15 @@ The service is auto-registered during `init_app(app)` only when both are `True`
 nacos.register_instance()
 ```
 
+When init-time registration is active, its deterministic settings are checked
+before the SDK client is created. With `NACOS_FAIL_FAST=True`, invalid settings
+raise `NacosValidationError` directly from `FlaskNacos(app)` or `init_app(app)`
+and no partial `app.extensions["nacos"]` state is retained. With fail-fast
+disabled, the error is logged, automatic registration is skipped, and config
+center and discovery operations remain available. If any auto-registration
+switch is off, a service name is not required until `register_instance()` is
+called manually.
+
 ### Gunicorn / Multi-worker Deployment
 
 Under Gunicorn/uWSGI each worker process runs `init_app` and would register its
@@ -357,6 +368,13 @@ implicitly at import/init time.
 
 In production, always set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 `NACOS_SERVICE_PORT` explicitly rather than relying on auto-detection.
+
+The startup guarantee begins when `FlaskNacos(app)` or `init_app(app)` actually
+runs. A WSGI server configured for lazy application loading may not construct
+the Flask app until its first request. Use eager loading (for example Gunicorn
+`--preload`, where appropriate) and invoke the application factory during
+process startup when configuration errors must prevent the server from
+accepting requests.
 
 ## Production Deployment & Service Discovery (0.4.0)
 
@@ -571,7 +589,9 @@ parameter validation, and local IP auto-detection:
   - `list_instances()` -> `[]`
   - `get_one_healthy_instance()` -> `None`
   - `get_config()` -> `None`
-- `NACOS_FAIL_FAST = True`: failures raise an exception.
+- `NACOS_FAIL_FAST = True`: failures raise an exception. Active automatic
+  registration settings are preflighted synchronously in `init_app(app)` before
+  client creation or extension-state installation.
 
 Exception hierarchy:
 

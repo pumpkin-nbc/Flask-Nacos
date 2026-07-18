@@ -11,7 +11,14 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 
 When `NACOS_REGISTER_ENABLED`, `NACOS_AUTO_REGISTER`, and
 `NACOS_AUTO_REGISTER_ON_INIT` are all `True`, the service is registered during
-`init_app(app)`.
+`init_app(app)`. Registration settings are validated synchronously before the
+SDK client is created or extension state is installed. With
+`NACOS_FAIL_FAST=True`, invalid settings raise immediately; otherwise the error
+is logged and automatic registration is skipped while config center and
+discovery remain usable.
+
+If any of the three switches is off, registration settings are not required at
+startup. They are validated if `register_instance()` is called manually.
 
 ## Manual registration
 
@@ -26,7 +33,7 @@ nacos.register_instance()
 
 Validated before registration; invalid values follow `NACOS_FAIL_FAST`:
 
-- `NACOS_SERVICE_NAME` - required, non-empty.
+- `NACOS_SERVICE_NAME` - required, a non-empty, non-whitespace string.
 - `NACOS_SERVICE_PORT` - required, integer in `1-65535`.
 - `NACOS_SERVICE_WEIGHT` - finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - a `dict`.
@@ -72,6 +79,11 @@ process id so a worker only deregisters the instance it registered. See
 
 If you prefer explicit control, set `NACOS_AUTO_REGISTER_ON_INIT=False` and call
 `nacos.register_instance()` from a post-fork hook.
+
+Validation is guaranteed when `FlaskNacos(app)` or `init_app(app)` executes. A
+lazy-loading WSGI server can defer application construction until the first
+request; use eager loading/preloading when invalid configuration must stop the
+process before it accepts traffic.
 
 ## Deregistration
 

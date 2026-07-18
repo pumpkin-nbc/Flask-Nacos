@@ -234,6 +234,31 @@ def test_bilingual_docs_describe_strict_runtime_validation():
             assert marker in text
 
 
+def test_bilingual_docs_describe_auto_registration_preflight():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "service-registration.md",
+        DOCS_DIR / "troubleshooting.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "service-registration.zh-CN.md",
+        DOCS_DIR / "troubleshooting.zh-CN.md",
+    )
+    shared_markers = (
+        "NACOS_SERVICE_NAME",
+        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_FAIL_FAST",
+        "init_app(app)",
+        "preload",
+    )
+
+    for path in english_files + chinese_files:
+        text = path.read_text(encoding="utf-8")
+        for marker in shared_markers:
+            assert marker in text
+
+
 def test_readme_only_mentions_forbidden_identifiers_with_negation():
     # The README may state that these identifiers are NOT provided, but must
     # never describe them as available capabilities. A forbidden token is only

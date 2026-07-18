@@ -10,7 +10,11 @@ flask-nacos 如何注册与注销服务实例。
 ## 自动注册
 
 当 `NACOS_REGISTER_ENABLED`、`NACOS_AUTO_REGISTER` 与
-`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 期间注册服务。
+`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 期间注册服务。注册配置
+会在创建 SDK client 和写入扩展状态前同步校验。`NACOS_FAIL_FAST=True` 时非法配置立即抛出；
+关闭 fail-fast 时会记录错误并跳过自动注册，配置中心和服务发现仍可使用。
+
+任一自动注册开关关闭时，启动阶段不要求注册配置；显式调用 `register_instance()` 时再校验。
 
 ## 手动注册
 
@@ -24,7 +28,7 @@ nacos.register_instance()
 
 注册前会校验以下参数；非法值遵循 `NACOS_FAIL_FAST` 规则：
 
-- `NACOS_SERVICE_NAME` —— 必填，不能为空。
+- `NACOS_SERVICE_NAME` —— 必填，必须是非空且不能只包含空白字符的字符串。
 - `NACOS_SERVICE_PORT` —— 必填，`1-65535` 范围内的整数。
 - `NACOS_SERVICE_WEIGHT` —— 大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
@@ -64,6 +68,10 @@ nacos.register_instance()
 
 如果希望显式控制，可设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 post-fork 钩子中
 调用 `nacos.register_instance()`。
+
+校验保证发生在 `FlaskNacos(app)` 或 `init_app(app)` 实际执行时。延迟加载的 WSGI 服务器
+可能直到第一次请求才创建应用；如果非法配置必须在接收流量前阻止进程启动，请使用 eager
+load/preload。
 
 ## 注销
 
