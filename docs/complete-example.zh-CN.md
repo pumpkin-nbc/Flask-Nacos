@@ -85,6 +85,10 @@ Invoke-RestMethod -Method Post `
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置读取超时秒数。 |
 | `FLASK_HOST` | `127.0.0.1` | 本地开发监听地址。 |
 
+`NACOS_SERVER_ADDR` 是当前 Flask 进程查找 Nacos 的地址，`NACOS_SERVICE_IP` 是注册给
+消费者访问 Flask 的地址。例如 Nacos 位于 `203.0.113.10:8848`、Flask 位于
+`203.0.113.20:5000` 时，应分别配置这两个值；Nacos 地址不是服务注册 IP。
+
 Bash 配置示例：
 
 ```bash
@@ -107,6 +111,9 @@ $env:NACOS_CONFIG_DATA_ID = "flask-nacos-demo.properties"
 
 如果 Nacos 开启认证，只通过环境变量或密钥管理服务注入凭据，切勿将真实凭据提交到
 应用配置中。
+请填写 namespace ID，而不是控制台显示名称。用户名/密码流程见
+[快速开始](quickstart.zh-CN.md#连接已有且开启认证的-nacos)；使用 AK/SK 时改为设置
+`NACOS_ACCESS_KEY` 与 `NACOS_SECRET_KEY`。
 
 ## 5. 运行应用
 
@@ -187,3 +194,35 @@ worker 内不会重复执行 SDK 注册，fork 后也会重建进程锁。共享
 - 根据应用启动策略选择 fail-fast 和重试配置；
 - 需要判断远端可用性时，使用真正执行 Nacos 操作的 readiness/监控；
 - 不要使用仓库自带的单机 Compose 配置。
+
+## 8. 可选的真实认证测试
+
+普通测试套件不会访问外部服务。如需验证专用、非生产的用户名/密码认证 Nacos，需要
+显式开启集成测试。测试会在 `FLASK_NACOS_TEST` group 创建唯一临时配置，通过
+Flask-Nacos 读取，并在清理阶段删除，因此测试账号需要配置读写权限。
+
+PowerShell：
+
+```powershell
+$credential = Get-Credential
+$env:FLASK_NACOS_RUN_AUTH_INTEGRATION = "1"
+$env:FLASK_NACOS_TEST_SERVER_ADDR = "nacos.example.com:8848"
+$env:FLASK_NACOS_TEST_NAMESPACE_ID = "your-namespace-id"
+$env:FLASK_NACOS_TEST_USERNAME = $credential.UserName
+$env:FLASK_NACOS_TEST_PASSWORD = $credential.GetNetworkCredential().Password
+python -m pytest tests/test_authenticated_integration.py -q
+```
+
+Bash：
+
+```bash
+export FLASK_NACOS_RUN_AUTH_INTEGRATION="1"
+export FLASK_NACOS_TEST_SERVER_ADDR="nacos.example.com:8848"
+export FLASK_NACOS_TEST_NAMESPACE_ID="your-namespace-id"
+read -r -p "Nacos username: " FLASK_NACOS_TEST_USERNAME
+read -r -s -p "Nacos password: " FLASK_NACOS_TEST_PASSWORD; echo
+export FLASK_NACOS_TEST_USERNAME FLASK_NACOS_TEST_PASSWORD
+python -m pytest tests/test_authenticated_integration.py -q
+```
+
+没有开启标志或缺少必需环境变量时，该测试会显示为 skipped。

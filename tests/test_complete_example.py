@@ -32,6 +32,8 @@ def test_complete_example_configuration_and_routes(
 
     assert cfg["NACOS_SERVER_ADDR"] == "nacos.example.test:8848"
     assert cfg["NACOS_NAMESPACE_ID"] == "example-namespace"
+    assert cfg["NACOS_USERNAME"] == "example-user"
+    assert cfg["NACOS_PASSWORD"] == "example-password"
     assert cfg["NACOS_SERVICE_NAME"] == "orders-api"
     assert cfg["NACOS_SERVICE_IP"] == "127.0.0.2"
     assert cfg["NACOS_SERVICE_PORT"] == 5100

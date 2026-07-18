@@ -177,7 +177,9 @@ class FlaskNacos:
             logger.error(str(error))
             if cfg["NACOS_FAIL_FAST"]:
                 raise error from exc
-            logger.debug("Nacos client init error suppressed: %s", exc)
+            logger.debug(
+                "Nacos client init error suppressed (%s)", type(exc).__name__
+            )
             return None
 
     def _atexit_handler(self) -> None:

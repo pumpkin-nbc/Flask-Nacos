@@ -1,5 +1,6 @@
 """No-network tests for the beginner Flask-Nacos example."""
 
+import logging
 import runpy
 from pathlib import Path
 
@@ -49,6 +50,13 @@ def test_beginner_example_covers_registration_config_and_discovery(
     monkeypatch, patched_create_client, fake_client
 ):
     monkeypatch.setenv("NACOS_ENABLED", "true")
+    monkeypatch.setenv("NACOS_SERVER_ADDR", "nacos.example.test:8848")
+    monkeypatch.setenv("NACOS_NAMESPACE_ID", "tenant-id")
+    monkeypatch.setenv("NACOS_USERNAME", "example-user")
+    monkeypatch.setenv("NACOS_PASSWORD", "example-password")
+    monkeypatch.setenv("NACOS_ACCESS_KEY", "example-access-key")
+    monkeypatch.setenv("NACOS_SECRET_KEY", "example-secret-key")
+    monkeypatch.setenv("NACOS_SERVICE_IP", "127.0.0.2")
     fake_client.get_config.return_value = "greeting=hello-from-nacos"
     module = _load_example()
     app = module["app"]
@@ -56,7 +64,14 @@ def test_beginner_example_covers_registration_config_and_discovery(
 
     cfg = app.extensions["nacos"]["config"]
     assert cfg["NACOS_ENABLED"] is True
+    assert cfg["NACOS_SERVER_ADDR"] == "nacos.example.test:8848"
+    assert cfg["NACOS_NAMESPACE_ID"] == "tenant-id"
+    assert cfg["NACOS_USERNAME"] == "example-user"
+    assert cfg["NACOS_PASSWORD"] == "example-password"
+    assert cfg["NACOS_ACCESS_KEY"] == "example-access-key"
+    assert cfg["NACOS_SECRET_KEY"] == "example-secret-key"
     assert cfg["NACOS_SERVICE_NAME"] == "flask-nacos-beginner"
+    assert cfg["NACOS_SERVICE_IP"] == "127.0.0.2"
     assert cfg["NACOS_SERVICE_PORT"] == 5000
     assert cfg["NACOS_CONFIG_DATA_ID"] == "flask-nacos-beginner.properties"
     fake_client.add_naming_instance.assert_called_once()
@@ -90,15 +105,19 @@ def test_beginner_example_covers_registration_config_and_discovery(
     )
 
 
-def test_beginner_example_hides_client_failure_details(monkeypatch):
+def test_beginner_example_hides_client_failure_details(monkeypatch, caplog):
     monkeypatch.setenv("NACOS_ENABLED", "true")
+    monkeypatch.setenv("NACOS_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("NACOS_USERNAME", "private-example-user")
+    monkeypatch.setenv("NACOS_PASSWORD", "private-example-password")
 
     def fail_to_create_client(config):
         raise RuntimeError("temporary failure containing hidden-example-token")
 
     monkeypatch.setattr(extension_module, "create_client", fail_to_create_client)
-    module = _load_example()
-    client = module["app"].test_client()
+    with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
+        module = _load_example()
+        client = module["app"].test_client()
 
     status = client.get("/nacos/status")
     assert status.status_code == 200
@@ -108,3 +127,9 @@ def test_beginner_example_hides_client_failure_details(monkeypatch):
     assert all(response.status_code == 503 for response in responses)
     combined = "".join(response.get_data(as_text=True) for response in responses)
     assert "hidden-example-token" not in combined
+    assert "private-example-user" not in combined
+    assert "private-example-password" not in combined
+    log_output = "\n".join(record.getMessage() for record in caplog.records)
+    assert "hidden-example-token" not in log_output
+    assert "private-example-user" not in log_output
+    assert "private-example-password" not in log_output

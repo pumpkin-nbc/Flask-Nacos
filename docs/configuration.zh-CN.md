@@ -30,16 +30,34 @@
 | `NACOS_SECRET_KEY` | str | `None` | 否 | 认证 SecretKey（敏感）。 |
 | `NACOS_GROUP_NAME` | str | `"DEFAULT_GROUP"` | 否 | 默认 group，作为回退值。 |
 
+`NACOS_SERVER_ADDR` 与 `NACOS_SERVICE_IP` 不能互换：
+
+- `NACOS_SERVER_ADDR` 是 Flask 进程主动连接的 Nacos API 地址。
+- `NACOS_SERVICE_IP` 是注册给消费者访问的 Flask 地址，需要与
+  `NACOS_SERVICE_PORT` 组合使用。
+
+以文档拓扑为例：Nacos 是 `203.0.113.10:8848`，Flask 是
+`203.0.113.20:5000`，两个配置应分别使用这两个值。从 Flask 主机测试第一条链路，从
+消费者主机测试第二条链路。PowerShell/Bash 诊断命令及 Docker/NAT 说明见
+[快速开始](quickstart.zh-CN.md#连接已有且开启认证的-nacos)。
+
 示例：
 
 ```python
+import os
+
 app.config.update(
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_NAMESPACE_ID="public",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
+    NACOS_SERVER_ADDR=os.environ["NACOS_SERVER_ADDR"],
+    NACOS_NAMESPACE_ID=os.environ.get("NACOS_NAMESPACE_ID", ""),
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
+    NACOS_ACCESS_KEY=os.environ.get("NACOS_ACCESS_KEY"),
+    NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
 )
 ```
+
+请填写 namespace ID，而不是控制台显示名称。根据服务端认证方式选择用户名/密码或
+AK/SK，任何一种都不要硬编码。
 
 ## 2. 服务注册
 

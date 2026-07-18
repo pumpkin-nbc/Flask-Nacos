@@ -23,7 +23,7 @@ def _config(**overrides):
     return config
 
 
-def test_create_client_forwards_namespace_and_authentication(monkeypatch):
+def test_create_client_forwards_username_and_password(monkeypatch):
     constructor = MagicMock(return_value=object())
     monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
 
@@ -31,8 +31,6 @@ def test_create_client_forwards_namespace_and_authentication(monkeypatch):
         _config(
             NACOS_USERNAME="user",
             NACOS_PASSWORD="password",
-            NACOS_ACCESS_KEY="access",
-            NACOS_SECRET_KEY="secret",
         )
     )
 
@@ -42,6 +40,24 @@ def test_create_client_forwards_namespace_and_authentication(monkeypatch):
         namespace="tenant-a",
         username="user",
         password="password",
+    )
+
+
+def test_create_client_forwards_access_key_authentication(monkeypatch):
+    constructor = MagicMock(return_value=object())
+    monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
+
+    client = create_client(
+        _config(
+            NACOS_ACCESS_KEY="access",
+            NACOS_SECRET_KEY="secret",
+        )
+    )
+
+    assert client is constructor.return_value
+    constructor.assert_called_once_with(
+        "nacos.example:8848",
+        namespace="tenant-a",
         ak="access",
         sk="secret",
     )

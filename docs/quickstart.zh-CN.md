@@ -91,9 +91,14 @@ DEFAULT_GROUP = "DEFAULT_GROUP"
 app = Flask(__name__)
 app.config.update(
     NACOS_ENABLED=os.environ.get("NACOS_ENABLED", "false"),
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
+    NACOS_SERVER_ADDR=os.environ.get("NACOS_SERVER_ADDR", "127.0.0.1:8848"),
+    NACOS_NAMESPACE_ID=os.environ.get("NACOS_NAMESPACE_ID", ""),
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
+    NACOS_ACCESS_KEY=os.environ.get("NACOS_ACCESS_KEY"),
+    NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
     NACOS_SERVICE_NAME=SERVICE_NAME,
-    NACOS_SERVICE_IP="127.0.0.1",
+    NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
     NACOS_SERVICE_PORT=5000,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
@@ -105,7 +110,8 @@ app.config.update(
     NACOS_REQUEST_TIMEOUT=5.0,
     NACOS_HEALTH_CHECK_ENABLED=True,
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
-    NACOS_FAIL_FAST=False,
+    NACOS_LOG_LEVEL=os.environ.get("NACOS_LOG_LEVEL", "INFO"),
+    NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
 
 nacos = FlaskNacos(app)
@@ -337,6 +343,72 @@ Bash：
 ```bash
 unset NACOS_ENABLED
 ```
+
+## 连接已有且开启认证的 Nacos
+
+下面两个看起来相似的地址，作用完全不同：
+
+| 配置项 | 含义 | 谁连接它？ |
+| --- | --- | --- |
+| `NACOS_SERVER_ADDR` | Nacos API 地址，格式为 `host:port`。 | Flask 进程主动连接 Nacos。 |
+| `NACOS_SERVICE_IP` | 注册时发布的 Flask 实例地址。 | 其他服务通过它和 `NACOS_SERVICE_PORT` 访问 Flask。 |
+
+例如，Nacos 使用文档示例地址 `203.0.113.10:8848`，Flask 使用
+`203.0.113.20:5000`，那么 server address 填 `.10:8848`，service IP 填 `.20`。
+不要把 Nacos 所在机器的 IP 填到 `NACOS_SERVICE_IP`。
+
+- 只有 Nacos、Flask 和消费者都在同一台机器时，才可以都使用 `127.0.0.1`。
+- Docker 中 `NACOS_SERVER_ADDR` 可以是 `nacos:8848` 这样的容器主机名；
+  `NACOS_SERVICE_IP` 仍必须是消费者能够访问的 Flask 地址。
+- NAT、多网卡环境应显式选择需要发布的 Flask IP，不要依赖自动识别。
+
+PowerShell 使用用户名/密码且不把密码写入源码：
+
+```powershell
+$credential = Get-Credential
+$env:NACOS_ENABLED = "true"
+$env:NACOS_SERVER_ADDR = "nacos.example.com:8848"
+$env:NACOS_SERVICE_IP = "203.0.113.20"
+$env:NACOS_NAMESPACE_ID = "your-namespace-id"
+$env:NACOS_USERNAME = $credential.UserName
+$env:NACOS_PASSWORD = $credential.GetNetworkCredential().Password
+.\.venv\Scripts\python.exe app.py
+```
+
+Bash 等价命令（密码输入时不会回显）：
+
+```bash
+export NACOS_ENABLED="true"
+export NACOS_SERVER_ADDR="nacos.example.com:8848"
+export NACOS_SERVICE_IP="203.0.113.20"
+export NACOS_NAMESPACE_ID="your-namespace-id"
+read -r -p "Nacos username: " NACOS_USERNAME
+read -r -s -p "Nacos password: " NACOS_PASSWORD; echo
+export NACOS_USERNAME NACOS_PASSWORD
+.venv/bin/python app.py
+```
+
+`NACOS_NAMESPACE_ID` 必须填写 namespace ID，不是控制台显示名称。使用 AccessKey 认证时，
+不要设置用户名/密码，改为通过同样的环境变量或密钥管理方式设置 `NACOS_ACCESS_KEY` 和
+`NACOS_SECRET_KEY`。
+
+分别测试两条网络路径。从 Flask 所在机器测试 Nacos：
+
+```powershell
+Test-NetConnection nacos.example.com -Port 8848
+```
+
+从消费者机器测试注册出去的 Flask 地址：
+
+```powershell
+Test-NetConnection 203.0.113.20 -Port 5000
+```
+
+macOS/Linux 可以使用 `nc -vz nacos.example.com 8848` 和
+`nc -vz 203.0.113.20 5000`。请将所有文档示例地址替换为自己的测试环境。
+
+如果 client 仍未初始化，可以临时设置 `NACOS_FAIL_FAST=true` 并重启 Flask，从异常中
+读取准确原因；完成排查后，根据应用启动策略删除或恢复该设置。
 
 ## 常见问题速查
 

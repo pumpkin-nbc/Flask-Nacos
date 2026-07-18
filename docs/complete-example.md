@@ -87,6 +87,11 @@ same code target another Nacos deployment without hardcoding credentials.
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | Config-read timeout in seconds. |
 | `FLASK_HOST` | `127.0.0.1` | Local development bind address. |
 
+`NACOS_SERVER_ADDR` is where this Flask process finds Nacos.
+`NACOS_SERVICE_IP` is the Flask address advertised to consumers. For example,
+with Nacos at `203.0.113.10:8848` and Flask at `203.0.113.20:5000`, configure
+those values separately. The server address is not the registered service IP.
+
 Example Bash configuration:
 
 ```bash
@@ -109,6 +114,9 @@ $env:NACOS_CONFIG_DATA_ID = "flask-nacos-demo.properties"
 
 Set credentials only through your environment or secret manager when the Nacos
 server requires them. Never commit real credentials to application config.
+Use the namespace ID rather than its display name. The username/password flow
+is shown in the [Quickstart](quickstart.md#connecting-to-an-existing-authenticated-nacos);
+AK/SK can be supplied with `NACOS_ACCESS_KEY` and `NACOS_SECRET_KEY` instead.
 
 ## 5. Run the application
 
@@ -197,3 +205,37 @@ For production:
 - use readiness/monitoring that checks actual Nacos-dependent operations when
   remote availability matters;
 - do not use the bundled standalone Compose configuration.
+
+## 8. Optional real authentication test
+
+The normal test suite never contacts an external service. To verify a dedicated,
+non-production username/password-protected Nacos, explicitly enable the opt-in
+test. It creates a uniquely named temporary config in `FLASK_NACOS_TEST`, reads
+it through Flask-Nacos, and removes it in cleanup. The account therefore needs
+config read/write permission.
+
+PowerShell:
+
+```powershell
+$credential = Get-Credential
+$env:FLASK_NACOS_RUN_AUTH_INTEGRATION = "1"
+$env:FLASK_NACOS_TEST_SERVER_ADDR = "nacos.example.com:8848"
+$env:FLASK_NACOS_TEST_NAMESPACE_ID = "your-namespace-id"
+$env:FLASK_NACOS_TEST_USERNAME = $credential.UserName
+$env:FLASK_NACOS_TEST_PASSWORD = $credential.GetNetworkCredential().Password
+python -m pytest tests/test_authenticated_integration.py -q
+```
+
+Bash:
+
+```bash
+export FLASK_NACOS_RUN_AUTH_INTEGRATION="1"
+export FLASK_NACOS_TEST_SERVER_ADDR="nacos.example.com:8848"
+export FLASK_NACOS_TEST_NAMESPACE_ID="your-namespace-id"
+read -r -p "Nacos username: " FLASK_NACOS_TEST_USERNAME
+read -r -s -p "Nacos password: " FLASK_NACOS_TEST_PASSWORD; echo
+export FLASK_NACOS_TEST_USERNAME FLASK_NACOS_TEST_PASSWORD
+python -m pytest tests/test_authenticated_integration.py -q
+```
+
+Without the enable flag or required variables, this test is reported as skipped.

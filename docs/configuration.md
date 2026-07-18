@@ -31,16 +31,35 @@ See also: [Quickstart](quickstart.md) - [API Reference](api-reference.md) -
 | `NACOS_SECRET_KEY` | str | `None` | no | Secret key for authentication (secret). |
 | `NACOS_GROUP_NAME` | str | `"DEFAULT_GROUP"` | no | Default group used as a fallback. |
 
+`NACOS_SERVER_ADDR` and `NACOS_SERVICE_IP` are not interchangeable:
+
+- `NACOS_SERVER_ADDR` is the Nacos API endpoint the Flask process connects to.
+- `NACOS_SERVICE_IP` is the Flask address registered for consumers, paired with
+  `NACOS_SERVICE_PORT`.
+
+For a documentation topology where Nacos is `203.0.113.10:8848` and Flask is
+`203.0.113.20:5000`, use those two values respectively. Test the first path from
+the Flask host and the second from a consumer host. See the
+[Quickstart](quickstart.md#connecting-to-an-existing-authenticated-nacos) for
+PowerShell/Bash connectivity commands and Docker/NAT guidance.
+
 Example:
 
 ```python
+import os
+
 app.config.update(
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_NAMESPACE_ID="public",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
+    NACOS_SERVER_ADDR=os.environ["NACOS_SERVER_ADDR"],
+    NACOS_NAMESPACE_ID=os.environ.get("NACOS_NAMESPACE_ID", ""),
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
+    NACOS_ACCESS_KEY=os.environ.get("NACOS_ACCESS_KEY"),
+    NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
 )
 ```
+
+Use the namespace ID rather than its display name. Prefer username/password or
+AK/SK according to the server's authentication mode; do not hardcode either.
 
 ## 2. Service registration
 

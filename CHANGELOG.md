@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Simplified Chinese end-to-end integration guides.
 - Added a beginner example and rewrote both Quickstart guides as a progressive
   Python-first tutorial covering registration, health, config, and discovery.
+- Added environment-based authentication to the beginner example, separate
+  username/password and AK/SK tests, and an opt-in real Nacos auth test.
 
 ### Changed
 
@@ -37,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NACOS_CONFIG_DATA_ID`, and passes `NACOS_REQUEST_TIMEOUT` to SDK 2.x.
 - SDK import and client-construction failures now use `NacosClientError` while
   preserving the original exception as the cause.
+- Clarified that `NACOS_SERVER_ADDR` locates Nacos while `NACOS_SERVICE_IP`
+  advertises the Flask service to consumers.
 
 ### Fixed
 

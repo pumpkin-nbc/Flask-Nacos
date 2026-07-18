@@ -84,9 +84,14 @@ DEFAULT_GROUP = "DEFAULT_GROUP"
 app = Flask(__name__)
 app.config.update(
     NACOS_ENABLED=os.environ.get("NACOS_ENABLED", "false"),
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
+    NACOS_SERVER_ADDR=os.environ.get("NACOS_SERVER_ADDR", "127.0.0.1:8848"),
+    NACOS_NAMESPACE_ID=os.environ.get("NACOS_NAMESPACE_ID", ""),
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
+    NACOS_ACCESS_KEY=os.environ.get("NACOS_ACCESS_KEY"),
+    NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
     NACOS_SERVICE_NAME=SERVICE_NAME,
-    NACOS_SERVICE_IP="127.0.0.1",
+    NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
     NACOS_SERVICE_PORT=5000,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
@@ -98,7 +103,8 @@ app.config.update(
     NACOS_REQUEST_TIMEOUT=5.0,
     NACOS_HEALTH_CHECK_ENABLED=True,
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
-    NACOS_FAIL_FAST=False,
+    NACOS_LOG_LEVEL=os.environ.get("NACOS_LOG_LEVEL", "INFO"),
+    NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
 
 nacos = FlaskNacos(app)
@@ -320,6 +326,77 @@ docker rm flask-nacos-beginner-nacos
 
 Clear the PowerShell variable with `Remove-Item Env:NACOS_ENABLED`, or use
 `unset NACOS_ENABLED` in Bash.
+
+## Connecting to an existing authenticated Nacos
+
+Two addresses that look similar have completely different jobs:
+
+| Setting | Meaning | Who connects to it? |
+| --- | --- | --- |
+| `NACOS_SERVER_ADDR` | Nacos API address in `host:port` form. | The Flask process connects to Nacos. |
+| `NACOS_SERVICE_IP` | Flask instance address advertised during registration. | Other service consumers connect to Flask on `NACOS_SERVICE_PORT`. |
+
+For example, if Nacos uses the documentation address `203.0.113.10:8848` and
+Flask uses `203.0.113.20:5000`, configure the server address with `.10:8848`
+and the service IP with `.20`. Do not put the Nacos host into
+`NACOS_SERVICE_IP`.
+
+- Use `127.0.0.1` for both only when Nacos, Flask, and the consumer are on the
+  same machine.
+- In Docker, `NACOS_SERVER_ADDR` may be a Nacos container hostname such as
+  `nacos:8848`; `NACOS_SERVICE_IP` must still identify the Flask endpoint that
+  consumers can reach.
+- Behind NAT or on a multi-NIC host, explicitly choose the advertised Flask IP.
+
+PowerShell username/password setup without writing the password into source:
+
+```powershell
+$credential = Get-Credential
+$env:NACOS_ENABLED = "true"
+$env:NACOS_SERVER_ADDR = "nacos.example.com:8848"
+$env:NACOS_SERVICE_IP = "203.0.113.20"
+$env:NACOS_NAMESPACE_ID = "your-namespace-id"
+$env:NACOS_USERNAME = $credential.UserName
+$env:NACOS_PASSWORD = $credential.GetNetworkCredential().Password
+.\.venv\Scripts\python.exe app.py
+```
+
+Bash equivalent (the password is read without echo):
+
+```bash
+export NACOS_ENABLED="true"
+export NACOS_SERVER_ADDR="nacos.example.com:8848"
+export NACOS_SERVICE_IP="203.0.113.20"
+export NACOS_NAMESPACE_ID="your-namespace-id"
+read -r -p "Nacos username: " NACOS_USERNAME
+read -r -s -p "Nacos password: " NACOS_PASSWORD; echo
+export NACOS_USERNAME NACOS_PASSWORD
+.venv/bin/python app.py
+```
+
+Use the namespace ID, not its display name. For AccessKey authentication, leave
+username/password unset and set `NACOS_ACCESS_KEY` and `NACOS_SECRET_KEY`
+through the same environment/secret-management mechanism.
+
+Test the two network paths separately. From the Flask machine:
+
+```powershell
+Test-NetConnection nacos.example.com -Port 8848
+```
+
+From a consumer machine, test the advertised Flask endpoint:
+
+```powershell
+Test-NetConnection 203.0.113.20 -Port 5000
+```
+
+On macOS/Linux, use `nc -vz nacos.example.com 8848` and
+`nc -vz 203.0.113.20 5000`. Replace all documentation addresses with your real
+test environment.
+
+If the client still does not initialize, temporarily set
+`NACOS_FAIL_FAST=true`, restart Flask, and read the exact exception. Remove or
+reset it after diagnosis according to your application's startup policy.
 
 ## Quick troubleshooting
 

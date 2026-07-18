@@ -82,6 +82,9 @@ ignore = ["B904"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --cov=flask_nacos --cov-report=term-missing"
+markers = [
+  "integration: opt-in tests that require an external non-production service",
+]
 
 [tool.coverage.run]
 branch = true
