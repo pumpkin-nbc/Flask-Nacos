@@ -1,9 +1,20 @@
 # Changelog
 
+English | [简体中文](CHANGELOG.zh-CN.md)
+
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## 1.0.1
+
+### Fixed
+
+- Preflighted active automatic-registration settings during `init_app()`, so
+  fail-fast validation errors occur before client creation or partial extension
+  state is installed, while disabled auto-registration still supports
+  config-center and discovery-only applications without a service name.
 
 ## 1.0.0
 

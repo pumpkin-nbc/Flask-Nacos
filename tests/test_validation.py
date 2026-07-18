@@ -1,9 +1,12 @@
 """Tests for enhanced service registration parameter validation."""
 
+import logging
+
 import pytest
 
 from flask_nacos import FlaskNacos
 from flask_nacos.exceptions import NacosValidationError
+from flask_nacos.extension import EXTENSION_KEY
 
 
 @pytest.fixture
@@ -56,6 +59,101 @@ def test_invalid_params_raise_when_fail_fast(nacos_factory, overrides):
     nacos = nacos_factory(overrides)
     with pytest.raises(NacosValidationError):
         nacos.register_instance()
+
+
+@pytest.mark.parametrize("mode", ["direct", "factory"])
+@pytest.mark.parametrize("service_name", [None, "", "   ", 123, True])
+def test_auto_registration_preflight_fails_before_client_and_state(
+    make_app,
+    patched_create_client,
+    fake_client,
+    mode,
+    service_name,
+):
+    app = make_app(
+        {
+            "NACOS_SERVICE_NAME": service_name,
+            "NACOS_REGISTER_ENABLED": True,
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
+            "NACOS_FAIL_FAST": True,
+        }
+    )
+
+    if mode == "direct":
+        with pytest.raises(NacosValidationError, match="NACOS_SERVICE_NAME"):
+            FlaskNacos(app)
+    else:
+        nacos = FlaskNacos()
+        with pytest.raises(NacosValidationError, match="NACOS_SERVICE_NAME"):
+            nacos.init_app(app)
+        assert nacos.app is None
+        assert nacos.client is None
+
+    assert EXTENSION_KEY not in app.extensions
+    assert patched_create_client["count"] == 0
+    fake_client.add_naming_instance.assert_not_called()
+
+
+def test_invalid_auto_registration_logs_and_continues_when_not_fail_fast(
+    make_app,
+    patched_create_client,
+    fake_client,
+    caplog,
+):
+    app = make_app(
+        {
+            "NACOS_SERVICE_NAME": None,
+            "NACOS_REGISTER_ENABLED": True,
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
+            "NACOS_FAIL_FAST": False,
+        }
+    )
+
+    with caplog.at_level(logging.ERROR, logger="flask_nacos"):
+        nacos = FlaskNacos(app)
+
+    assert patched_create_client["count"] == 1
+    fake_client.add_naming_instance.assert_not_called()
+    assert nacos.get_status()["registered"] is False
+    assert nacos.get_config("application.yaml") == "server:\n  port: 8000\n"
+    assert "Automatic registration skipped" in caplog.text
+    assert "NACOS_SERVICE_NAME" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "disabled_switch",
+    [
+        "NACOS_REGISTER_ENABLED",
+        "NACOS_AUTO_REGISTER",
+        "NACOS_AUTO_REGISTER_ON_INIT",
+    ],
+)
+def test_missing_service_name_is_allowed_when_auto_registration_is_disabled(
+    make_app,
+    patched_create_client,
+    fake_client,
+    disabled_switch,
+):
+    overrides = {
+        "NACOS_SERVICE_NAME": None,
+        "NACOS_REGISTER_ENABLED": True,
+        "NACOS_AUTO_REGISTER": True,
+        "NACOS_AUTO_REGISTER_ON_INIT": True,
+        "NACOS_FAIL_FAST": True,
+        disabled_switch: False,
+    }
+    app = make_app(overrides)
+
+    nacos = FlaskNacos(app)
+
+    assert patched_create_client["count"] == 1
+    fake_client.add_naming_instance.assert_not_called()
+    assert nacos.get_config("application.yaml") == "server:\n  port: 8000\n"
+    with pytest.raises(NacosValidationError, match="NACOS_SERVICE_NAME"):
+        nacos.register_instance()
+    fake_client.add_naming_instance.assert_not_called()
 
 
 # -- fail-fast = False: register returns False ------------------------------

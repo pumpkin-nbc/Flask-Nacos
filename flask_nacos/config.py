@@ -189,9 +189,15 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
     Raises :class:`NacosValidationError` (a subclass of ``NacosConfigError``)
     when a required field is missing or a value is invalid.
     """
-    if not config.get("NACOS_SERVICE_NAME"):
-        logger.error("Service registration failed: NACOS_SERVICE_NAME is required")
-        raise NacosValidationError("NACOS_SERVICE_NAME is required to register a service")
+    service_name = config.get("NACOS_SERVICE_NAME")
+    if not isinstance(service_name, str) or not service_name.strip():
+        logger.error(
+            "Service registration failed: NACOS_SERVICE_NAME must be a "
+            "non-empty string"
+        )
+        raise NacosValidationError(
+            "NACOS_SERVICE_NAME must be a non-empty string to register a service"
+        )
 
     if config.get("NACOS_SERVICE_PORT") is None:
         logger.error("Service registration failed: NACOS_SERVICE_PORT is required")

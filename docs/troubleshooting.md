@@ -124,11 +124,17 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 
 ## 12. `NACOS_FAIL_FAST=True` prevents startup
 
-- Symptom: the app crashes on startup when Nacos is unreachable.
-- Cause: `NACOS_FAIL_FAST=True` turns Nacos errors into exceptions.
-- Investigate: read the raised exception.
+- Symptom: the app crashes during `FlaskNacos(app)` / `init_app(app)`, or a
+  lazy-loading WSGI server shows the error on the first request.
+- Cause: `NACOS_FAIL_FAST=True` turns Nacos errors into exceptions. When
+  automatic registration is active, missing or invalid registration settings
+  are checked before client creation.
+- Investigate: read the exception and confirm when the application factory is
+  executed. `NACOS_SERVICE_NAME` must be a non-empty, non-whitespace string when
+  automatic registration is active.
 - Fix: fix the underlying Nacos issue, or use `NACOS_FAIL_FAST=False` (default)
-  so failures are logged and startup continues.
+  so failures are logged and startup continues. Configure the WSGI server for
+  eager loading/preloading if validation must finish before traffic is accepted.
 
 ## 13. `get_config()` returns a string, not a dict
 

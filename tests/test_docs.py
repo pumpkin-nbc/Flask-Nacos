@@ -38,6 +38,18 @@ def test_expected_docs_exist():
         assert (DOCS_DIR / name).is_file(), f"missing docs/{name}"
 
 
+def test_root_changelogs_are_bilingual_and_version_aligned():
+    english = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "CHANGELOG.zh-CN.md").read_text(encoding="utf-8")
+    version_pattern = r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)"
+
+    assert "[简体中文](CHANGELOG.zh-CN.md)" in english
+    assert "[English](CHANGELOG.md)" in chinese
+    assert re.findall(version_pattern, english, re.MULTILINE) == re.findall(
+        version_pattern, chinese, re.MULTILINE
+    )
+
+
 def test_readme_links_and_docs_cross_links_resolve():
     assert check_docs.check_links(ROOT) == []
 
@@ -81,7 +93,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.0",
+        "v1.0.1",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
@@ -226,6 +238,31 @@ def test_bilingual_docs_describe_strict_runtime_validation():
         "NACOS_USERNAME",
         "NACOS_ACCESS_KEY",
         "NACOS_FAIL_FAST",
+    )
+
+    for path in english_files + chinese_files:
+        text = path.read_text(encoding="utf-8")
+        for marker in shared_markers:
+            assert marker in text
+
+
+def test_bilingual_docs_describe_auto_registration_preflight():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "service-registration.md",
+        DOCS_DIR / "troubleshooting.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "service-registration.zh-CN.md",
+        DOCS_DIR / "troubleshooting.zh-CN.md",
+    )
+    shared_markers = (
+        "NACOS_SERVICE_NAME",
+        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_FAIL_FAST",
+        "init_app(app)",
+        "preload",
     )
 
     for path in english_files + chinese_files:

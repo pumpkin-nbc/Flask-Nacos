@@ -98,6 +98,16 @@ class FlaskNacos:
         cfg = config_module.load_config(app)
         self._configure_logging(cfg)
 
+        should_auto_register = bool(
+            cfg["NACOS_ENABLED"]
+            and cfg["NACOS_REGISTER_ENABLED"]
+            and cfg["NACOS_AUTO_REGISTER"]
+            and cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True)
+        )
+        registration_config_valid = True
+        if should_auto_register:
+            registration_config_valid = self._preflight_auto_registration(cfg)
+
         runtime = _AppRuntimeState()
         state = {
             "config": cfg,
@@ -132,10 +142,10 @@ class FlaskNacos:
         if client is None:
             return
 
-        if cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
-            if cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
-                self._register_instance_for(app, state, runtime)
-            else:
+        if should_auto_register and registration_config_valid:
+            self._register_instance_for(app, state, runtime)
+        elif cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
+            if not cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
                 logger.info(
                     "Auto registration on init disabled by configuration "
                     "(NACOS_AUTO_REGISTER_ON_INIT=False)"
@@ -157,6 +167,17 @@ class FlaskNacos:
         logger.setLevel(level)
         if not logger.handlers:
             logger.addHandler(logging.NullHandler())
+
+    def _preflight_auto_registration(self, cfg: Dict[str, Any]) -> bool:
+        """Validate active init-time registration before creating a client."""
+        try:
+            config_module.validate_registration_config(cfg)
+        except NacosConfigError as exc:
+            if cfg["NACOS_FAIL_FAST"]:
+                raise
+            logger.error("Automatic registration skipped: %s", exc)
+            return False
+        return True
 
     def _init_client(self, cfg: Dict[str, Any]) -> Any:
         try:

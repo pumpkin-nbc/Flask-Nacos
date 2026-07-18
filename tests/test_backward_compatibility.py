@@ -102,4 +102,4 @@ def test_py_typed_present():
 
 
 def test_version_is_100():
-    assert flask_nacos.__version__ == "1.0.0"
+    assert flask_nacos.__version__ == "1.0.1"

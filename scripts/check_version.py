@@ -5,7 +5,8 @@ Compares the versions declared in:
 
 - ``pyproject.toml`` (``[project].version``)
 - ``flask_nacos/__init__.py`` (``__version__``)
-- ``CHANGELOG.md`` (the most recent ``## X.Y.Z`` heading)
+- ``CHANGELOG.md`` and ``CHANGELOG.zh-CN.md`` (the most recent
+  ``## X.Y.Z`` heading)
 
 Exits with a non-zero status when they disagree. Uses only the standard
 library so it can run anywhere without extra dependencies.
@@ -45,9 +46,11 @@ def read_dunder_version(root: Path) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def read_changelog_version(root: Path) -> Optional[str]:
-    """Return the most recent ``## X.Y.Z`` version heading from CHANGELOG.md."""
-    changelog = root / "CHANGELOG.md"
+def read_changelog_version(
+    root: Path, filename: str = "CHANGELOG.md"
+) -> Optional[str]:
+    """Return the most recent ``## X.Y.Z`` heading from a changelog file."""
+    changelog = root / filename
     if not changelog.is_file():
         return None
     text = changelog.read_text(encoding="utf-8")
@@ -61,6 +64,7 @@ def check(root: Path = ROOT) -> Tuple[bool, dict, str]:
         "pyproject.toml": read_pyproject_version(root),
         "flask_nacos/__init__.py": read_dunder_version(root),
         "CHANGELOG.md": read_changelog_version(root),
+        "CHANGELOG.zh-CN.md": read_changelog_version(root, "CHANGELOG.zh-CN.md"),
     }
 
     present = {source: ver for source, ver in versions.items() if ver is not None}
