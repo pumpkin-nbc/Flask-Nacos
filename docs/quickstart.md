@@ -51,8 +51,9 @@ app.config.update(
 nacos = FlaskNacos(app)
 ```
 
-After initialization the extension instance is available at
-`app.extensions["nacos"]`.
+After initialization, `app.extensions["nacos"]` contains the extension state
+mapping with its `config` and `client` entries. Use the `nacos` variable to call
+the extension's methods.
 
 ## Factory mode
 

@@ -54,7 +54,7 @@ app.config.update(
 | `NACOS_SERVICE_PORT` | int | `None` | yes (to register) | Service port, `1-65535`. |
 | `NACOS_SERVICE_GROUP` | str | `"DEFAULT_GROUP"` | no | Group used for registration. |
 | `NACOS_SERVICE_CLUSTER` | str | `"DEFAULT"` | no | Cluster name. |
-| `NACOS_SERVICE_WEIGHT` | float | `1.0` | no | Load-balancing weight (`> 0`). |
+| `NACOS_SERVICE_WEIGHT` | float | `1.0` | no | Finite load-balancing weight (`> 0`). |
 | `NACOS_SERVICE_METADATA` | dict | `{}` | no | Instance metadata. |
 | `NACOS_SERVICE_EPHEMERAL` | bool | `True` | no | Register as an ephemeral instance. |
 | `NACOS_SERVICE_HEALTHY` | bool | `True` | no | Initial healthy flag. |

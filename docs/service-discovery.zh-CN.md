@@ -34,8 +34,8 @@ instances = nacos.list_instances("user-service", cluster="CANARY")
 instances = nacos.list_instances("user-service", metadata={"version": "v1"})
 ```
 
-只返回 metadata 包含全部给定键值对的实例。省略时 `metadata` 回退到
-`NACOS_DISCOVERY_METADATA`。
+只返回 metadata 包含全部给定键值对的实例。省略或传入 `None` 时 `metadata` 回退到
+`NACOS_DISCOVERY_METADATA`；显式传入 `{}` 可禁用配置中的 metadata 过滤。
 
 ## 实例标准化
 

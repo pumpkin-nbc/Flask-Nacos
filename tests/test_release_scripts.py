@@ -116,6 +116,8 @@ def test_validate_wheel_names_accepts_good_wheel(check_package):
         "flask_nacos/extension.py",
         "flask_nacos/py.typed",
         "flask_nacos-0.6.0.dist-info/METADATA",
+        "flask_nacos-0.6.0.dist-info/licenses/LICENSE",
+        "flask_nacos-0.6.0.dist-info/licenses/NOTICE",
     ]
     assert check_package.validate_wheel_names(good) == []
 
@@ -149,3 +151,86 @@ def test_validate_wheel_names_requires_py_typed(check_package):
     ]
     problems = check_package.validate_wheel_names(names)
     assert any("py.typed" in problem for problem in problems)
+
+
+def test_validate_wheel_names_requires_license_and_notice(check_package):
+    names = [
+        "flask_nacos/__init__.py",
+        "flask_nacos/extension.py",
+        "flask_nacos/py.typed",
+        "flask_nacos-1.0.0.dist-info/METADATA",
+    ]
+
+    problems = check_package.validate_wheel_names(names)
+
+    assert "missing packaged license file: LICENSE" in problems
+    assert "missing packaged license file: NOTICE" in problems
+
+
+def test_validate_wheel_metadata_accepts_apache_2(check_package):
+    metadata = """\
+Metadata-Version: 2.4
+Name: flask-nacos
+Version: 1.0.0
+License-Expression: Apache-2.0
+License-File: LICENSE
+License-File: NOTICE
+"""
+
+    assert check_package.validate_wheel_metadata(metadata) == []
+
+
+def test_validate_wheel_metadata_rejects_wrong_license(check_package):
+    metadata = """\
+Metadata-Version: 2.4
+Name: flask-nacos
+Version: 1.0.0
+License-Expression: GPL-3.0-or-later
+License-File: LICENSE
+License-File: NOTICE
+"""
+
+    problems = check_package.validate_wheel_metadata(metadata)
+
+    assert any("wrong License-Expression" in problem for problem in problems)
+
+
+def test_validate_wheel_metadata_requires_both_license_files(check_package):
+    metadata = """\
+Metadata-Version: 2.4
+Name: flask-nacos
+Version: 1.0.0
+License-Expression: Apache-2.0
+License-File: LICENSE
+"""
+
+    problems = check_package.validate_wheel_metadata(metadata)
+
+    assert "missing License-File metadata: NOTICE" in problems
+
+
+def test_validate_wheel_metadata_rejects_deprecated_classifier(check_package):
+    metadata = """\
+Metadata-Version: 2.4
+Name: flask-nacos
+Version: 1.0.0
+License-Expression: Apache-2.0
+License-File: LICENSE
+License-File: NOTICE
+Classifier: License :: OSI Approved :: Apache Software License
+"""
+
+    problems = check_package.validate_wheel_metadata(metadata)
+
+    assert any("deprecated license classifier" in problem for problem in problems)
+
+
+def test_validate_sdist_names_requires_license_and_notice(check_package):
+    assert check_package.validate_sdist_names(
+        ["flask_nacos-1.0.0/LICENSE", "flask_nacos-1.0.0/NOTICE"]
+    ) == []
+
+    problems = check_package.validate_sdist_names(
+        ["flask_nacos-1.0.0/LICENSE"]
+    )
+    assert "sdist missing license file: NOTICE" in problems

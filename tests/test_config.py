@@ -124,3 +124,33 @@ def test_new_040_config_overrides():
     assert cfg["NACOS_DISCOVERY_CLUSTER"] == "CANARY"
     assert cfg["NACOS_DISCOVERY_METADATA"] == {"version": "v1"}
     assert cfg["NACOS_INSTANCE_NORMALIZE"] is False
+
+
+def test_mutable_metadata_is_isolated_between_apps():
+    first = load_config(Flask("first"))
+    second = load_config(Flask("second"))
+
+    first["NACOS_SERVICE_METADATA"]["version"] = "v1"
+    first["NACOS_DISCOVERY_METADATA"]["zone"] = "east"
+
+    assert second["NACOS_SERVICE_METADATA"] == {}
+    assert second["NACOS_DISCOVERY_METADATA"] == {}
+    assert first["NACOS_SERVICE_METADATA"] is not second["NACOS_SERVICE_METADATA"]
+    assert first["NACOS_DISCOVERY_METADATA"] is not second["NACOS_DISCOVERY_METADATA"]
+
+
+def test_user_metadata_is_snapshotted():
+    app = Flask(__name__)
+    service_metadata = {"version": "v1"}
+    discovery_metadata = {"zone": "east"}
+    app.config.update(
+        NACOS_SERVICE_METADATA=service_metadata,
+        NACOS_DISCOVERY_METADATA=discovery_metadata,
+    )
+
+    cfg = load_config(app)
+    service_metadata["version"] = "v2"
+    discovery_metadata["zone"] = "west"
+
+    assert cfg["NACOS_SERVICE_METADATA"] == {"version": "v1"}
+    assert cfg["NACOS_DISCOVERY_METADATA"] == {"zone": "east"}

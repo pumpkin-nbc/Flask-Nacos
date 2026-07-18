@@ -54,7 +54,8 @@ nacos = FlaskNacos()             # factory mode; call init_app later
 
 Initialize the extension against a Flask `app`: load configuration, create the
 Nacos client lazily, register the health route (if enabled), and auto-register
-the service (if enabled). Stores the extension at `app.extensions["nacos"]`.
+the service (if enabled). Stores a state mapping containing `config` and
+`client` at `app.extensions["nacos"]`.
 
 - Parameters: `app` - the Flask application.
 - Returns: `None`.
@@ -105,8 +106,9 @@ List service instances.
   - `group` - falls back to `NACOS_GROUP_NAME`.
   - `healthy_only` - default `True`.
   - `cluster` - falls back to `NACOS_DISCOVERY_CLUSTER`.
-  - `metadata` - falls back to `NACOS_DISCOVERY_METADATA`; matches instances that
-    contain all given key/value pairs.
+  - `metadata` - falls back to `NACOS_DISCOVERY_METADATA` when `None`; `{}`
+    explicitly disables the configured filter. Matches instances that contain
+    all given key/value pairs.
 - Returns: `list` of instances (normalized dicts when `NACOS_INSTANCE_NORMALIZE`
   is `True`). Empty result is an empty list.
 - Exceptions: raises `NacosDiscoveryError` when `NACOS_FAIL_FAST` is `True`.

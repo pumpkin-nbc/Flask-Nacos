@@ -50,7 +50,8 @@ app.config.update(
 nacos = FlaskNacos(app)
 ```
 
-初始化完成后，扩展实例可通过 `app.extensions["nacos"]` 获取。
+初始化完成后，`app.extensions["nacos"]` 保存包含 `config` 与 `client` 的扩展状态
+映射；调用扩展方法时继续使用 `nacos` 变量。
 
 ## 工厂模式
 

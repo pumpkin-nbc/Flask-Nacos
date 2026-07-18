@@ -158,3 +158,16 @@ def test_list_instances_cluster_defaults_from_config(make_app, patched_create_cl
     instances = nacos.list_instances("user-service")
     assert len(instances) == 1
     assert instances[0]["port"] == 8001
+
+
+def test_explicit_empty_metadata_disables_configured_filter(
+    make_app, patched_create_client
+):
+    app = make_app({"NACOS_DISCOVERY_METADATA": {"version": "v1"}})
+    nacos = FlaskNacos(app)
+
+    configured = nacos.list_instances("user-service")
+    unfiltered = nacos.list_instances("user-service", metadata={})
+
+    assert [instance["port"] for instance in configured] == [8000]
+    assert [instance["port"] for instance in unfiltered] == [8000, 8001]

@@ -35,7 +35,8 @@ instances = nacos.list_instances("user-service", metadata={"version": "v1"})
 ```
 
 Only instances whose metadata contains all the given key/value pairs are
-returned. `metadata` falls back to `NACOS_DISCOVERY_METADATA` when omitted.
+returned. `metadata` falls back to `NACOS_DISCOVERY_METADATA` when omitted or
+`None`; pass `{}` to explicitly disable the configured metadata filter.
 
 ## Instance normalization
 

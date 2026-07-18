@@ -53,7 +53,7 @@ app.config.update(
 | `NACOS_SERVICE_PORT` | int | `None` | 是（注册时） | 服务端口，`1-65535`。 |
 | `NACOS_SERVICE_GROUP` | str | `"DEFAULT_GROUP"` | 否 | 注册所用 group。 |
 | `NACOS_SERVICE_CLUSTER` | str | `"DEFAULT"` | 否 | 集群名称。 |
-| `NACOS_SERVICE_WEIGHT` | float | `1.0` | 否 | 负载均衡权重（`> 0`）。 |
+| `NACOS_SERVICE_WEIGHT` | float | `1.0` | 否 | 有限的负载均衡权重（`> 0`）。 |
 | `NACOS_SERVICE_METADATA` | dict | `{}` | 否 | 实例元数据。 |
 | `NACOS_SERVICE_EPHEMERAL` | bool | `True` | 否 | 是否注册为临时实例。 |
 | `NACOS_SERVICE_HEALTHY` | bool | `True` | 否 | 初始健康标识。 |

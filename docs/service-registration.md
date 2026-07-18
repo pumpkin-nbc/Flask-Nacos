@@ -25,7 +25,7 @@ Validated before registration; invalid values follow `NACOS_FAIL_FAST`:
 
 - `NACOS_SERVICE_NAME` - required, non-empty.
 - `NACOS_SERVICE_PORT` - required, integer in `1-65535`.
-- `NACOS_SERVICE_WEIGHT` - number greater than `0`.
+- `NACOS_SERVICE_WEIGHT` - finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - a `dict`.
 - `NACOS_SERVICE_EPHEMERAL` - a `bool`.
 
@@ -67,5 +67,6 @@ Deregistration is idempotent and never raises once already deregistered.
 ## Automatic deregistration
 
 When `NACOS_AUTO_DEREGISTER` and `NACOS_DEREGISTER_ON_EXIT` are both `True`, an
-`atexit` handler deregisters the instance on process exit. The handler is
-registered at most once per extension instance.
+`atexit` handler deregisters an instance successfully registered by this
+extension on process exit. It does nothing if registration never occurred or
+failed. The handler is registered at most once per extension instance.

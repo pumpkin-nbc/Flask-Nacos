@@ -93,8 +93,9 @@ app.config.update(
 nacos = FlaskNacos(app)
 ```
 
-After initialization the extension instance is available at
-`app.extensions["nacos"]`.
+After initialization, `app.extensions["nacos"]` contains the extension state
+mapping with its `config` and `client` entries. Continue using the `nacos`
+variable above to call `FlaskNacos` methods.
 
 ## Documentation
 
@@ -157,7 +158,7 @@ follow the `NACOS_FAIL_FAST` rule (see [Exception Handling](#exception-handling)
 
 - `NACOS_SERVICE_NAME` - required, must be non-empty.
 - `NACOS_SERVICE_PORT` - required, must be an integer in the range `1-65535`.
-- `NACOS_SERVICE_WEIGHT` - must be a number greater than `0`.
+- `NACOS_SERVICE_WEIGHT` - must be a finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - must be a `dict`.
 - `NACOS_SERVICE_EPHEMERAL` - must be a `bool`.
 
@@ -176,8 +177,9 @@ behavior follows the `NACOS_FAIL_FAST` rule.
 
 ## Service Deregistration
 
-When `NACOS_AUTO_DEREGISTER` is `True`, the instance is deregistered on process
-exit via `atexit`. You can also deregister manually:
+When `NACOS_AUTO_DEREGISTER` is `True`, an instance successfully registered by
+this extension is deregistered on process exit via `atexit`. You can also
+deregister manually:
 
 ```python
 nacos.deregister_instance()
@@ -386,6 +388,8 @@ post-fork hook.
 - The `atexit` handler is only registered when both `NACOS_AUTO_DEREGISTER` and
   `NACOS_DEREGISTER_ON_EXIT` are `True`, and it is registered at most once per
   extension instance (repeated `init_app(app)` calls do not add duplicates).
+- The handler only deregisters an instance that this extension successfully
+  registered; it is a no-op when registration never occurred or failed.
 
 ### Instance Normalization
 
@@ -428,7 +432,8 @@ nacos.list_instances("user-service", metadata={"version": "v1"})
 ```
 
 - `cluster` falls back to `NACOS_DISCOVERY_CLUSTER` when not provided.
-- `metadata` falls back to `NACOS_DISCOVERY_METADATA` when not provided.
+- `metadata` falls back to `NACOS_DISCOVERY_METADATA` when omitted or `None`;
+  pass `{}` to explicitly disable the configured metadata filter.
 - When `cluster` is set, only instances in that cluster are returned.
 - When `metadata` is set, only instances whose metadata contains all the given
   key/value pairs are returned.
@@ -679,5 +684,5 @@ tests, builds, and runs the release-check scripts.
 
 ## License
 
-Licensed under the GNU General Public License v3.0 or later. See
-[LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE).

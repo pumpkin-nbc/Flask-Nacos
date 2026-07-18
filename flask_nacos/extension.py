@@ -128,6 +128,12 @@ class FlaskNacos:
             return None
 
     def _atexit_handler(self) -> None:
+        if not self._registered:
+            logger.info(
+                "No service instance registered by this extension; "
+                "skipping exit deregistration"
+            )
+            return
         try:
             self.deregister_instance()
         except Exception:  # pragma: no cover - best effort on shutdown
@@ -242,7 +248,7 @@ class FlaskNacos:
         client, cfg = self._require_client()
         if cluster is None:
             cluster = cfg.get("NACOS_DISCOVERY_CLUSTER")
-        if not metadata:
+        if metadata is None:
             metadata = cfg.get("NACOS_DISCOVERY_METADATA") or {}
 
         result = self._safe(

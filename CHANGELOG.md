@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Adopted the Apache License 2.0 for the initial public release.
+- Hardened configuration isolation, numeric validation, discovery filtering,
+  and automatic deregistration behavior.
+- Added package checks that keep source and distribution license metadata aligned.
 - Marked the public API as stable.
 - Improved README for PyPI display.
 - Improved release documentation for TestPyPI and PyPI publishing.

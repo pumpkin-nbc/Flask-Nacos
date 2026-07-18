@@ -115,3 +115,27 @@ def test_repeated_init_app_does_not_double_register_atexit(
     nacos.init_app(app)
 
     assert len(registered) == 1
+
+
+def test_atexit_skips_deregister_when_extension_never_registered(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_AUTO_REGISTER": False})
+    nacos = FlaskNacos(app)
+
+    nacos._atexit_handler()
+
+    fake_client.remove_naming_instance.assert_not_called()
+
+
+def test_atexit_deregisters_instance_registered_by_extension(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_AUTO_REGISTER": False})
+    nacos = FlaskNacos(app)
+    nacos.register_instance()
+
+    nacos._atexit_handler()
+
+    fake_client.remove_naming_instance.assert_called_once()
+    assert nacos.get_status()["registered"] is False

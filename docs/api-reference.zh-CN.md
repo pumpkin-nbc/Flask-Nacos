@@ -49,7 +49,8 @@ nacos = FlaskNacos()             # 工厂模式；稍后调用 init_app
 ## `init_app(app)`
 
 针对 Flask `app` 初始化扩展：加载配置、惰性创建 Nacos client、注册健康检查路由
-（若启用）、自动注册服务（若启用）。会将扩展实例保存到 `app.extensions["nacos"]`。
+（若启用）、自动注册服务（若启用）。会将包含 `config` 与 `client` 的状态映射保存到
+`app.extensions["nacos"]`。
 
 - 参数：`app` —— Flask 应用。
 - 返回：`None`。
@@ -98,7 +99,8 @@ nacos.deregister_instance()
   - `group` —— 回退到 `NACOS_GROUP_NAME`。
   - `healthy_only` —— 默认 `True`。
   - `cluster` —— 回退到 `NACOS_DISCOVERY_CLUSTER`。
-  - `metadata` —— 回退到 `NACOS_DISCOVERY_METADATA`；匹配包含全部给定键值对的实例。
+  - `metadata` —— 为 `None` 时回退到 `NACOS_DISCOVERY_METADATA`；`{}` 会显式禁用
+    配置过滤；匹配包含全部给定键值对的实例。
 - 返回：实例 `list`（当 `NACOS_INSTANCE_NORMALIZE` 为 `True` 时为标准化 dict）。
   结果为空时返回空列表。
 - 异常：`NACOS_FAIL_FAST` 为 `True` 时抛出 `NacosDiscoveryError`。

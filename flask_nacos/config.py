@@ -128,6 +128,12 @@ def load_config(app) -> Dict[str, Any]:
     if port_coerced is not None:
         merged["NACOS_SERVICE_PORT"] = port_coerced
 
+    # Keep mutable metadata isolated per initialized application. This also
+    # snapshots user-provided metadata instead of retaining app.config's dict.
+    for key in ("NACOS_SERVICE_METADATA", "NACOS_DISCOVERY_METADATA"):
+        if isinstance(merged[key], dict):
+            merged[key] = dict(merged[key])
+
     # Metadata validation is deferred to registration so a bad value honors
     # NACOS_FAIL_FAST rather than crashing init_app unconditionally.
     return merged

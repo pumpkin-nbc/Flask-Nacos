@@ -24,7 +24,7 @@ nacos.register_instance()
 
 - `NACOS_SERVICE_NAME` —— 必填，不能为空。
 - `NACOS_SERVICE_PORT` —— 必填，`1-65535` 范围内的整数。
-- `NACOS_SERVICE_WEIGHT` —— 大于 `0` 的数字。
+- `NACOS_SERVICE_WEIGHT` —— 大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
 - `NACOS_SERVICE_EPHEMERAL` —— 必须是 `bool`。
 
@@ -63,4 +63,5 @@ nacos.deregister_instance()
 ## 自动注销
 
 当 `NACOS_AUTO_DEREGISTER` 与 `NACOS_DEREGISTER_ON_EXIT` 都为 `True` 时，会通过
-`atexit` 处理器在进程退出时注销实例。每个扩展实例最多注册一次该处理器。
+`atexit` 处理器在进程退出时注销由当前扩展成功注册的实例；从未注册或注册失败时不执行
+注销。每个扩展实例最多注册一次该处理器。

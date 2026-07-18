@@ -1,6 +1,7 @@
 """Utility helpers for flask-nacos."""
 
 import logging
+import math
 import socket
 from typing import Any, Dict, Optional
 
@@ -81,10 +82,14 @@ def to_int(value: Any, default: Optional[int] = None) -> Optional[int]:
     if value is None:
         return default
     if isinstance(value, bool):
-        return int(value)
+        return default
+    if isinstance(value, float) and (
+        not math.isfinite(value) or not value.is_integer()
+    ):
+        return default
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -92,9 +97,11 @@ def to_float(value: Any, default: Optional[float] = 1.0) -> Optional[float]:
     """Coerce a config value into a float, returning ``default`` on failure."""
     if value is None:
         return default
+    if isinstance(value, bool):
+        return default
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -107,9 +114,15 @@ def validate_port(value: Any) -> int:
     """Validate that ``value`` is a legal TCP port (1-65535)."""
     if isinstance(value, bool):
         raise NacosValidationError("NACOS_SERVICE_PORT must be an integer, got bool")
+    if isinstance(value, float) and (
+        not math.isfinite(value) or not value.is_integer()
+    ):
+        raise NacosValidationError(
+            f"NACOS_SERVICE_PORT must be an integer, got {value!r}"
+        )
     try:
         port = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise NacosValidationError(
             f"NACOS_SERVICE_PORT must be an integer, got {value!r}"
         )
@@ -126,13 +139,13 @@ def validate_weight(value: Any) -> float:
         raise NacosValidationError("NACOS_SERVICE_WEIGHT must be a number, got bool")
     try:
         weight = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise NacosValidationError(
             f"NACOS_SERVICE_WEIGHT must be a number, got {value!r}"
         )
-    if weight <= 0:
+    if not math.isfinite(weight) or weight <= 0:
         raise NacosValidationError(
-            f"NACOS_SERVICE_WEIGHT must be greater than 0, got {weight}"
+            f"NACOS_SERVICE_WEIGHT must be finite and greater than 0, got {weight}"
         )
     return weight
 

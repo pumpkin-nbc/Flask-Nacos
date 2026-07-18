@@ -84,7 +84,8 @@ app.config.update(
 nacos = FlaskNacos(app)
 ```
 
-初始化完成后，扩展实例可通过 `app.extensions["nacos"]` 获取。
+初始化完成后，`app.extensions["nacos"]` 保存包含 `config` 与 `client` 的扩展状态
+映射。调用 `FlaskNacos` 方法时请继续使用上例中的 `nacos` 变量。
 
 ## 文档
 
@@ -146,7 +147,7 @@ nacos.register_instance()
 
 - `NACOS_SERVICE_NAME` —— 必填，不能为空。
 - `NACOS_SERVICE_PORT` —— 必填，必须是 `1-65535` 范围内的整数。
-- `NACOS_SERVICE_WEIGHT` —— 必须是大于 `0` 的数字。
+- `NACOS_SERVICE_WEIGHT` —— 必须是大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
 - `NACOS_SERVICE_EPHEMERAL` —— 必须是 `bool`。
 
@@ -163,8 +164,8 @@ nacos.register_instance()
 
 ## 服务注销
 
-当 `NACOS_AUTO_DEREGISTER` 为 `True` 时，会在进程退出时通过 `atexit` 自动注销实例。
-你也可以手动注销：
+当 `NACOS_AUTO_DEREGISTER` 为 `True` 时，会在进程退出时通过 `atexit` 自动注销由当前
+扩展成功注册的实例。你也可以手动注销：
 
 ```python
 nacos.deregister_instance()
@@ -353,6 +354,7 @@ uWSGI 行为相同，每个 worker 进程各自注册和注销自己的实例。
 - `NACOS_DEREGISTER_ON_EXIT`（默认 `True`）：是否注册 `atexit` 处理器在进程退出时注销。
 - 仅当 `NACOS_AUTO_DEREGISTER` 与 `NACOS_DEREGISTER_ON_EXIT` 都为 `True` 时才注册
   `atexit` 处理器，且每个扩展实例最多注册一次（重复调用 `init_app(app)` 不会重复注册）。
+- 该处理器只注销由当前扩展成功注册的实例；从未注册或注册失败时不会执行注销。
 
 ### 实例标准化
 
@@ -393,7 +395,8 @@ nacos.list_instances("user-service", metadata={"version": "v1"})
 ```
 
 - `cluster` 未提供时回退到 `NACOS_DISCOVERY_CLUSTER`。
-- `metadata` 未提供时回退到 `NACOS_DISCOVERY_METADATA`。
+- `metadata` 省略或为 `None` 时回退到 `NACOS_DISCOVERY_METADATA`；显式传入 `{}` 可
+  禁用配置中的 metadata 过滤。
 - 设置 `cluster` 时只返回该 cluster 的实例。
 - 设置 `metadata` 时只返回 metadata 包含全部指定键值对的实例。
 - 过滤后无实例时返回空列表。
@@ -628,4 +631,4 @@ TestPyPI/PyPI 步骤以及 GitHub Secrets 配置（`TEST_PYPI_API_TOKEN`、`PYPI
 
 ## 开源许可
 
-基于 GNU General Public License v3.0 或更新版本发布，详见 [LICENSE](LICENSE)。
+基于 Apache License 2.0 发布，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。

@@ -41,7 +41,8 @@ def test_atexit_callback_deregisters(make_app, patched_create_client, fake_clien
     )
 
     app = make_app({"NACOS_AUTO_DEREGISTER": True})
-    FlaskNacos(app)
+    nacos = FlaskNacos(app)
+    nacos.register_instance()
 
     registered[0]()
     fake_client.remove_naming_instance.assert_called_once()
