@@ -5,6 +5,7 @@ English | [简体中文](quickstart.zh-CN.md)
 This guide gets you from install to a running Flask app integrated with Nacos.
 
 See also: [Configuration](configuration.md) - [API Reference](api-reference.md) -
+[Complete Example](complete-example.md) -
 [Service Registration](service-registration.md) -
 [Service Discovery](service-discovery.md) - [Health Check](health-check.md) -
 [Production](production.md) - [Troubleshooting](troubleshooting.md).
@@ -30,7 +31,12 @@ only, never for production):
 docker compose -f examples/docker-compose-nacos.yml up -d
 ```
 
-It listens on `127.0.0.1:8848` with the default demo credentials `nacos/nacos`.
+It listens on `127.0.0.1:8848`; authentication is disabled by the bundled local
+development configuration.
+
+For a copy-ready application factory, environment configuration, Nacos OpenAPI
+setup, curl verification, and production notes, continue with the
+[Complete Flask Integration Example](complete-example.md).
 
 ## Minimal app
 

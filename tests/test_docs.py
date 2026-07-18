@@ -15,6 +15,7 @@ check_docs = importlib.import_module("check_docs")
 
 EXPECTED_DOCS = [
     "quickstart.md",
+    "complete-example.md",
     "configuration.md",
     "api-reference.md",
     "service-registration.md",
@@ -53,6 +54,28 @@ def test_readme_references_docs():
     assert "docs/quickstart.md" in readme
     assert "docs/configuration.md" in readme
     assert "docs/api-reference.md" in readme
+    assert "docs/complete-example.md" in readme
+
+
+def test_complete_example_guides_share_commands_and_defaults():
+    english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
+    shared_markers = (
+        "examples/complete_factory_app.py",
+        "examples/docker-compose-nacos.yml up -d",
+        "flask-nacos-complete-demo",
+        "flask-nacos-demo.properties",
+        "python examples/complete_factory_app.py",
+        "/api/nacos/status",
+        "/api/nacos/config",
+        "/api/nacos/instances",
+        "/health/nacos",
+        'gunicorn "examples.complete_factory_app:create_app()"',
+    )
+
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
 
 
 def test_readme_only_mentions_forbidden_identifiers_with_negation():

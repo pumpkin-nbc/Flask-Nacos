@@ -5,6 +5,7 @@
 本指南带你从安装到运行一个接入 Nacos 的 Flask 应用。
 
 另请参阅：[配置项](configuration.zh-CN.md) - [API 参考](api-reference.zh-CN.md) -
+[完整接入案例](complete-example.zh-CN.md) -
 [服务注册](service-registration.zh-CN.md) -
 [服务发现](service-discovery.zh-CN.md) - [健康检查](health-check.zh-CN.md) -
 [生产部署](production.zh-CN.md) - [错误排查](troubleshooting.zh-CN.md)。
@@ -29,7 +30,10 @@ pip install -e ".[dev]"
 docker compose -f examples/docker-compose-nacos.yml up -d
 ```
 
-它监听 `127.0.0.1:8848`，默认演示账号为 `nacos/nacos`。
+它监听 `127.0.0.1:8848`，仓库自带的本地配置关闭了认证。
+
+如需可直接复制的应用工厂、环境变量、Nacos OpenAPI 初始化、curl 验证与生产注意事项，
+请继续阅读 [Flask 完整接入案例](complete-example.zh-CN.md)。
 
 ## 最小示例
 

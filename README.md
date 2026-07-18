@@ -102,6 +102,7 @@ variable above to call `FlaskNacos` methods.
 Full documentation lives under [`docs/`](docs/):
 
 - [Quickstart](docs/quickstart.md) - install and first app.
+- [Complete Example](docs/complete-example.md) - end-to-end factory integration.
 - [Configuration](docs/configuration.md) - every config key, grouped.
 - [API Reference](docs/api-reference.md) - public methods and error behavior.
 - [Service Registration](docs/service-registration.md) - register/deregister.
@@ -592,6 +593,9 @@ Runnable examples live in the [`examples/`](examples/) directory:
   `FlaskNacos(app)`.
 - [`examples/factory_app.py`](examples/factory_app.py) — Flask application
   factory mode with `nacos.init_app(app)`.
+- [`examples/complete_factory_app.py`](examples/complete_factory_app.py) —
+  environment-driven, end-to-end factory integration; follow the
+  [complete guide](docs/complete-example.md).
 - [`examples/service_registration.py`](examples/service_registration.py) —
   manual and automatic registration and deregistration.
 - [`examples/service_discovery.py`](examples/service_discovery.py) — listing
@@ -603,8 +607,9 @@ Runnable examples live in the [`examples/`](examples/) directory:
 - [`examples/docker-compose-nacos.yml`](examples/docker-compose-nacos.yml) — a
   local Nacos for manual testing (local use only).
 
-The examples use `127.0.0.1:8848` and the local demo credentials `nacos/nacos`;
-replace them with your own configuration (preferably via environment variables).
+The bundled local Compose setup uses `127.0.0.1:8848` with authentication
+disabled. Replace it with an authenticated deployment and inject credentials
+through environment variables or a secret manager in production.
 
 Start a local Nacos for manual testing:
 

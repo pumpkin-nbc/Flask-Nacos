@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Python 3.13 CI coverage and an 85% coverage floor.
 - Added regression coverage for multi-app state, concurrent lifecycle calls,
   post-fork locks, config defaults/timeouts, and SDK client construction.
+- Added a runnable application-factory example with matching English and
+  Simplified Chinese end-to-end integration guides.
 
 ### Changed
 

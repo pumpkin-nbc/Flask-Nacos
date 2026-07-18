@@ -92,6 +92,7 @@ nacos = FlaskNacos(app)
 完整文档位于 [`docs/`](docs/)（每篇均有中英文版本）：
 
 - [快速开始](docs/quickstart.zh-CN.md) —— 安装与第一个应用。
+- [完整接入案例](docs/complete-example.zh-CN.md) —— 端到端工厂模式接入。
 - [配置项](docs/configuration.zh-CN.md) —— 全部配置项分组说明。
 - [API 参考](docs/api-reference.zh-CN.md) —— 公开方法与异常行为。
 - [服务注册](docs/service-registration.zh-CN.md) —— 注册/注销。
@@ -545,6 +546,8 @@ from flask_nacos import (
   `FlaskNacos(app)`。
 - [`examples/factory_app.py`](examples/factory_app.py) —— Flask 工厂模式，使用
   `nacos.init_app(app)`。
+- [`examples/complete_factory_app.py`](examples/complete_factory_app.py) ——
+  基于环境变量的端到端工厂模式接入；配套[完整指南](docs/complete-example.zh-CN.md)。
 - [`examples/service_registration.py`](examples/service_registration.py) ——
   手动与自动注册、注销。
 - [`examples/service_discovery.py`](examples/service_discovery.py) —— 列举实例、
@@ -556,8 +559,8 @@ from flask_nacos import (
 - [`examples/docker-compose-nacos.yml`](examples/docker-compose-nacos.yml) ——
   本地手动测试用的 Nacos（仅限本地使用）。
 
-示例使用 `127.0.0.1:8848` 与本地演示账号 `nacos/nacos`，请替换为你自己的配置
-（建议通过环境变量传入）。
+仓库自带的本地 Compose 配置使用 `127.0.0.1:8848` 并关闭认证。生产环境应替换为
+开启认证的部署，并通过环境变量或密钥管理服务注入凭据。
 
 启动本地 Nacos 进行手动测试：
 
