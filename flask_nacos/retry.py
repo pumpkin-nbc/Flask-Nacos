@@ -5,6 +5,7 @@ import time
 from typing import Any, Callable, Dict
 
 from .exceptions import NacosValidationError
+from .utils import validate_retry_interval, validate_retry_times
 
 logger = logging.getLogger("flask_nacos")
 
@@ -35,19 +36,8 @@ def run_with_retry(
     if not enabled:
         return operation()
 
-    max_attempts = config.get("NACOS_RETRY_TIMES", 3)
-    try:
-        max_attempts = int(max_attempts)
-    except (TypeError, ValueError):
-        max_attempts = 3
-    if max_attempts < 1:
-        max_attempts = 1
-
-    interval = config.get("NACOS_RETRY_INTERVAL", 1.0)
-    try:
-        interval = float(interval)
-    except (TypeError, ValueError):
-        interval = 1.0
+    max_attempts = validate_retry_times(config.get("NACOS_RETRY_TIMES", 3))
+    interval = validate_retry_interval(config.get("NACOS_RETRY_INTERVAL", 1.0))
 
     if max_attempts > 1:
         logger.debug(

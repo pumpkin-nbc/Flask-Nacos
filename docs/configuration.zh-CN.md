@@ -57,7 +57,8 @@ app.config.update(
 ```
 
 请填写 namespace ID，而不是控制台显示名称。根据服务端认证方式选择用户名/密码或
-AK/SK，任何一种都不要硬编码。
+AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥；认证配置非法时，
+client 初始化会遵循 `NACOS_FAIL_FAST`。
 
 ## 2. 服务注册
 
@@ -102,7 +103,7 @@ app.config.update(
 | `NACOS_DISCOVERY_STRATEGY` | str | `"first"` | 否 | `get_one_healthy_instance` 的默认策略（`first`/`random`/`weight`）。 |
 | `NACOS_DISCOVERY_CLUSTER` | str | `None` | 否 | 默认 cluster 过滤。 |
 | `NACOS_DISCOVERY_METADATA` | dict | `{}` | 否 | 默认 metadata 过滤。 |
-| `NACOS_INSTANCE_NORMALIZE` | bool | `True` | 否 | `list_instances` 是否返回标准化实例 dict。 |
+| `NACOS_INSTANCE_NORMALIZE` | bool | `True` | 否 | 是否返回标准化实例 dict；IP/端口畸形的实例会被跳过。 |
 
 示例：
 
@@ -134,9 +135,9 @@ app.config.update(
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_RETRY_ENABLED` | bool | `True` | 否 | 是否为 Nacos 操作启用重试。 |
-| `NACOS_RETRY_TIMES` | int | `3` | 否 | 每个操作的最大尝试次数。 |
-| `NACOS_RETRY_INTERVAL` | float | `1.0` | 否 | 每次尝试之间的等待秒数。 |
-| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | 否 | 传给 SDK 2.x 配置中心读取调用的超时时间。 |
+| `NACOS_RETRY_TIMES` | int | `3` | 否 | 最大尝试次数，必须为不小于 `1` 的整数。 |
+| `NACOS_RETRY_INTERVAL` | float | `1.0` | 否 | 尝试间隔秒数，必须为不小于 `0` 的有限数字。 |
+| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | 否 | 配置中心读取超时，必须为大于 `0` 的有限数字。 |
 
 示例：
 
@@ -147,6 +148,9 @@ app.config.update(
     NACOS_RETRY_INTERVAL=1.0,
 )
 ```
+
+支持合法数字字符串；布尔值、小数尝试次数、NaN、Infinity 和越界值会立即失败且不重试。
+关闭重试时忽略重试参数；关闭配置中心时忽略请求超时。
 
 ## 6. 运行状态
 

@@ -1,13 +1,15 @@
 """Tests for isolated Nacos SDK client construction."""
 
+import logging
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from flask_nacos import FlaskNacos
 from flask_nacos.client import create_client
-from flask_nacos.exceptions import NacosClientError
+from flask_nacos.exceptions import NacosClientError, NacosConfigError
 
 
 def _config(**overrides):
@@ -89,3 +91,77 @@ def test_create_client_wraps_missing_sdk(monkeypatch):
         create_client(_config())
 
     assert isinstance(exc_info.value.__cause__, ImportError)
+
+
+@pytest.mark.parametrize(
+    "auth_config",
+    [
+        {"NACOS_USERNAME": "user"},
+        {"NACOS_PASSWORD": "password"},
+        {"NACOS_ACCESS_KEY": "access"},
+        {"NACOS_SECRET_KEY": "secret"},
+        {
+            "NACOS_USERNAME": "user",
+            "NACOS_PASSWORD": "password",
+            "NACOS_ACCESS_KEY": "access",
+            "NACOS_SECRET_KEY": "secret",
+        },
+        {"NACOS_USERNAME": 123, "NACOS_PASSWORD": "password"},
+    ],
+)
+def test_invalid_authentication_fails_before_client_creation(
+    make_app, patched_create_client, auth_config
+):
+    app = make_app({**auth_config, "NACOS_FAIL_FAST": True})
+
+    with pytest.raises(NacosConfigError):
+        FlaskNacos(app)
+
+    assert patched_create_client["count"] == 0
+
+
+def test_invalid_authentication_is_safe_when_not_fail_fast(
+    make_app, patched_create_client
+):
+    app = make_app(
+        {
+            "NACOS_USERNAME": "user",
+            "NACOS_PASSWORD": "password",
+            "NACOS_ACCESS_KEY": "access",
+            "NACOS_SECRET_KEY": "secret",
+            "NACOS_FAIL_FAST": False,
+        }
+    )
+
+    extension = FlaskNacos(app)
+
+    assert extension.client is None
+    assert patched_create_client["count"] == 0
+
+
+def test_invalid_authentication_does_not_log_credentials(
+    make_app, patched_create_client, caplog
+):
+    credentials = (
+        "private-auth-user",
+        "private-auth-password",
+        "private-auth-access-key",
+        "private-auth-secret-key",
+    )
+    app = make_app(
+        {
+            "NACOS_USERNAME": credentials[0],
+            "NACOS_PASSWORD": credentials[1],
+            "NACOS_ACCESS_KEY": credentials[2],
+            "NACOS_SECRET_KEY": credentials[3],
+            "NACOS_FAIL_FAST": False,
+        }
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
+        extension = FlaskNacos(app)
+
+    assert extension.client is None
+    output = "\n".join(record.getMessage() for record in caplog.records)
+    assert all(value not in output for value in credentials)
+    assert patched_create_client["count"] == 0

@@ -4,6 +4,7 @@ import pytest
 
 from flask_nacos import FlaskNacos
 from flask_nacos.config_center import load_config_to_flask
+from flask_nacos.exceptions import NacosValidationError
 
 
 def test_get_config(make_app, patched_create_client, fake_client):
@@ -95,11 +96,54 @@ def test_get_config_disabled_skips_sdk_even_without_client(
 def test_missing_default_data_id_honors_fail_fast(
     make_app, patched_create_client, fake_client
 ):
-    from flask_nacos.exceptions import NacosValidationError
-
     app = make_app({"NACOS_CONFIG_DATA_ID": None, "NACOS_FAIL_FAST": True})
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosValidationError):
         nacos.get_config()
+    fake_client.get_config.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    [0, -1, True, float("nan"), float("inf"), "invalid"],
+)
+def test_invalid_request_timeout_does_not_call_sdk(
+    make_app, patched_create_client, fake_client, timeout
+):
+    nacos = FlaskNacos(
+        make_app({"NACOS_REQUEST_TIMEOUT": timeout, "NACOS_FAIL_FAST": False})
+    )
+
+    assert nacos.get_config("application.yaml") is None
+    fake_client.get_config.assert_not_called()
+
+
+def test_invalid_request_timeout_raises_when_fail_fast(
+    make_app, patched_create_client, fake_client
+):
+    nacos = FlaskNacos(
+        make_app(
+            {"NACOS_REQUEST_TIMEOUT": float("inf"), "NACOS_FAIL_FAST": True}
+        )
+    )
+
+    with pytest.raises(NacosValidationError):
+        nacos.get_config("application.yaml")
+    fake_client.get_config.assert_not_called()
+
+
+def test_request_timeout_is_ignored_when_config_center_disabled(
+    make_app, patched_create_client, fake_client
+):
+    nacos = FlaskNacos(
+        make_app(
+            {
+                "NACOS_CONFIG_ENABLED": False,
+                "NACOS_REQUEST_TIMEOUT": float("nan"),
+            }
+        )
+    )
+
+    assert nacos.get_config("application.yaml") is None
     fake_client.get_config.assert_not_called()

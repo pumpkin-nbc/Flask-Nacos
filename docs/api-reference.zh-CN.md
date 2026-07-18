@@ -181,6 +181,6 @@ from flask_nacos import (
 - `FlaskNacosError` —— 基类。
 - `NacosConfigError` —— 配置无效或配置读取失败。
 - `NacosClientError` —— Nacos client 创建 / 使用失败。
-- `NacosValidationError` —— 注册参数校验失败（`NacosConfigError` 的子类）。
+- `NacosValidationError` —— 确定性输入或数值配置校验失败（`NacosConfigError` 的子类）。
 - `NacosRegistrationError` / `NacosDeregistrationError` / `NacosDiscoveryError`
   —— 注册、注销与服务发现失败。

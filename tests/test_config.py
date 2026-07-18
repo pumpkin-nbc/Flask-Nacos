@@ -1,5 +1,6 @@
 """Tests for default configuration loading and overrides."""
 
+import pytest
 from flask import Flask
 
 from flask_nacos.config import DEFAULTS, load_config
@@ -93,6 +94,27 @@ def test_new_030_config_overrides():
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is True
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/healthz"
     assert cfg["NACOS_AUTO_REGISTER_ON_INIT"] is False
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("NACOS_RETRY_TIMES", True),
+        ("NACOS_RETRY_TIMES", 1.5),
+        ("NACOS_RETRY_TIMES", "invalid"),
+        ("NACOS_RETRY_INTERVAL", True),
+        ("NACOS_RETRY_INTERVAL", "invalid"),
+        ("NACOS_REQUEST_TIMEOUT", True),
+        ("NACOS_REQUEST_TIMEOUT", "invalid"),
+    ],
+)
+def test_invalid_operational_numbers_are_preserved_for_validation(key, value):
+    app = Flask(__name__)
+    app.config[key] = value
+
+    cfg = load_config(app)
+
+    assert cfg[key] == value
 
 
 def test_request_timeout_readable():

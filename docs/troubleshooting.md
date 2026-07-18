@@ -53,6 +53,14 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: verify credentials against the Nacos console.
 - Fix: correct the credentials (inject via environment variables).
 
+## Authentication configuration is rejected before client initialization
+
+- Cause: `NACOS_USERNAME`/`NACOS_PASSWORD` or
+  `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` is incomplete, both authentication
+  methods are configured, or a credential is not a string.
+- Fix: configure exactly one complete credential pair. Temporarily enable
+  `NACOS_FAIL_FAST=True` to surface the safe configuration error.
+
 ## 7. Wrong namespace
 
 - Symptom: instances/config not found even though they exist.
@@ -68,6 +76,15 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: relax filters, try `healthy_only=False`, confirm the group.
 - Fix: correct the `service_name`/`group`/`cluster`/`metadata`; an empty result
   is normal when nothing matches.
+- A returned instance with an empty IP or an invalid port is logged and skipped;
+  verify the provider's registered `NACOS_SERVICE_IP` and port in Nacos.
+
+## Retry or request-timeout configuration fails immediately
+
+- Cause: attempts are below `1` or not an integer, an interval is negative, or
+  a numeric value is boolean, NaN, Infinity, or non-numeric.
+- Fix: use `NACOS_RETRY_TIMES >= 1`, `NACOS_RETRY_INTERVAL >= 0`, and
+  `NACOS_REQUEST_TIMEOUT > 0`. Deterministic validation failures are not retried.
 
 ## 9. `get_one_healthy_instance()` returns `None`
 

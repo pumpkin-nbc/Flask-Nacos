@@ -156,6 +156,9 @@ nacos.register_instance()
 临时实例默认由 SDK 每 `5.0` 秒发送一次心跳。初始健康标识不能替代持续心跳；持久实例
 不会收到心跳间隔参数。
 
+只有 SDK 2.x 明确返回 `True` 时，注册或注销才算成功。返回 `False` 时会进入现有重试与
+`NACOS_FAIL_FAST` 流程，并且不会错误更新扩展的注册状态。
+
 注册具备幂等性：对同一个扩展实例多次调用 `register_instance()` 只会注册一次，
 后续调用为无操作（no-op）。
 
@@ -223,6 +226,9 @@ dict 解析。
   3 次。
 - `NACOS_RETRY_INTERVAL`（默认 `1.0`）：每次尝试之间的等待秒数。
 
+最大尝试次数必须是不小于 `1` 的整数；等待间隔必须是不小于 `0` 的有限数字。支持合法
+数字字符串。关闭重试时会忽略这两个值。
+
 每次失败都会记录 `warning` 日志。最终失败后由 `NACOS_FAIL_FAST` 决定抛出异常还是返回
 安全默认值。确定性的输入与校验错误会立即失败，不重试也不等待退避。
 
@@ -230,6 +236,7 @@ dict 解析。
 
 - `NACOS_REQUEST_TIMEOUT`（默认 `5.0`）会传给同步 SDK 2.x 配置中心的
   `get_config(..., timeout=...)` 调用。
+- 超时必须是大于 `0` 的有限数字；关闭配置中心时会忽略该值。
 
 ### 健康检查路由
 
@@ -383,9 +390,9 @@ instance = nacos.normalize_instance(raw_sdk_instance)
 }
 ```
 
-`normalize_instance()` 兼容 dict 与对象属性形式的实例，缺失字段使用合理默认值，且不会
-因单个实例异常而抛错（记录日志并返回 `None`）。服务发现时，单个标准化失败的实例会被
-跳过，而不会导致整个发现失败。
+`normalize_instance()` 兼容 dict 与对象属性形式，并能正确解析字符串布尔值。可用实例
+必须包含非空字符串 IP 和 `1-65535` 范围内的整数端口；畸形地址返回 `None`，服务发现会
+跳过它而不影响其他实例。非法或非有限权重回退为 `1.0`。
 
 ### 服务发现过滤
 
@@ -451,6 +458,9 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 `get_config()` 仍然只返回 Nacos 配置的原始内容，不做任何 YAML、JSON、dict 解析。
 
 ## 配置项说明
+
+用户名与密码必须成对配置，AccessKey 与 SecretKey 必须成对配置，并且两种认证方式不能
+同时启用。
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -527,7 +537,7 @@ from flask_nacos import (
 - `FlaskNacosError` —— 基类。
 - `NacosConfigError` —— 配置无效或配置读取失败。
 - `NacosClientError` —— Nacos 客户端创建 / 使用失败。
-- `NacosValidationError` —— 注册参数校验失败（继承自 `NacosConfigError`）。
+- `NacosValidationError` —— 确定性输入或数值配置校验失败（继承自 `NacosConfigError`）。
 - `NacosRegistrationError` —— 服务注册失败。
 - `NacosDeregistrationError` —— 服务注销失败。
 - `NacosDiscoveryError` —— 服务发现失败。

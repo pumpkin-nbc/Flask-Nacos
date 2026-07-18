@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Treated SDK `False` registration and deregistration results as retryable
+  failures without corrupting lifecycle state.
+- Rejected incomplete or mixed authentication credentials and invalid retry or
+  request-timeout numbers through the existing fail-fast behavior.
+- Skipped discovered instances with malformed endpoints, parsed string boolean
+  fields correctly, and sanitized invalid weights.
 - Kept ephemeral service instances healthy by passing the heartbeat interval to
   Nacos SDK 2.x, while leaving persistent-instance registration unchanged.
 - Aligned the beginner example's registered and listening ports at `3000` and

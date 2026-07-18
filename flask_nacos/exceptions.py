@@ -14,7 +14,7 @@ class NacosClientError(FlaskNacosError):
 
 
 class NacosValidationError(NacosConfigError):
-    """Raised when service registration parameters fail validation.
+    """Raised when deterministic Nacos input or numeric config validation fails.
 
     Subclasses :class:`NacosConfigError` so that code catching configuration
     errors also catches validation errors.

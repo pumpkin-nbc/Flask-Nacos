@@ -54,8 +54,6 @@ def test_beginner_example_covers_registration_config_and_discovery(
     monkeypatch.setenv("NACOS_NAMESPACE_ID", "tenant-id")
     monkeypatch.setenv("NACOS_USERNAME", "example-user")
     monkeypatch.setenv("NACOS_PASSWORD", "example-password")
-    monkeypatch.setenv("NACOS_ACCESS_KEY", "example-access-key")
-    monkeypatch.setenv("NACOS_SECRET_KEY", "example-secret-key")
     monkeypatch.setenv("NACOS_SERVICE_IP", "127.0.0.2")
     fake_client.get_config.return_value = "greeting=hello-from-nacos"
     module = _load_example()
@@ -68,8 +66,8 @@ def test_beginner_example_covers_registration_config_and_discovery(
     assert cfg["NACOS_NAMESPACE_ID"] == "tenant-id"
     assert cfg["NACOS_USERNAME"] == "example-user"
     assert cfg["NACOS_PASSWORD"] == "example-password"
-    assert cfg["NACOS_ACCESS_KEY"] == "example-access-key"
-    assert cfg["NACOS_SECRET_KEY"] == "example-secret-key"
+    assert cfg["NACOS_ACCESS_KEY"] is None
+    assert cfg["NACOS_SECRET_KEY"] is None
     assert cfg["NACOS_SERVICE_NAME"] == "flask-nacos-beginner"
     assert cfg["NACOS_SERVICE_IP"] == "127.0.0.2"
     assert cfg["NACOS_SERVICE_PORT"] == 3000
@@ -136,6 +134,23 @@ def test_beginner_example_hides_client_failure_details(monkeypatch, caplog):
     assert "hidden-example-token" not in log_output
     assert "private-example-user" not in log_output
     assert "private-example-password" not in log_output
+
+
+def test_beginner_example_supports_access_key_authentication(
+    monkeypatch, patched_create_client
+):
+    monkeypatch.setenv("NACOS_ENABLED", "true")
+    monkeypatch.setenv("NACOS_ACCESS_KEY", "example-access-key")
+    monkeypatch.setenv("NACOS_SECRET_KEY", "example-secret-key")
+
+    module = _load_example()
+    cfg = module["app"].extensions["nacos"]["config"]
+
+    assert cfg["NACOS_USERNAME"] is None
+    assert cfg["NACOS_PASSWORD"] is None
+    assert cfg["NACOS_ACCESS_KEY"] == "example-access-key"
+    assert cfg["NACOS_SECRET_KEY"] == "example-secret-key"
+    assert patched_create_client["count"] == 1
 
 
 def test_beginner_example_has_no_hardcoded_environment_or_port_mismatch():

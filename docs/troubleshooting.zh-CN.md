@@ -50,6 +50,12 @@
 - 排查方法：在 Nacos 控制台核对凭据。
 - 解决建议：修正凭据（通过环境变量注入）。
 
+## client 初始化前认证配置被拒绝
+
+- 可能原因：`NACOS_USERNAME`/`NACOS_PASSWORD` 或
+  `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` 缺少一项、同时配置两种认证，或凭据不是字符串。
+- 解决建议：只配置一组完整凭据；可临时启用 `NACOS_FAIL_FAST=True` 查看安全的配置错误。
+
 ## 7. namespace 配置错误
 
 - 现象：实例/配置明明存在却查不到。
@@ -65,6 +71,15 @@
 - 排查方法：放宽过滤条件、尝试 `healthy_only=False`、确认 group。
 - 解决建议：修正 `service_name`/`group`/`cluster`/`metadata`；无匹配时返回空是
   正常的。
+- 返回实例的 IP 为空或端口非法时，该实例会被记录并跳过；请在 Nacos 中核对提供方注册的
+  `NACOS_SERVICE_IP` 与端口。
+
+## 重试或请求超时配置立即失败
+
+- 可能原因：尝试次数小于 `1` 或不是整数、间隔为负数，或数值为布尔值、NaN、Infinity
+  或非数字。
+- 解决建议：使用 `NACOS_RETRY_TIMES >= 1`、`NACOS_RETRY_INTERVAL >= 0` 和
+  `NACOS_REQUEST_TIMEOUT > 0`。确定性校验失败不会重试。
 
 ## 9. `get_one_healthy_instance()` 返回 None
 

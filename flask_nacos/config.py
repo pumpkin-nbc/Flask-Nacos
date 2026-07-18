@@ -110,18 +110,17 @@ def load_config(app) -> Dict[str, Any]:
     for key in bool_keys:
         merged[key] = to_bool(merged[key], DEFAULTS[key])
 
-    merged["NACOS_RETRY_TIMES"] = to_int(
-        merged["NACOS_RETRY_TIMES"], DEFAULTS["NACOS_RETRY_TIMES"]
-    )
-    merged["NACOS_RETRY_INTERVAL"] = to_float(
-        merged["NACOS_RETRY_INTERVAL"], DEFAULTS["NACOS_RETRY_INTERVAL"]
-    )
-    merged["NACOS_REQUEST_TIMEOUT"] = to_float(
-        merged["NACOS_REQUEST_TIMEOUT"], DEFAULTS["NACOS_REQUEST_TIMEOUT"]
-    )
-
     # Coerce valid string numbers (e.g. from env vars) but keep the original
     # value when coercion fails so that validation can report it clearly.
+    retry_times_coerced = to_int(merged["NACOS_RETRY_TIMES"], None)
+    if retry_times_coerced is not None:
+        merged["NACOS_RETRY_TIMES"] = retry_times_coerced
+
+    for key in ("NACOS_RETRY_INTERVAL", "NACOS_REQUEST_TIMEOUT"):
+        coerced = to_float(merged[key], None)
+        if coerced is not None:
+            merged[key] = coerced
+
     weight_coerced = to_float(merged["NACOS_SERVICE_WEIGHT"], None)
     if weight_coerced is not None:
         merged["NACOS_SERVICE_WEIGHT"] = weight_coerced
@@ -149,8 +148,39 @@ def load_config(app) -> Dict[str, Any]:
 
 def validate_connection_config(config: Dict[str, Any]) -> None:
     """Validate the settings required to create a Nacos client."""
-    if not config.get("NACOS_SERVER_ADDR"):
+    server_addr = config.get("NACOS_SERVER_ADDR")
+    if not isinstance(server_addr, str) or not server_addr.strip():
         raise NacosConfigError("NACOS_SERVER_ADDR is required to initialize Nacos client")
+
+    auth_keys = (
+        "NACOS_USERNAME",
+        "NACOS_PASSWORD",
+        "NACOS_ACCESS_KEY",
+        "NACOS_SECRET_KEY",
+    )
+    for key in auth_keys:
+        value = config.get(key)
+        if value is not None and value != "" and not isinstance(value, str):
+            raise NacosConfigError(f"{key} must be a string when configured")
+
+    username_set = config.get("NACOS_USERNAME") not in (None, "")
+    password_set = config.get("NACOS_PASSWORD") not in (None, "")
+    access_key_set = config.get("NACOS_ACCESS_KEY") not in (None, "")
+    secret_key_set = config.get("NACOS_SECRET_KEY") not in (None, "")
+
+    if username_set != password_set:
+        raise NacosConfigError(
+            "NACOS_USERNAME and NACOS_PASSWORD must be configured together"
+        )
+    if access_key_set != secret_key_set:
+        raise NacosConfigError(
+            "NACOS_ACCESS_KEY and NACOS_SECRET_KEY must be configured together"
+        )
+    if username_set and access_key_set:
+        raise NacosConfigError(
+            "Username/password authentication and AK/SK authentication "
+            "cannot be configured together"
+        )
 
 
 def validate_registration_config(config: Dict[str, Any]) -> None:

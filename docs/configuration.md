@@ -60,6 +60,9 @@ app.config.update(
 
 Use the namespace ID rather than its display name. Prefer username/password or
 AK/SK according to the server's authentication mode; do not hardcode either.
+Each credential pair must be complete, and the two authentication methods are
+mutually exclusive. Invalid authentication follows `NACOS_FAIL_FAST` during
+client initialization.
 
 ## 2. Service registration
 
@@ -105,7 +108,7 @@ The initial healthy flag does not keep an ephemeral instance alive.
 | `NACOS_DISCOVERY_STRATEGY` | str | `"first"` | no | Default strategy for `get_one_healthy_instance` (`first`/`random`/`weight`). |
 | `NACOS_DISCOVERY_CLUSTER` | str | `None` | no | Default cluster filter. |
 | `NACOS_DISCOVERY_METADATA` | dict | `{}` | no | Default metadata filter. |
-| `NACOS_INSTANCE_NORMALIZE` | bool | `True` | no | Return normalized instance dicts from `list_instances`. |
+| `NACOS_INSTANCE_NORMALIZE` | bool | `True` | no | Return normalized instance dicts; malformed IP/port endpoints are skipped. |
 
 Example:
 
@@ -137,9 +140,9 @@ app.config.update(
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
 | `NACOS_RETRY_ENABLED` | bool | `True` | no | Enable retries for Nacos operations. |
-| `NACOS_RETRY_TIMES` | int | `3` | no | Maximum number of attempts per operation. |
-| `NACOS_RETRY_INTERVAL` | float | `1.0` | no | Seconds between attempts. |
-| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | no | Timeout passed to SDK 2.x config-center read calls. |
+| `NACOS_RETRY_TIMES` | int | `3` | no | Maximum attempts; integer `>= 1`. |
+| `NACOS_RETRY_INTERVAL` | float | `1.0` | no | Finite seconds between attempts; `>= 0`. |
+| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | no | Finite config-center read timeout; `> 0`. |
 
 Example:
 
@@ -150,6 +153,11 @@ app.config.update(
     NACOS_RETRY_INTERVAL=1.0,
 )
 ```
+
+Numeric strings are accepted. Booleans, fractional attempt counts, NaN,
+Infinity, and out-of-range values are rejected without retrying. Retry values
+are ignored when retries are disabled; request timeout is ignored when the
+configuration center is disabled.
 
 ## 6. Runtime status
 

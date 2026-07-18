@@ -171,6 +171,64 @@ def validate_heartbeat_interval(value: Any) -> float:
     return interval
 
 
+def validate_retry_times(value: Any) -> int:
+    """Validate the number of attempts used by the retry helper."""
+    if isinstance(value, bool):
+        raise NacosValidationError("NACOS_RETRY_TIMES must be an integer, got bool")
+    if isinstance(value, float) and (
+        not math.isfinite(value) or not value.is_integer()
+    ):
+        raise NacosValidationError(
+            f"NACOS_RETRY_TIMES must be an integer, got {value!r}"
+        )
+    try:
+        attempts = int(value)
+    except (TypeError, ValueError, OverflowError):
+        raise NacosValidationError(
+            f"NACOS_RETRY_TIMES must be an integer, got {value!r}"
+        )
+    if attempts < 1:
+        raise NacosValidationError(
+            f"NACOS_RETRY_TIMES must be greater than or equal to 1, got {attempts}"
+        )
+    return attempts
+
+
+def validate_retry_interval(value: Any) -> float:
+    """Validate the finite non-negative delay between retry attempts."""
+    if isinstance(value, bool):
+        raise NacosValidationError("NACOS_RETRY_INTERVAL must be a number, got bool")
+    try:
+        interval = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise NacosValidationError(
+            f"NACOS_RETRY_INTERVAL must be a number, got {value!r}"
+        )
+    if not math.isfinite(interval) or interval < 0:
+        raise NacosValidationError(
+            "NACOS_RETRY_INTERVAL must be finite and greater than or equal "
+            f"to 0, got {interval}"
+        )
+    return interval
+
+
+def validate_request_timeout(value: Any) -> float:
+    """Validate the positive finite configuration-center request timeout."""
+    if isinstance(value, bool):
+        raise NacosValidationError("NACOS_REQUEST_TIMEOUT must be a number, got bool")
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise NacosValidationError(
+            f"NACOS_REQUEST_TIMEOUT must be a number, got {value!r}"
+        )
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise NacosValidationError(
+            f"NACOS_REQUEST_TIMEOUT must be finite and greater than 0, got {timeout}"
+        )
+    return timeout
+
+
 def validate_metadata(metadata: Any) -> Dict[str, Any]:
     """Validate service metadata, ensuring it is a plain mapping."""
     if metadata is None:

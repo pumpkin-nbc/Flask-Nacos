@@ -171,6 +171,10 @@ Ephemeral instances use SDK heartbeats every `5.0` seconds by default. The
 initial healthy flag does not replace heartbeat renewal; persistent instances
 do not receive a heartbeat interval.
 
+Registration and deregistration succeed only when SDK 2.x explicitly returns
+`True`. A `False` result follows the normal retry and `NACOS_FAIL_FAST` flow and
+does not update the extension's registered state.
+
 Registration is idempotent: calling `register_instance()` multiple times on the
 same extension instance registers only once (subsequent calls are no-ops).
 
@@ -246,6 +250,10 @@ control over auto-registration.
   retries). `3` means the operation is attempted up to 3 times.
 - `NACOS_RETRY_INTERVAL` (default `1.0`): seconds to wait between attempts.
 
+Retry attempts must be an integer greater than or equal to `1`; the interval
+must be a finite number greater than or equal to `0`. Numeric strings are
+accepted. These values are ignored when retries are disabled.
+
 Each failed attempt is logged at `warning` level. After the final failure the
 `NACOS_FAIL_FAST` rule decides whether to raise or return a safe default.
 Deterministic input and validation errors fail immediately without retrying or
@@ -255,6 +263,8 @@ waiting for backoff.
 
 - `NACOS_REQUEST_TIMEOUT` (default `5.0`) is passed to synchronous SDK 2.x
   configuration-center `get_config(..., timeout=...)` calls.
+- The timeout must be a finite number greater than `0` and is ignored when the
+  configuration center is disabled.
 
 ### Health Check Route
 
@@ -423,10 +433,11 @@ The standard dict shape:
 }
 ```
 
-`normalize_instance()` accepts dict or attribute-style instances, fills missing
-fields with sensible defaults, and never raises for a single bad instance (it
-logs and returns `None`). During discovery a single instance that fails
-normalization is skipped rather than failing the whole call.
+`normalize_instance()` accepts dict or attribute-style instances and parses
+string boolean fields correctly. A usable instance requires a non-empty string
+IP and an integer port in `1-65535`; malformed endpoints return `None`, and are
+skipped during discovery without failing the whole call. Invalid or non-finite
+weights fall back to `1.0`.
 
 ### Discovery Filtering
 
@@ -498,6 +509,10 @@ secret-free and without calling Nacos):
 JSON, or dict parsing is performed.
 
 ## Configuration Reference
+
+Username and password must be configured together; access key and secret key
+must be configured together. Do not configure both authentication methods at
+the same time.
 
 | Key | Default | Description |
 | --- | --- | --- |
@@ -575,7 +590,7 @@ from flask_nacos import (
 - `FlaskNacosError` — base class.
 - `NacosConfigError` — invalid config or config-read failures.
 - `NacosClientError` — Nacos client creation/usage failures.
-- `NacosValidationError` — registration parameter validation failures (subclass
+- `NacosValidationError` — deterministic input or numeric configuration validation failures (subclass
   of `NacosConfigError`).
 - `NacosRegistrationError` — service registration failures.
 - `NacosDeregistrationError` — service deregistration failures.

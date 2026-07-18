@@ -6,10 +6,12 @@ reused across the discovery pipeline.
 """
 
 import logging
+import math
 import random
 from typing import Any, Dict, List, Optional
 
 from .exceptions import NacosDiscoveryError
+from .utils import to_bool
 
 logger = logging.getLogger("flask_nacos")
 
@@ -86,33 +88,51 @@ def _get_field(instance: Any, keys, default: Any = None) -> Any:
 def normalize_instance(instance: Any) -> Dict[str, Any]:
     """Convert a Nacos SDK instance (dict or object) into a standard dict.
 
-    Missing fields fall back to sensible defaults. Raises ``NacosDiscoveryError``
-    only when ``instance`` is fundamentally unusable (e.g. ``None``) so that the
-    caller can log and skip a single bad instance without failing discovery.
+    Optional fields fall back to sensible defaults. A missing or malformed
+    endpoint raises ``NacosDiscoveryError`` so callers can skip that single bad
+    instance without failing the complete discovery result.
     """
     if instance is None:
         raise NacosDiscoveryError("Cannot normalize a None instance")
 
     try:
+        ip = _get_field(instance, ("ip",), None)
+        if not isinstance(ip, str) or not ip.strip():
+            raise NacosDiscoveryError("Discovered instance must have a non-empty IP")
+        ip = ip.strip()
+
+        port_value = _get_field(instance, ("port",), None)
+        if isinstance(port_value, bool):
+            raise NacosDiscoveryError("Discovered instance port must be an integer")
+        if isinstance(port_value, float) and (
+            not math.isfinite(port_value) or not port_value.is_integer()
+        ):
+            raise NacosDiscoveryError("Discovered instance port must be an integer")
+        try:
+            port = int(port_value)
+        except (TypeError, ValueError, OverflowError):
+            raise NacosDiscoveryError("Discovered instance port must be an integer")
+        if not 1 <= port <= 65535:
+            raise NacosDiscoveryError(
+                "Discovered instance port must be in range 1-65535"
+            )
+
         metadata = _get_field(instance, ("metadata",), {}) or {}
         if not isinstance(metadata, dict):
             metadata = {}
+        else:
+            metadata = dict(metadata)
 
-        weight = _get_field(instance, ("weight",), 1.0)
+        weight_value = _get_field(instance, ("weight",), 1.0)
         try:
-            weight = float(weight)
-        except (TypeError, ValueError):
+            weight = 1.0 if isinstance(weight_value, bool) else float(weight_value)
+        except (TypeError, ValueError, OverflowError):
+            weight = 1.0
+        if not math.isfinite(weight):
             weight = 1.0
 
-        port = _get_field(instance, ("port",), None)
-        if port is not None:
-            try:
-                port = int(port)
-            except (TypeError, ValueError):
-                port = None
-
         return {
-            "ip": _get_field(instance, ("ip",), None),
+            "ip": ip,
             "port": port,
             "service_name": _get_field(
                 instance, ("service_name", "serviceName"), None
@@ -121,9 +141,9 @@ def normalize_instance(instance: Any) -> Dict[str, Any]:
                 instance, ("cluster_name", "clusterName"), "DEFAULT"
             ),
             "weight": weight,
-            "healthy": bool(_get_field(instance, ("healthy",), True)),
-            "enabled": bool(_get_field(instance, ("enabled",), True)),
-            "ephemeral": bool(_get_field(instance, ("ephemeral",), True)),
+            "healthy": to_bool(_get_field(instance, ("healthy",), True), True),
+            "enabled": to_bool(_get_field(instance, ("enabled",), True), True),
+            "ephemeral": to_bool(_get_field(instance, ("ephemeral",), True), True),
             "metadata": metadata,
         }
     except NacosDiscoveryError:
@@ -196,10 +216,12 @@ def select_instance(
     # strategy == "weight"
     weights = []
     for inst in instances:
-        weight = _get_field(inst, ("weight",), 1.0)
+        weight_value = _get_field(inst, ("weight",), 1.0)
         try:
-            weight = float(weight)
-        except (TypeError, ValueError):
+            weight = 1.0 if isinstance(weight_value, bool) else float(weight_value)
+        except (TypeError, ValueError, OverflowError):
+            weight = 1.0
+        if not math.isfinite(weight):
             weight = 1.0
         weights.append(weight if weight > 0 else 0.0)
 

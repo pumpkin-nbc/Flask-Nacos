@@ -66,6 +66,7 @@ def test_discovery_error_returns_empty_when_not_fail_fast(
 
 
 def test_secrets_never_logged(make_app, patched_create_client, fake_client, caplog):
+    secret_user = "private-user"
     secret_pw = "super-secret-password"
     secret_ak = "AK-1234567890"
     secret_sk = "SK-abcdefghij"
@@ -73,9 +74,8 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
     with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
         app = make_app(
             {
+                "NACOS_USERNAME": secret_user,
                 "NACOS_PASSWORD": secret_pw,
-                "NACOS_ACCESS_KEY": secret_ak,
-                "NACOS_SECRET_KEY": secret_sk,
                 "NACOS_AUTO_REGISTER": True,
                 "NACOS_HEALTH_CHECK_ENABLED": True,
             }
@@ -87,7 +87,17 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
         nacos.get_status()
         app.test_client().get("/health/nacos")
 
+        ak_app = make_app(
+            {
+                "NACOS_ACCESS_KEY": secret_ak,
+                "NACOS_SECRET_KEY": secret_sk,
+            }
+        )
+        ak_nacos = FlaskNacos(ak_app)
+        ak_nacos.get_status()
+
     combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert secret_user not in combined
     assert secret_pw not in combined
     assert secret_ak not in combined
     assert secret_sk not in combined

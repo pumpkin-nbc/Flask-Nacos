@@ -69,7 +69,7 @@ def register_instance(client: Any, config: Dict[str, Any]) -> bool:
         ephemeral,
     )
     try:
-        client.add_naming_instance(
+        result = client.add_naming_instance(
             identity["service_name"],
             identity["ip"],
             identity["port"],
@@ -81,6 +81,14 @@ def register_instance(client: Any, config: Dict[str, Any]) -> bool:
             f"call failed (service={identity['service_name']}, ip={identity['ip']}, "
             f"port={identity['port']}, group={identity['group_name']})"
         ) from exc
+
+    if result is not True:
+        raise NacosRegistrationError(
+            "Failed to register service instance: Nacos SDK "
+            "add_naming_instance returned an unsuccessful result "
+            f"(service={identity['service_name']}, ip={identity['ip']}, "
+            f"port={identity['port']}, group={identity['group_name']})"
+        )
 
     logger.info(
         "Service registered (service=%s, ip=%s, port=%s, group=%s)",
@@ -103,7 +111,7 @@ def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
         identity["group_name"],
     )
     try:
-        client.remove_naming_instance(
+        result = client.remove_naming_instance(
             identity["service_name"],
             identity["ip"],
             identity["port"],
@@ -117,6 +125,14 @@ def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
             f"call failed (service={identity['service_name']}, ip={identity['ip']}, "
             f"port={identity['port']}, group={identity['group_name']})"
         ) from exc
+
+    if result is not True:
+        raise NacosDeregistrationError(
+            "Failed to deregister service instance: Nacos SDK "
+            "remove_naming_instance returned an unsuccessful result "
+            f"(service={identity['service_name']}, ip={identity['ip']}, "
+            f"port={identity['port']}, group={identity['group_name']})"
+        )
 
     logger.info(
         "Service deregistered (service=%s, ip=%s, port=%s, group=%s)",

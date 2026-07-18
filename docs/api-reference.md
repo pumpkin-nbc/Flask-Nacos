@@ -191,7 +191,7 @@ from flask_nacos import (
 - `FlaskNacosError` - base class.
 - `NacosConfigError` - invalid config or config-read failures.
 - `NacosClientError` - Nacos client creation/usage failures.
-- `NacosValidationError` - registration parameter validation (subclass of
+- `NacosValidationError` - deterministic input or numeric configuration validation (subclass of
   `NacosConfigError`).
 - `NacosRegistrationError` / `NacosDeregistrationError` / `NacosDiscoveryError` -
   registration, deregistration, and discovery failures.

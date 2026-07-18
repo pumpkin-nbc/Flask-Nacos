@@ -174,6 +174,32 @@ def test_complete_guides_document_opt_in_authentication_test():
         assert marker in chinese
 
 
+def test_bilingual_docs_describe_strict_runtime_validation():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "configuration.md",
+        DOCS_DIR / "troubleshooting.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "configuration.zh-CN.md",
+        DOCS_DIR / "troubleshooting.zh-CN.md",
+    )
+    shared_markers = (
+        "NACOS_RETRY_TIMES",
+        "NACOS_RETRY_INTERVAL",
+        "NACOS_REQUEST_TIMEOUT",
+        "NACOS_USERNAME",
+        "NACOS_ACCESS_KEY",
+        "NACOS_FAIL_FAST",
+    )
+
+    for path in english_files + chinese_files:
+        text = path.read_text(encoding="utf-8")
+        for marker in shared_markers:
+            assert marker in text
+
+
 def test_readme_only_mentions_forbidden_identifiers_with_negation():
     # The README may state that these identifiers are NOT provided, but must
     # never describe them as available capabilities. A forbidden token is only

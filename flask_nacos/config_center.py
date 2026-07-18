@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from .exceptions import NacosConfigError, NacosValidationError
+from .utils import validate_request_timeout
 
 logger = logging.getLogger("flask_nacos")
 
@@ -34,11 +35,12 @@ def get_config(
         or config.get("NACOS_GROUP_NAME")
         or "DEFAULT_GROUP"
     )
+    timeout = validate_request_timeout(config.get("NACOS_REQUEST_TIMEOUT", 5.0))
     try:
         content = client.get_config(
             data_id,
             group_name,
-            timeout=config.get("NACOS_REQUEST_TIMEOUT"),
+            timeout=timeout,
         )
     except Exception as exc:
         logger.error("Config read failed (data_id=%s, group=%s)", data_id, group_name)
