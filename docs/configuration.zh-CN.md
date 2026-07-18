@@ -74,6 +74,7 @@ AK/SK，任何一种都不要硬编码。
 | `NACOS_SERVICE_WEIGHT` | float | `1.0` | 否 | 有限的负载均衡权重（`> 0`）。 |
 | `NACOS_SERVICE_METADATA` | dict | `{}` | 否 | 实例元数据。 |
 | `NACOS_SERVICE_EPHEMERAL` | bool | `True` | 否 | 是否注册为临时实例。 |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | float | `5.0` | 否 | 临时实例的 SDK 心跳间隔，单位为秒；必须为大于 `0` 的有限数字。 |
 | `NACOS_SERVICE_HEALTHY` | bool | `True` | 否 | 初始健康标识。 |
 | `NACOS_SERVICE_ENABLED` | bool | `True` | 否 | 实例是否启用。 |
 
@@ -90,6 +91,9 @@ app.config.update(
 
 生产建议：显式设置 `NACOS_SERVICE_NAME`、`NACOS_SERVICE_IP`、
 `NACOS_SERVICE_PORT`。
+
+`NACOS_SERVICE_HEARTBEAT_INTERVAL` 仅在临时实例注册时传给 SDK 2.x；持久实例
+（`NACOS_SERVICE_EPHEMERAL=False`）会忽略它。初始健康标识不能让临时实例持续存活。
 
 ## 3. 服务发现
 

@@ -76,6 +76,19 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: call `list_instances(healthy_only=True)` to inspect candidates.
 - Fix: ensure healthy instances exist; check the `strategy` value.
 
+## Ephemeral instance becomes unhealthy and disappears
+
+- Symptom: the service appears in Nacos with zero healthy instances and is
+  removed after a short delay.
+- Cause: the ephemeral instance is not renewing its heartbeat, the Flask
+  process stopped, or the query uses a different namespace/group.
+- Investigate: keep the Flask process alive; inspect SDK heartbeat logs; confirm
+  `NACOS_SERVICE_EPHEMERAL=True`, the namespace, and the group. `/health/nacos`
+  only reports local client initialization and is not a remote heartbeat probe.
+- Fix: use flask-nacos with the default
+  `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`, or set another finite positive interval.
+  Do not use the initial `healthy=True` flag as a substitute for heartbeats.
+
 ## 10. Health check route is not registered
 
 - Symptom: the health path returns 404.

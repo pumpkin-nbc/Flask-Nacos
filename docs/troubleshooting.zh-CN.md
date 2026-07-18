@@ -73,6 +73,17 @@
 - 排查方法：调用 `list_instances(healthy_only=True)` 查看候选。
 - 解决建议：确保存在健康实例；检查 `strategy` 取值。
 
+## 临时实例变为不健康并自动消失
+
+- 现象：服务出现在 Nacos 中，但健康实例数为 0，稍后实例被删除。
+- 可能原因：临时实例没有持续发送心跳、Flask 进程已停止，或查询使用了不同的
+  namespace/group。
+- 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志，确认
+  `NACOS_SERVICE_EPHEMERAL=True`、namespace 与 group。`/health/nacos` 只反映本地
+  client 初始化状态，不是远端心跳探测。
+- 解决建议：使用 Flask-Nacos 默认的 `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`，或设置
+  另一个大于 0 的有限间隔。不要用初始 `healthy=True` 代替持续心跳。
+
 ## 10. 健康检查接口未注册
 
 - 现象：健康检查路径返回 404。

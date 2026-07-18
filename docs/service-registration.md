@@ -31,6 +31,20 @@ Validated before registration; invalid values follow `NACOS_FAIL_FAST`:
 - `NACOS_SERVICE_WEIGHT` - finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - a `dict`.
 - `NACOS_SERVICE_EPHEMERAL` - a `bool`.
+- `NACOS_SERVICE_HEARTBEAT_INTERVAL` - finite number greater than `0` (seconds).
+
+## Ephemeral instance heartbeat
+
+Ephemeral instances rely on SDK heartbeats to stay healthy. Flask-Nacos passes
+`NACOS_SERVICE_HEARTBEAT_INTERVAL` to SDK 2.x when registering an ephemeral
+instance; the default is `5.0` seconds. Setting the initial `healthy=True` only
+describes registration state and cannot replace heartbeat renewal.
+
+Persistent instances do not receive a heartbeat interval. If an ephemeral
+instance first has zero healthy instances and then disappears, check heartbeat
+logs, `NACOS_SERVICE_EPHEMERAL`, namespace/group consistency, and whether the
+Flask process is still alive. `/health/nacos` reports local client initialization
+state and does not prove that Nacos continues to receive heartbeats.
 
 ## IP auto-detection
 

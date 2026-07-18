@@ -29,6 +29,17 @@ nacos.register_instance()
 - `NACOS_SERVICE_WEIGHT` —— 大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
 - `NACOS_SERVICE_EPHEMERAL` —— 必须是 `bool`。
+- `NACOS_SERVICE_HEARTBEAT_INTERVAL` —— 大于 `0` 的有限数字，单位为秒。
+
+## 临时实例心跳
+
+临时实例依靠 SDK 心跳保持健康。注册临时实例时，Flask-Nacos 会把
+`NACOS_SERVICE_HEARTBEAT_INTERVAL` 传给 SDK 2.x，默认值为 `5.0` 秒。初始的
+`healthy=True` 只描述注册时的状态，不能替代持续心跳。
+
+持久实例不会收到心跳间隔参数。如果临时实例先出现健康实例数为 0、随后又消失，请检查
+心跳日志、`NACOS_SERVICE_EPHEMERAL`、namespace/group 是否一致，以及 Flask 进程是否
+仍在运行。`/health/nacos` 仅反映本地 client 初始化状态，不能证明 Nacos 在持续收到心跳。
 
 ## IP 自动识别
 

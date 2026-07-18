@@ -151,6 +151,10 @@ nacos.register_instance()
 - `NACOS_SERVICE_WEIGHT` —— 必须是大于 `0` 的有限数字。
 - `NACOS_SERVICE_METADATA` —— 必须是 `dict`。
 - `NACOS_SERVICE_EPHEMERAL` —— 必须是 `bool`。
+- `NACOS_SERVICE_HEARTBEAT_INTERVAL` —— 大于 `0` 的有限数字，单位为秒。
+
+临时实例默认由 SDK 每 `5.0` 秒发送一次心跳。初始健康标识不能替代持续心跳；持久实例
+不会收到心跳间隔参数。
 
 注册具备幂等性：对同一个扩展实例多次调用 `register_instance()` 只会注册一次，
 后续调用为无操作（no-op）。
@@ -469,6 +473,7 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_SERVICE_WEIGHT` | `1.0` | 负载均衡权重。 |
 | `NACOS_SERVICE_METADATA` | `{}` | 实例元数据字典。 |
 | `NACOS_SERVICE_EPHEMERAL` | `True` | 是否注册为临时实例。 |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | 临时实例的 SDK 心跳间隔，单位为秒。 |
 | `NACOS_SERVICE_HEALTHY` | `True` | 初始健康标识。 |
 | `NACOS_SERVICE_ENABLED` | `True` | 实例是否启用。 |
 | `NACOS_CONFIG_ENABLED` | `True` | 是否启用配置中心能力。 |

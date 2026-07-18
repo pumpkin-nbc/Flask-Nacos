@@ -16,6 +16,7 @@ def test_auto_register(make_app, patched_create_client, fake_client):
     assert args[1] == "127.0.0.1"
     assert args[2] == 8000
     assert kwargs["group_name"] == "DEFAULT_GROUP"
+    assert kwargs["heartbeat_interval"] == 5.0
 
 
 def test_manual_register(make_app, patched_create_client, fake_client):
@@ -34,6 +35,7 @@ def test_register_uses_configured_values(make_app, patched_create_client, fake_c
             "NACOS_SERVICE_CLUSTER": "C1",
             "NACOS_SERVICE_METADATA": {"env": "test"},
             "NACOS_SERVICE_GROUP": "G1",
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL": 2.5,
         }
     )
     nacos = FlaskNacos(app)
@@ -44,6 +46,21 @@ def test_register_uses_configured_values(make_app, patched_create_client, fake_c
     assert kwargs["cluster_name"] == "C1"
     assert kwargs["metadata"] == {"env": "test"}
     assert kwargs["group_name"] == "G1"
+    assert kwargs["heartbeat_interval"] == 2.5
+
+
+def test_persistent_instance_does_not_send_heartbeat_interval(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app(
+        {"NACOS_AUTO_REGISTER": False, "NACOS_SERVICE_EPHEMERAL": False}
+    )
+    nacos = FlaskNacos(app)
+
+    assert nacos.register_instance() is True
+    _, kwargs = fake_client.add_naming_instance.call_args
+    assert kwargs["ephemeral"] is False
+    assert "heartbeat_interval" not in kwargs
 
 
 def test_missing_port_fails_fast(make_app, patched_create_client):

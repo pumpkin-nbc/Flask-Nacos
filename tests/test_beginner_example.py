@@ -72,9 +72,12 @@ def test_beginner_example_covers_registration_config_and_discovery(
     assert cfg["NACOS_SECRET_KEY"] == "example-secret-key"
     assert cfg["NACOS_SERVICE_NAME"] == "flask-nacos-beginner"
     assert cfg["NACOS_SERVICE_IP"] == "127.0.0.2"
-    assert cfg["NACOS_SERVICE_PORT"] == 5000
+    assert cfg["NACOS_SERVICE_PORT"] == 3000
+    assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
     assert cfg["NACOS_CONFIG_DATA_ID"] == "flask-nacos-beginner.properties"
     fake_client.add_naming_instance.assert_called_once()
+    _, register_kwargs = fake_client.add_naming_instance.call_args
+    assert register_kwargs["heartbeat_interval"] == 5.0
 
     status = client.get("/nacos/status").get_json()
     assert status["client_initialized"] is True
@@ -133,3 +136,11 @@ def test_beginner_example_hides_client_failure_details(monkeypatch, caplog):
     assert "hidden-example-token" not in log_output
     assert "private-example-user" not in log_output
     assert "private-example-password" not in log_output
+
+
+def test_beginner_example_has_no_hardcoded_environment_or_port_mismatch():
+    source = EXAMPLE.read_text(encoding="utf-8")
+
+    assert "os.environ.update" not in source
+    assert "NACOS_SERVICE_PORT=3000" in source
+    assert 'app.run(host="127.0.0.1", port=3000)' in source

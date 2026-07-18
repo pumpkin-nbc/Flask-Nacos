@@ -45,25 +45,35 @@ def resolve_instance_identity(config: Dict[str, Any]) -> Dict[str, Any]:
 def register_instance(client: Any, config: Dict[str, Any]) -> bool:
     """Register the current service instance with Nacos."""
     identity = resolve_instance_identity(config)
+    ephemeral = config.get("NACOS_SERVICE_EPHEMERAL", True)
+    registration_options: Dict[str, Any] = {
+        "cluster_name": identity["cluster_name"],
+        "weight": config.get("NACOS_SERVICE_WEIGHT", 1.0),
+        "metadata": config.get("NACOS_SERVICE_METADATA") or {},
+        "enable": config.get("NACOS_SERVICE_ENABLED", True),
+        "healthy": config.get("NACOS_SERVICE_HEALTHY", True),
+        "ephemeral": ephemeral,
+        "group_name": identity["group_name"],
+    }
+    if ephemeral:
+        registration_options["heartbeat_interval"] = config.get(
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0
+        )
     logger.info(
-        "Registering service instance (service=%s, ip=%s, port=%s, group=%s)",
+        "Registering service instance (service=%s, ip=%s, port=%s, group=%s, "
+        "ephemeral=%s)",
         identity["service_name"],
         identity["ip"],
         identity["port"],
         identity["group_name"],
+        ephemeral,
     )
     try:
         client.add_naming_instance(
             identity["service_name"],
             identity["ip"],
             identity["port"],
-            cluster_name=identity["cluster_name"],
-            weight=config.get("NACOS_SERVICE_WEIGHT", 1.0),
-            metadata=config.get("NACOS_SERVICE_METADATA") or {},
-            enable=config.get("NACOS_SERVICE_ENABLED", True),
-            healthy=config.get("NACOS_SERVICE_HEALTHY", True),
-            ephemeral=config.get("NACOS_SERVICE_EPHEMERAL", True),
-            group_name=identity["group_name"],
+            **registration_options,
         )
     except Exception as exc:
         raise NacosRegistrationError(

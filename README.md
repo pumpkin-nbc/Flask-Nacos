@@ -165,6 +165,11 @@ follow the `NACOS_FAIL_FAST` rule (see [Exception Handling](#exception-handling)
 - `NACOS_SERVICE_WEIGHT` - must be a finite number greater than `0`.
 - `NACOS_SERVICE_METADATA` - must be a `dict`.
 - `NACOS_SERVICE_EPHEMERAL` - must be a `bool`.
+- `NACOS_SERVICE_HEARTBEAT_INTERVAL` - finite number greater than `0` (seconds).
+
+Ephemeral instances use SDK heartbeats every `5.0` seconds by default. The
+initial healthy flag does not replace heartbeat renewal; persistent instances
+do not receive a heartbeat interval.
 
 Registration is idempotent: calling `register_instance()` multiple times on the
 same extension instance registers only once (subsequent calls are no-ops).
@@ -515,6 +520,7 @@ JSON, or dict parsing is performed.
 | `NACOS_SERVICE_WEIGHT` | `1.0` | Load-balancing weight. |
 | `NACOS_SERVICE_METADATA` | `{}` | Instance metadata dict. |
 | `NACOS_SERVICE_EPHEMERAL` | `True` | Register as ephemeral instance. |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | SDK heartbeat interval in seconds for ephemeral instances. |
 | `NACOS_SERVICE_HEALTHY` | `True` | Initial healthy flag. |
 | `NACOS_SERVICE_ENABLED` | `True` | Instance enabled flag. |
 | `NACOS_CONFIG_ENABLED` | `True` | Enable config-center features. |

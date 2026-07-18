@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Python-first tutorial covering registration, health, config, and discovery.
 - Added environment-based authentication to the beginner example, separate
   username/password and AK/SK tests, and an opt-in real Nacos auth test.
+- Added `NACOS_SERVICE_HEARTBEAT_INTERVAL` with a validated `5.0` second default
+  for SDK-managed ephemeral-instance heartbeat renewal.
 
 ### Changed
 
@@ -45,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `app/extensions.py` and `extension_config(app)` application-factory pattern.
 
 ### Fixed
+
+- Kept ephemeral service instances healthy by passing the heartbeat interval to
+  Nacos SDK 2.x, while leaving persistent-instance registration unchanged.
+- Aligned the beginner example's registered and listening ports at `3000` and
+  removed hardcoded connection and authentication values.
 
 - Made runtime state, health reporting, registration flags, process IDs, locks,
   and shutdown callbacks independent for every initialized Flask app.

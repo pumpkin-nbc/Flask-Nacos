@@ -43,6 +43,12 @@ def nacos_factory(make_app, patched_create_client):
         {"NACOS_SERVICE_METADATA": "string"},
         {"NACOS_SERVICE_EPHEMERAL": "yes"},
         {"NACOS_SERVICE_EPHEMERAL": 1},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": 0},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": -1},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": True},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": float("nan")},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": float("inf")},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": "abc"},
     ],
 )
 def test_invalid_params_raise_when_fail_fast(nacos_factory, overrides):
@@ -69,6 +75,12 @@ def test_invalid_params_raise_when_fail_fast(nacos_factory, overrides):
         {"NACOS_SERVICE_WEIGHT": float("inf")},
         {"NACOS_SERVICE_METADATA": ["not", "a", "dict"]},
         {"NACOS_SERVICE_EPHEMERAL": "yes"},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": 0},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": -1},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": True},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": float("nan")},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": float("inf")},
+        {"NACOS_SERVICE_HEARTBEAT_INTERVAL": "abc"},
     ],
 )
 def test_invalid_params_return_false_when_not_fail_fast(

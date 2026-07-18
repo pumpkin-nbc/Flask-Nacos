@@ -13,6 +13,7 @@ def test_defaults_loaded():
     assert cfg["NACOS_SERVER_ADDR"] == "127.0.0.1:8848"
     assert cfg["NACOS_GROUP_NAME"] == "DEFAULT_GROUP"
     assert cfg["NACOS_FAIL_FAST"] is False
+    assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
     # Every default key should be present.
     for key in DEFAULTS:
         assert key in cfg
@@ -48,6 +49,14 @@ def test_weight_coercion():
     cfg = load_config(app)
 
     assert cfg["NACOS_SERVICE_WEIGHT"] == 2.5
+
+
+def test_heartbeat_interval_coercion():
+    app = Flask(__name__)
+    app.config.update(NACOS_SERVICE_HEARTBEAT_INTERVAL="2.5")
+    cfg = load_config(app)
+
+    assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 2.5
 
 
 def test_new_030_config_defaults():

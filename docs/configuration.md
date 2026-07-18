@@ -76,6 +76,7 @@ AK/SK according to the server's authentication mode; do not hardcode either.
 | `NACOS_SERVICE_WEIGHT` | float | `1.0` | no | Finite load-balancing weight (`> 0`). |
 | `NACOS_SERVICE_METADATA` | dict | `{}` | no | Instance metadata. |
 | `NACOS_SERVICE_EPHEMERAL` | bool | `True` | no | Register as an ephemeral instance. |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | float | `5.0` | no | SDK heartbeat interval in seconds for ephemeral instances; finite and `> 0`. |
 | `NACOS_SERVICE_HEALTHY` | bool | `True` | no | Initial healthy flag. |
 | `NACOS_SERVICE_ENABLED` | bool | `True` | no | Instance enabled flag. |
 
@@ -92,6 +93,10 @@ app.config.update(
 
 Production tip: set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 `NACOS_SERVICE_PORT` explicitly.
+
+`NACOS_SERVICE_HEARTBEAT_INTERVAL` is passed to SDK 2.x only for ephemeral
+instances. Persistent instances (`NACOS_SERVICE_EPHEMERAL=False`) ignore it.
+The initial healthy flag does not keep an ephemeral instance alive.
 
 ## 3. Service discovery
 

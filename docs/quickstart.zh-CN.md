@@ -99,7 +99,8 @@ app.config.update(
     NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
     NACOS_SERVICE_NAME=SERVICE_NAME,
     NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
-    NACOS_SERVICE_PORT=5000,
+    NACOS_SERVICE_PORT=3000,
+    NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
     NACOS_AUTO_REGISTER=True,
@@ -163,7 +164,7 @@ def nacos_instances():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="127.0.0.1", port=3000)
 ```
 
 仓库源码用户也可以直接运行
@@ -183,11 +184,11 @@ macOS / Linux：
 .venv/bin/python app.py
 ```
 
-看到 `Running on http://127.0.0.1:5000` 表示 Flask 已启动。打开：
+看到 `Running on http://127.0.0.1:3000` 表示 Flask 已启动。打开：
 
-- <http://127.0.0.1:5000/>
-- <http://127.0.0.1:5000/nacos/status>
-- <http://127.0.0.1:5000/health/nacos>
+- <http://127.0.0.1:3000/>
+- <http://127.0.0.1:3000/nacos/status>
+- <http://127.0.0.1:3000/health/nacos>
 
 此时预期看到：
 
@@ -250,7 +251,7 @@ export NACOS_ENABLED="true"
 .venv/bin/python app.py
 ```
 
-再次打开 <http://127.0.0.1:5000/nacos/status>，预期关键字段为：
+再次打开 <http://127.0.0.1:3000/nacos/status>，预期关键字段为：
 
 ```json
 {
@@ -258,15 +259,19 @@ export NACOS_ENABLED="true"
   "client_initialized": true,
   "registered": true,
   "service_name": "flask-nacos-beginner",
-  "service_port": 5000
+  "service_port": 3000
 }
 ```
 
 这表示 client 已创建，并且 `FlaskNacos(app)` 初始化时完成了自动注册。你也可以在 Nacos
 控制台的服务列表中查找 `flask-nacos-beginner`。
 
-打开 <http://127.0.0.1:5000/health/nacos>，此时预期为 `"status": "ok"`。这个接口只
+打开 <http://127.0.0.1:3000/health/nacos>，此时预期为 `"status": "ok"`。这个接口只
 反映扩展内部状态，并不主动请求远端 Nacos。
+
+这是临时实例，因此 SDK 默认每 5 秒发送一次心跳。初始的 `healthy=True` 不能替代持续
+心跳。如果健康实例数变成 `0`，随后实例又消失，请先保持 Flask 进程运行，并检查心跳
+日志、ephemeral 类型、namespace 与 group。
 
 ### 7. 发布并读取一条配置
 
@@ -291,7 +296,7 @@ curl -X POST "http://127.0.0.1:8848/nacos/v1/cs/configs" \
   --data-urlencode "content=greeting=hello-from-nacos"
 ```
 
-返回 `true` 表示发布成功。打开 <http://127.0.0.1:5000/nacos/config>，预期看到：
+返回 `true` 表示发布成功。打开 <http://127.0.0.1:3000/nacos/config>，预期看到：
 
 ```json
 {
@@ -306,13 +311,13 @@ curl -X POST "http://127.0.0.1:8848/nacos/v1/cs/configs" \
 
 ### 8. 发现刚才注册的服务
 
-打开 <http://127.0.0.1:5000/nacos/instances>。等待一两秒后，预期 `count` 至少为 `1`，
+打开 <http://127.0.0.1:3000/nacos/instances>。等待一两秒后，预期 `count` 至少为 `1`，
 并看到类似下面的实例：
 
 ```json
 {
   "ip": "127.0.0.1",
-  "port": 5000,
+  "port": 3000,
   "healthy": true
 }
 ```
@@ -354,7 +359,7 @@ unset NACOS_ENABLED
 | `NACOS_SERVICE_IP` | 注册时发布的 Flask 实例地址。 | 其他服务通过它和 `NACOS_SERVICE_PORT` 访问 Flask。 |
 
 例如，Nacos 使用文档示例地址 `203.0.113.10:8848`，Flask 使用
-`203.0.113.20:5000`，那么 server address 填 `.10:8848`，service IP 填 `.20`。
+`203.0.113.20:3000`，那么 server address 填 `.10:8848`，service IP 填 `.20`。
 不要把 Nacos 所在机器的 IP 填到 `NACOS_SERVICE_IP`。
 
 - 只有 Nacos、Flask 和消费者都在同一台机器时，才可以都使用 `127.0.0.1`。
@@ -401,11 +406,11 @@ Test-NetConnection nacos.example.com -Port 8848
 从消费者机器测试注册出去的 Flask 地址：
 
 ```powershell
-Test-NetConnection 203.0.113.20 -Port 5000
+Test-NetConnection 203.0.113.20 -Port 3000
 ```
 
 macOS/Linux 可以使用 `nc -vz nacos.example.com 8848` 和
-`nc -vz 203.0.113.20 5000`。请将所有文档示例地址替换为自己的测试环境。
+`nc -vz 203.0.113.20 3000`。请将所有文档示例地址替换为自己的测试环境。
 
 如果 client 仍未初始化，可以临时设置 `NACOS_FAIL_FAST=true` 并重启 Flask，从异常中
 读取准确原因；完成排查后，根据应用启动策略删除或恢复该设置。
@@ -417,7 +422,7 @@ macOS/Linux 可以使用 `nc -vz nacos.example.com 8848` 和
 | 找不到 `py` / `python` | 安装 Python 并加入 PATH；macOS/Linux 使用 `python3`。 |
 | 无法执行 `Activate.ps1` | 不需要激活；直接使用 `.venv\Scripts\python.exe`。 |
 | `No module named flask_nacos` | 确认安装和运行使用的是同一个 `.venv` Python。 |
-| 5000 端口被占用 | 关闭占用程序，或同时修改服务端口与 `app.run()` 端口。 |
+| 3000 端口被占用 | 关闭占用程序，或同时修改服务端口与 `app.run()` 端口。 |
 | 8848 端口被占用 | 停止已有 Nacos，或复用已有 Nacos 并修改服务地址。 |
 | 找不到 `docker` | 安装并启动 Docker Desktop；第一阶段仍然可以正常完成。 |
 | `registered` 为 `false` | 确认环境变量为 `true`、容器状态为 `Up`，然后查看 Flask 日志。 |

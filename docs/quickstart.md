@@ -92,7 +92,8 @@ app.config.update(
     NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
     NACOS_SERVICE_NAME=SERVICE_NAME,
     NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
-    NACOS_SERVICE_PORT=5000,
+    NACOS_SERVICE_PORT=3000,
+    NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
     NACOS_AUTO_REGISTER=True,
@@ -156,7 +157,7 @@ def nacos_instances():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="127.0.0.1", port=3000)
 ```
 
 Repository users can instead run
@@ -177,11 +178,11 @@ macOS/Linux:
 .venv/bin/python app.py
 ```
 
-After `Running on http://127.0.0.1:5000` appears, open:
+After `Running on http://127.0.0.1:3000` appears, open:
 
-- <http://127.0.0.1:5000/>
-- <http://127.0.0.1:5000/nacos/status>
-- <http://127.0.0.1:5000/health/nacos>
+- <http://127.0.0.1:3000/>
+- <http://127.0.0.1:3000/nacos/status>
+- <http://127.0.0.1:3000/health/nacos>
 
 The expected status includes:
 
@@ -242,7 +243,7 @@ export NACOS_ENABLED="true"
 .venv/bin/python app.py
 ```
 
-Open <http://127.0.0.1:5000/nacos/status>. The important fields should be:
+Open <http://127.0.0.1:3000/nacos/status>. The important fields should be:
 
 ```json
 {
@@ -250,7 +251,7 @@ Open <http://127.0.0.1:5000/nacos/status>. The important fields should be:
   "client_initialized": true,
   "registered": true,
   "service_name": "flask-nacos-beginner",
-  "service_port": 5000
+  "service_port": 3000
 }
 ```
 
@@ -258,6 +259,11 @@ The client is initialized and `FlaskNacos(app)` registered the service. The
 Nacos console should list `flask-nacos-beginner`. The health endpoint should now
 report `"status": "ok"`; it still reports local extension state, not remote
 Nacos availability.
+
+Because this is an ephemeral instance, the SDK sends a heartbeat every 5 seconds.
+The initial `healthy=True` flag does not replace heartbeat renewal. If the healthy
+instance count becomes `0` and the instance later disappears, keep Flask running
+and check the heartbeat log, ephemeral type, namespace, and group first.
 
 ### 7. Publish and read configuration
 
@@ -282,7 +288,7 @@ curl -X POST "http://127.0.0.1:8848/nacos/v1/cs/configs" \
   --data-urlencode "content=greeting=hello-from-nacos"
 ```
 
-After `true` is returned, open <http://127.0.0.1:5000/nacos/config>. Expect:
+After `true` is returned, open <http://127.0.0.1:3000/nacos/config>. Expect:
 
 ```json
 {
@@ -297,13 +303,13 @@ into `app.config`.
 
 ### 8. Discover the registered service
 
-Open <http://127.0.0.1:5000/nacos/instances>. After a second or two, `count`
+Open <http://127.0.0.1:3000/nacos/instances>. After a second or two, `count`
 should be at least `1`, with an instance like:
 
 ```json
 {
   "ip": "127.0.0.1",
-  "port": 5000,
+  "port": 3000,
   "healthy": true
 }
 ```
@@ -337,7 +343,7 @@ Two addresses that look similar have completely different jobs:
 | `NACOS_SERVICE_IP` | Flask instance address advertised during registration. | Other service consumers connect to Flask on `NACOS_SERVICE_PORT`. |
 
 For example, if Nacos uses the documentation address `203.0.113.10:8848` and
-Flask uses `203.0.113.20:5000`, configure the server address with `.10:8848`
+Flask uses `203.0.113.20:3000`, configure the server address with `.10:8848`
 and the service IP with `.20`. Do not put the Nacos host into
 `NACOS_SERVICE_IP`.
 
@@ -387,11 +393,11 @@ Test-NetConnection nacos.example.com -Port 8848
 From a consumer machine, test the advertised Flask endpoint:
 
 ```powershell
-Test-NetConnection 203.0.113.20 -Port 5000
+Test-NetConnection 203.0.113.20 -Port 3000
 ```
 
 On macOS/Linux, use `nc -vz nacos.example.com 8848` and
-`nc -vz 203.0.113.20 5000`. Replace all documentation addresses with your real
+`nc -vz 203.0.113.20 3000`. Replace all documentation addresses with your real
 test environment.
 
 If the client still does not initialize, temporarily set
@@ -405,7 +411,7 @@ reset it after diagnosis according to your application's startup policy.
 | `py` / `python` not found | Install Python and add it to PATH; use `python3` on macOS/Linux. |
 | `Activate.ps1` is blocked | Do not activate; run `.venv\Scripts\python.exe` directly. |
 | `No module named flask_nacos` | Install and run with the same `.venv` Python. |
-| Port 5000 is occupied | Stop its current process, or change both configured and Flask ports. |
+| Port 3000 is occupied | Stop its current process, or change both configured and Flask ports. |
 | Port 8848 is occupied | Stop the existing Nacos or connect to it instead. |
 | `docker` not found | Install/start Docker Desktop; stage one still works without it. |
 | `registered` is `false` | Check the environment variable, container state, and Flask logs. |

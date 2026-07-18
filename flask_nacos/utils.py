@@ -150,6 +150,27 @@ def validate_weight(value: Any) -> float:
     return weight
 
 
+def validate_heartbeat_interval(value: Any) -> float:
+    """Validate the positive finite heartbeat interval used by the Nacos SDK."""
+    if isinstance(value, bool):
+        raise NacosValidationError(
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, got bool"
+        )
+    try:
+        interval = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise NacosValidationError(
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, "
+            f"got {value!r}"
+        )
+    if not math.isfinite(interval) or interval <= 0:
+        raise NacosValidationError(
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be finite and greater "
+            f"than 0, got {interval}"
+        )
+    return interval
+
+
 def validate_metadata(metadata: Any) -> Dict[str, Any]:
     """Validate service metadata, ensuring it is a plain mapping."""
     if metadata is None:
@@ -181,6 +202,7 @@ __all__ = [
     "is_bool",
     "validate_port",
     "validate_weight",
+    "validate_heartbeat_interval",
     "validate_metadata",
     "mask_sensitive",
 ]

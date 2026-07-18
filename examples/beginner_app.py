@@ -24,7 +24,8 @@ app.config.update(
     NACOS_SERVICE_NAME=SERVICE_NAME,
     # Address advertised to consumers; this is not the Nacos server address.
     NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
-    NACOS_SERVICE_PORT=5000,
+    NACOS_SERVICE_PORT=3000,
+    NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
     NACOS_AUTO_REGISTER=True,
@@ -100,4 +101,4 @@ def nacos_instances():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="127.0.0.1", port=3000)

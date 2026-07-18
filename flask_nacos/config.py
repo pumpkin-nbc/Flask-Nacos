@@ -9,6 +9,7 @@ from .utils import (
     to_bool,
     to_float,
     to_int,
+    validate_heartbeat_interval,
     validate_metadata,
     validate_port,
     validate_weight,
@@ -39,6 +40,7 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_SERVICE_WEIGHT": 1.0,
     "NACOS_SERVICE_METADATA": {},
     "NACOS_SERVICE_EPHEMERAL": True,
+    "NACOS_SERVICE_HEARTBEAT_INTERVAL": 5.0,
     "NACOS_SERVICE_HEALTHY": True,
     "NACOS_SERVICE_ENABLED": True,
     # Configuration center.
@@ -124,6 +126,12 @@ def load_config(app) -> Dict[str, Any]:
     if weight_coerced is not None:
         merged["NACOS_SERVICE_WEIGHT"] = weight_coerced
 
+    heartbeat_coerced = to_float(
+        merged["NACOS_SERVICE_HEARTBEAT_INTERVAL"], None
+    )
+    if heartbeat_coerced is not None:
+        merged["NACOS_SERVICE_HEARTBEAT_INTERVAL"] = heartbeat_coerced
+
     port_coerced = to_int(merged["NACOS_SERVICE_PORT"], None)
     if port_coerced is not None:
         merged["NACOS_SERVICE_PORT"] = port_coerced
@@ -164,6 +172,9 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
     # Raises NacosValidationError on illegal port / weight / metadata values.
     validate_port(config["NACOS_SERVICE_PORT"])
     validate_weight(config.get("NACOS_SERVICE_WEIGHT", 1.0))
+    validate_heartbeat_interval(
+        config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
+    )
     validate_metadata(config.get("NACOS_SERVICE_METADATA"))
 
     if not is_bool(config.get("NACOS_SERVICE_EPHEMERAL")):
