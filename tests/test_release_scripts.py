@@ -68,7 +68,7 @@ def _valid_metadata(body="# Flask-Nacos\n", extra_headers=""):
     metadata = """\
 Metadata-Version: 2.4
 Name: flask-nacos
-Version: 1.0.0
+Version: 1.0.1
 License-Expression: Apache-2.0
 License-File: LICENSE
 License-File: NOTICE
@@ -84,11 +84,12 @@ Project-URL: Security, https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SE
 
 
 def _valid_sdist_names():
-    root = "flask_nacos-1.0.0"
+    root = "flask_nacos-1.0.1"
     files = [
         "README.md",
         "README.zh-CN.md",
         "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md",
         "SECURITY.md",
         "LICENSE",
         "NOTICE",
@@ -126,12 +127,13 @@ def test_scripts_are_import_safe(
     assert check_index_version is not None
 
 
-def test_version_check_passes_with_100(check_version):
+def test_version_check_passes_with_current_version(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message
-    assert versions["pyproject.toml"] == "1.0.0"
-    assert versions["flask_nacos/__init__.py"] == "1.0.0"
-    assert versions["CHANGELOG.md"] == "1.0.0"
+    assert versions["pyproject.toml"] == "1.0.1"
+    assert versions["flask_nacos/__init__.py"] == "1.0.1"
+    assert versions["CHANGELOG.md"] == "1.0.1"
+    assert versions["CHANGELOG.zh-CN.md"] == "1.0.1"
 
 
 def test_docs_check_is_clean(check_docs):
@@ -211,7 +213,7 @@ def test_validate_wheel_names_requires_license_and_notice(check_package):
         "flask_nacos/__init__.py",
         "flask_nacos/extension.py",
         "flask_nacos/py.typed",
-        "flask_nacos-1.0.0.dist-info/METADATA",
+        "flask_nacos-1.0.1.dist-info/METADATA",
     ]
 
     problems = check_package.validate_wheel_names(names)
@@ -263,13 +265,19 @@ def test_validate_sdist_names_requires_license_and_notice(check_package):
     assert "sdist missing required file: NOTICE" in problems
 
 
-def test_validate_sdist_names_requires_bilingual_readme_and_release_dirs(
+def test_validate_sdist_names_requires_bilingual_docs_and_release_dirs(
     check_package,
 ):
     names = _valid_sdist_names()
     without_chinese = [name for name in names if not name.endswith("README.zh-CN.md")]
     problems = check_package.validate_sdist_names(without_chinese)
     assert "sdist missing required file: README.zh-CN.md" in problems
+
+    without_chinese_changelog = [
+        name for name in names if not name.endswith("CHANGELOG.zh-CN.md")
+    ]
+    problems = check_package.validate_sdist_names(without_chinese_changelog)
+    assert "sdist missing required file: CHANGELOG.zh-CN.md" in problems
 
     without_docs = [name for name in names if "/docs/" not in name]
     problems = check_package.validate_sdist_names(without_docs)
@@ -297,9 +305,9 @@ def test_validate_wheel_metadata_rejects_main_branch_url(check_package):
 
 
 def test_release_tag_must_match_version(check_release_tag):
-    assert check_release_tag.validate_tag("v1.0.0") == "v1.0.0"
+    assert check_release_tag.validate_tag("v1.0.1") == "v1.0.1"
     with pytest.raises(ValueError, match="release tag must be"):
-        check_release_tag.validate_tag("v1.0.1")
+        check_release_tag.validate_tag("v1.0.0")
 
 
 def test_index_preflight_accepts_404(check_index_version, monkeypatch):
@@ -309,7 +317,7 @@ def test_index_preflight_accepts_404(check_index_version, monkeypatch):
     monkeypatch.setattr(check_index_version, "urlopen", missing)
     assert check_index_version.ensure_version_available("pypi") == (
         "flask-nacos",
-        "1.0.0",
+        "1.0.1",
     )
 
 

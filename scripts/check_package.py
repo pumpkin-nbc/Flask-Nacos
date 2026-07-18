@@ -27,6 +27,7 @@ REQUIRED_SDIST_FILES = (
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md",
+    "CHANGELOG.zh-CN.md",
     "SECURITY.md",
     "LICENSE",
     "NOTICE",
@@ -41,7 +42,7 @@ REQUIRED_SDIST_DIRECTORIES = (
 )
 EXPECTED_LICENSE_EXPRESSION = "Apache-2.0"
 EXPECTED_NAME = "flask-nacos"
-EXPECTED_VERSION = "1.0.0"
+EXPECTED_VERSION = "1.0.1"
 EXPECTED_PROJECT_URLS = {
     "Changelog": (
         "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"

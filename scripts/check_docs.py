@@ -51,7 +51,12 @@ class Problem(NamedTuple):
 
 def _doc_files(root: Path) -> List[Path]:
     files: List[Path] = []
-    for name in ("README.md", "README.zh-CN.md"):
+    for name in (
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md",
+    ):
         candidate = root / name
         if candidate.is_file():
             files.append(candidate)

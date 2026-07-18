@@ -38,6 +38,18 @@ def test_expected_docs_exist():
         assert (DOCS_DIR / name).is_file(), f"missing docs/{name}"
 
 
+def test_root_changelogs_are_bilingual_and_version_aligned():
+    english = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "CHANGELOG.zh-CN.md").read_text(encoding="utf-8")
+    version_pattern = r"^##\s+\[?([0-9]+\.[0-9]+\.[0-9]+)"
+
+    assert "[简体中文](CHANGELOG.zh-CN.md)" in english
+    assert "[English](CHANGELOG.md)" in chinese
+    assert re.findall(version_pattern, english, re.MULTILINE) == re.findall(
+        version_pattern, chinese, re.MULTILINE
+    )
+
+
 def test_readme_links_and_docs_cross_links_resolve():
     assert check_docs.check_links(ROOT) == []
 
@@ -81,7 +93,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.0",
+        "v1.0.1",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",

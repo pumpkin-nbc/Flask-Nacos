@@ -99,7 +99,7 @@ pip install -e ".[dev]"
 - [兼容性](docs/compatibility.zh-CN.md) —— 支持的 Python/Flask/Nacos 版本。
 - [1.0.0 验收清单](docs/1.0-checklist.zh-CN.md) —— Release Candidate 验收清单。
 - [发布指南](docs/release.zh-CN.md) —— 发布到 TestPyPI/PyPI。
-- [更新日志](docs/changelog.zh-CN.md) —— 指向完整更新日志。
+- [更新日志](CHANGELOG.zh-CN.md) —— 完整中文版本历史。
 
 ## Flask 普通模式
 
