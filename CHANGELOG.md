@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   post-fork locks, config defaults/timeouts, and SDK client construction.
 - Added a runnable application-factory example with matching English and
   Simplified Chinese end-to-end integration guides.
+- Added a beginner example and rewrote both Quickstart guides as a progressive
+  Python-first tutorial covering registration, health, config, and discovery.
 
 ### Changed
 

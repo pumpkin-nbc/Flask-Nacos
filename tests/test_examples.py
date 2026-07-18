@@ -16,6 +16,7 @@ EXAMPLE_FILES = [
     "health_check_app.py",
     "production_config.py",
     "complete_factory_app.py",
+    "beginner_app.py",
 ]
 
 PRIVATE_IP_RE = r"\b(?:192\.168|10\.10)\.\d{1,3}\.\d{1,3}\b"

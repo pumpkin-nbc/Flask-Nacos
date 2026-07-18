@@ -7,8 +7,6 @@ from flask_nacos import FlaskNacos
 app = Flask(__name__)
 app.config.update(
     NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
     NACOS_SERVICE_NAME="basic-service",
     NACOS_SERVICE_IP="127.0.0.1",
     NACOS_SERVICE_PORT=5000,

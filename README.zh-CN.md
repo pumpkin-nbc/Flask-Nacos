@@ -6,6 +6,17 @@
 提供服务注册、服务注销、服务发现以及配置中心访问能力。其使用方式尽量贴近常见的 Flask
 扩展（如 `Flask-SQLAlchemy`、`Flask-Redis`）。
 
+## 新手从这里开始
+
+- **第一次使用 Python/Flask-Nacos**：按照[零基础快速开始](docs/quickstart.zh-CN.md)，
+  先在没有 Nacos 的情况下启动 Flask，再逐步完成注册、配置读取和服务发现。
+- **已经跑通，想接入真实项目**：阅读[完整接入案例](docs/complete-example.zh-CN.md)，
+  使用应用工厂和环境变量组织配置。
+- **准备生产部署**：阅读[生产部署](docs/production.zh-CN.md)，了解 Gunicorn、容器、
+  多 worker 和安全配置。
+
+第一次学习时不需要先读全部配置项或 API 参考；从快速开始逐行复制即可。
+
 ## 功能特性
 
 - 同时支持 `FlaskNacos(app)` 直接初始化与工厂模式 `init_app(app)`。
@@ -69,29 +80,14 @@ pip install -e ".[dev]"
 
 ## 快速开始
 
-```python
-from flask import Flask
-from flask_nacos import FlaskNacos
-
-app = Flask(__name__)
-app.config.update(
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_SERVICE_NAME="my-service",
-    NACOS_SERVICE_IP="127.0.0.1",
-    NACOS_SERVICE_PORT=5000,
-)
-
-nacos = FlaskNacos(app)
-```
-
-初始化完成后，`app.extensions["nacos"]` 保存包含 `config` 与 `client` 的扩展状态
-映射。调用 `FlaskNacos` 方法时请继续使用上例中的 `nacos` 变量。
+请直接按照[零基础快速开始](docs/quickstart.zh-CN.md)操作。它包含 Windows PowerShell
+与 macOS/Linux 命令、可完整复制的 `app.py`、每一步的预期结果和常见错误处理。
 
 ## 文档
 
 完整文档位于 [`docs/`](docs/)（每篇均有中英文版本）：
 
-- [快速开始](docs/quickstart.zh-CN.md) —— 安装与第一个应用。
+- [快速开始](docs/quickstart.zh-CN.md) —— 从 Python 环境到全部核心能力的零基础路径。
 - [完整接入案例](docs/complete-example.zh-CN.md) —— 端到端工厂模式接入。
 - [配置项](docs/configuration.zh-CN.md) —— 全部配置项分组说明。
 - [API 参考](docs/api-reference.zh-CN.md) —— 公开方法与异常行为。
@@ -544,6 +540,8 @@ from flask_nacos import (
 
 - [`examples/basic_app.py`](examples/basic_app.py) —— Flask 普通模式，使用
   `FlaskNacos(app)`。
+- [`examples/beginner_app.py`](examples/beginner_app.py) —— 默认无需 Nacos 即可启动的
+  零基础渐进示例；配套[快速开始](docs/quickstart.zh-CN.md)。
 - [`examples/factory_app.py`](examples/factory_app.py) —— Flask 工厂模式，使用
   `nacos.init_app(app)`。
 - [`examples/complete_factory_app.py`](examples/complete_factory_app.py) ——

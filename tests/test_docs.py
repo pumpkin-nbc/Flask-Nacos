@@ -1,6 +1,7 @@
 """Documentation consistency tests."""
 
 import importlib
+import re
 import sys
 from pathlib import Path
 
@@ -76,6 +77,36 @@ def test_complete_example_guides_share_commands_and_defaults():
     for marker in shared_markers:
         assert marker in english
         assert marker in chinese
+
+
+def test_beginner_quickstarts_are_copyable_and_consistent():
+    english = (DOCS_DIR / "quickstart.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "quickstart.zh-CN.md").read_text(encoding="utf-8")
+    shared_markers = (
+        "examples/beginner_app.py",
+        "flask-nacos-beginner",
+        "flask-nacos-beginner.properties",
+        "NACOS_ENABLED=true",
+        "/nacos/status",
+        "/health/nacos",
+        "/nacos/config",
+        "/nacos/instances",
+        "flask-nacos-beginner-nacos",
+        "nacos/nacos-server:v2.3.2",
+        "docker stop flask-nacos-beginner-nacos",
+        "docker rm flask-nacos-beginner-nacos",
+    )
+
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
+
+    english_code = re.search(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_code = re.search(r"```python\n(.*?)```", chinese, re.DOTALL)
+    assert english_code is not None
+    assert chinese_code is not None
+    assert english_code.group(1) == chinese_code.group(1)
+    compile(english_code.group(1), "quickstart-app.py", "exec")
 
 
 def test_readme_only_mentions_forbidden_identifiers_with_negation():

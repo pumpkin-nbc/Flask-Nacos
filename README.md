@@ -7,6 +7,20 @@ English | [简体中文](README.zh-CN.md)
 service discovery, and configuration-center access. It follows the conventions
 of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 
+## New users start here
+
+- **New to Python or Flask-Nacos:** follow the
+  [beginner quickstart](docs/quickstart.md). It first runs Flask without Nacos,
+  then adds registration, config reads, and discovery one step at a time.
+- **Ready to integrate a real project:** use the
+  [complete integration example](docs/complete-example.md) with factory mode and
+  environment-based configuration.
+- **Preparing for production:** read [Production](docs/production.md) for
+  Gunicorn, containers, multiple workers, and security.
+
+You do not need to read every config key or API page first. Start by copying the
+quickstart exactly as written.
+
 ## Features
 
 - Simple `FlaskNacos(app)` and application-factory `init_app(app)` styles.
@@ -78,30 +92,15 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-```python
-from flask import Flask
-from flask_nacos import FlaskNacos
-
-app = Flask(__name__)
-app.config.update(
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_SERVICE_NAME="my-service",
-    NACOS_SERVICE_IP="127.0.0.1",
-    NACOS_SERVICE_PORT=5000,
-)
-
-nacos = FlaskNacos(app)
-```
-
-After initialization, `app.extensions["nacos"]` contains the extension state
-mapping with its `config` and `client` entries. Continue using the `nacos`
-variable above to call `FlaskNacos` methods.
+Follow the [beginner quickstart](docs/quickstart.md). It includes Windows
+PowerShell and macOS/Linux commands, a complete copy-ready `app.py`, expected
+results for every step, and common-error fixes.
 
 ## Documentation
 
 Full documentation lives under [`docs/`](docs/):
 
-- [Quickstart](docs/quickstart.md) - install and first app.
+- [Quickstart](docs/quickstart.md) - beginner path from Python setup through all core features.
 - [Complete Example](docs/complete-example.md) - end-to-end factory integration.
 - [Configuration](docs/configuration.md) - every config key, grouped.
 - [API Reference](docs/api-reference.md) - public methods and error behavior.
@@ -591,6 +590,8 @@ Runnable examples live in the [`examples/`](examples/) directory:
 
 - [`examples/basic_app.py`](examples/basic_app.py) — Flask standard mode with
   `FlaskNacos(app)`.
+- [`examples/beginner_app.py`](examples/beginner_app.py) — progressive first-run
+  example that starts without Nacos; follow the [quickstart](docs/quickstart.md).
 - [`examples/factory_app.py`](examples/factory_app.py) — Flask application
   factory mode with `nacos.init_app(app)`.
 - [`examples/complete_factory_app.py`](examples/complete_factory_app.py) —
