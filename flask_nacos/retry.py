@@ -4,6 +4,8 @@ import logging
 import time
 from typing import Any, Callable, Dict
 
+from .exceptions import NacosValidationError
+
 logger = logging.getLogger("flask_nacos")
 
 
@@ -61,6 +63,10 @@ def run_with_retry(
     for attempt in range(1, max_attempts + 1):
         try:
             result = operation()
+        except NacosValidationError:
+            # Invalid input is deterministic. Retrying would only add latency
+            # and duplicate log noise without changing the outcome.
+            raise
         except Exception as exc:
             last_exc = exc
             logger.warning(

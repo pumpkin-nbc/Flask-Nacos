@@ -55,7 +55,11 @@ def register_health_route(app: "Flask", extension: "FlaskNacos") -> bool:
     Returns ``True`` when the route was registered, ``False`` when it already
     existed and registration was skipped.
     """
-    cfg = extension.config or {}
+    # Use the explicit target app rather than context-based extension
+    # properties. ``init_app(app_b)`` may legitimately be called while an
+    # ``app_a`` context is active.
+    state = app.extensions.get("nacos") or {}
+    cfg = state.get("config") or {}
     path = cfg.get("NACOS_HEALTH_CHECK_PATH") or "/health/nacos"
 
     if HEALTH_ENDPOINT in app.view_functions:

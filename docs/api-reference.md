@@ -25,7 +25,7 @@ register_instance()
 deregister_instance()
 list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
 get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
-get_config(data_id, group=None)
+get_config(data_id=None, group=None)
 get_status()
 normalize_instance(instance)
 ```
@@ -131,15 +131,18 @@ Select a single healthy instance.
 instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
 ```
 
-## `get_config(data_id, group=None)`
+## `get_config(data_id=None, group=None)`
 
 Read configuration content from Nacos.
 
-- Parameters: `data_id` (required); `group` falls back to `NACOS_CONFIG_GROUP`
-  then `NACOS_GROUP_NAME`.
+- Parameters: `data_id` falls back to `NACOS_CONFIG_DATA_ID`; `group` falls back
+  to `NACOS_CONFIG_GROUP` then `NACOS_GROUP_NAME`.
 - Returns: the raw configuration content `str`, or `None` on failure when
-  `NACOS_FAIL_FAST` is `False`.
-- Exceptions: raises `NacosConfigError` when `NACOS_FAIL_FAST` is `True`.
+  `NACOS_FAIL_FAST` is `False`. Returns `None` without an SDK call when
+  `NACOS_CONFIG_ENABLED` is `False`.
+- Exceptions: raises `NacosValidationError` when both data IDs are empty and
+  fail-fast is enabled; other config failures raise `NacosConfigError`.
+- Timeout: `NACOS_REQUEST_TIMEOUT` is passed to the SDK 2.x read call.
 
 `get_config()` returns the raw Nacos configuration string only. It does not
 perform YAML, JSON, or dict parsing, and it does not write into Flask

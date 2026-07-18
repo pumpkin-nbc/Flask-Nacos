@@ -49,12 +49,12 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_RETRY_ENABLED": True,
     "NACOS_RETRY_TIMES": 3,
     "NACOS_RETRY_INTERVAL": 1.0,
-    # Request timeout (0.3.0, reserved - see README).
+    # Configuration-center request timeout.
     "NACOS_REQUEST_TIMEOUT": 5.0,
     # Health check route (0.3.0).
     "NACOS_HEALTH_CHECK_ENABLED": False,
     "NACOS_HEALTH_CHECK_PATH": "/health/nacos",
-    # Runtime status (0.3.0).
+    # Deprecated compatibility setting; get_status() is always available.
     "NACOS_STATUS_ENABLED": True,
     # Auto-registration control (0.3.0).
     "NACOS_AUTO_REGISTER_ON_INIT": True,

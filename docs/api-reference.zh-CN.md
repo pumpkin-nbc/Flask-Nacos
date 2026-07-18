@@ -22,7 +22,7 @@ register_instance()
 deregister_instance()
 list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
 get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
-get_config(data_id, group=None)
+get_config(data_id=None, group=None)
 get_status()
 normalize_instance(instance)
 ```
@@ -123,14 +123,17 @@ instances = nacos.list_instances("user-service", cluster="CANARY")
 instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
 ```
 
-## `get_config(data_id, group=None)`
+## `get_config(data_id=None, group=None)`
 
 从 Nacos 读取配置内容。
 
-- 参数：`data_id`（必填）；`group` 回退到 `NACOS_CONFIG_GROUP` 再回退到
-  `NACOS_GROUP_NAME`。
+- 参数：`data_id` 未传时回退到 `NACOS_CONFIG_DATA_ID`；`group` 回退到
+  `NACOS_CONFIG_GROUP` 再回退到 `NACOS_GROUP_NAME`。
 - 返回：配置的原始内容 `str`；`NACOS_FAIL_FAST` 为 `False` 时失败返回 `None`。
-- 异常：`NACOS_FAIL_FAST` 为 `True` 时抛出 `NacosConfigError`。
+  `NACOS_CONFIG_ENABLED=False` 时不调用 SDK，直接返回 `None`。
+- 异常：两个 data ID 都为空且 fail-fast 开启时抛出 `NacosValidationError`；其他配置
+  失败抛出 `NacosConfigError`。
+- 超时：`NACOS_REQUEST_TIMEOUT` 会传给 SDK 2.x 的读取调用。
 
 `get_config()` 只返回 Nacos 配置的原始字符串，不做 YAML、JSON、dict 解析，也不会
 写入 Flask `app.config`。

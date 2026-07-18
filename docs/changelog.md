@@ -7,5 +7,6 @@ the repository root. This page links to it for convenience.
 
 - [View the full changelog](../CHANGELOG.md)
 
-The latest release is `0.7.0` (documentation & UX enhancements). See the root
-changelog for the complete history and per-version details.
+The latest release is `1.0.0`, including the stable 1.0 API, per-application
+runtime isolation, synchronized lifecycle operations, and Apache-2.0 packaging.
+See the root changelog for complete details.

@@ -73,7 +73,8 @@ def create_app():
 ## Service registration
 
 With `NACOS_REGISTER_ENABLED` and `NACOS_AUTO_REGISTER` both `True`, the service
-registers automatically during `init_app(app)`. You can also register manually:
+registers automatically during `init_app(app)`. The former only controls this
+init-time behavior; you can always register manually:
 
 ```python
 nacos.register_instance()

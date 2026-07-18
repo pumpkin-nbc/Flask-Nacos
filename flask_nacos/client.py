@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict
 
-from .exceptions import NacosConfigError
+from .exceptions import NacosClientError
 
 logger = logging.getLogger("flask_nacos")
 
@@ -19,7 +19,7 @@ def create_client(config: Dict[str, Any]) -> Any:
     try:
         import nacos
     except ImportError as exc:  # pragma: no cover - exercised only without the SDK
-        raise NacosConfigError(
+        raise NacosClientError(
             "nacos-sdk-python is required. Install it with 'pip install nacos-sdk-python'."
         ) from exc
 
@@ -36,7 +36,10 @@ def create_client(config: Dict[str, Any]) -> Any:
     if config.get("NACOS_SECRET_KEY"):
         kwargs["sk"] = config["NACOS_SECRET_KEY"]
 
-    client = nacos.NacosClient(server_addresses, **kwargs)
+    try:
+        client = nacos.NacosClient(server_addresses, **kwargs)
+    except Exception as exc:
+        raise NacosClientError("Failed to construct the Nacos SDK client") from exc
     logger.info(
         "Nacos client initialized (server_addr=%s, namespace=%s)",
         server_addresses,

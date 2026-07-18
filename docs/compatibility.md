@@ -13,7 +13,7 @@ See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
 
 ## Supported Python versions
 
-flask-nacos supports **Python 3.8 - 3.12**. The library keeps its type hints
+flask-nacos supports **Python 3.8 - 3.13**. The library keeps its type hints
 Python 3.8 compatible: it uses `typing.Optional` / `typing.List` / `typing.Dict`
 rather than PEP 604 unions (`str | None`) or PEP 585 builtin generics
 (`list[str]`), and does not use `match`/`case`. A `scripts/check_compatibility.py`

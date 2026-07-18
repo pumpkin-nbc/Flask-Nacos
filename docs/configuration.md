@@ -46,7 +46,7 @@ app.config.update(
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Enable service registration. |
+| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Enable init-time automatic registration; manual registration is unaffected. |
 | `NACOS_AUTO_REGISTER` | bool | `True` | no | Master switch for auto-registration. |
 | `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Deregister automatically on exit. |
 | `NACOS_SERVICE_NAME` | str | `None` | yes (to register) | Service name. |
@@ -115,7 +115,7 @@ app.config.update(
 | `NACOS_RETRY_ENABLED` | bool | `True` | no | Enable retries for Nacos operations. |
 | `NACOS_RETRY_TIMES` | int | `3` | no | Maximum number of attempts per operation. |
 | `NACOS_RETRY_INTERVAL` | float | `1.0` | no | Seconds between attempts. |
-| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | no | Request timeout (reserved; exposed via `get_status()` but not yet applied by the bundled SDK). |
+| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | no | Timeout passed to SDK 2.x config-center read calls. |
 
 Example:
 
@@ -131,7 +131,7 @@ app.config.update(
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | no | Enable runtime status querying via `get_status()`. |
+| `NACOS_STATUS_ENABLED` | bool | `True` | no | Deprecated no-op retained for 1.x compatibility; planned for removal in 2.0. |
 
 ## 7. Lifecycle
 
@@ -172,3 +172,5 @@ method.
 
 `get_config()` returns the raw configuration content string only. It does not
 perform YAML, JSON, or dict parsing, and does not write into `app.config`.
+When `data_id` is omitted it uses `NACOS_CONFIG_DATA_ID`. Disabling
+`NACOS_CONFIG_ENABLED` skips the SDK call and returns `None`.

@@ -13,9 +13,10 @@ def test_get_config(make_app, patched_create_client, fake_client):
     content = nacos.get_config("application.yaml")
     assert content == "server:\n  port: 8000\n"
     fake_client.get_config.assert_called_once()
-    args, _ = fake_client.get_config.call_args
+    args, kwargs = fake_client.get_config.call_args
     assert args[0] == "application.yaml"
     assert args[1] == "DEFAULT_GROUP"
+    assert kwargs["timeout"] == 5.0
 
 
 def test_get_config_custom_group(make_app, patched_create_client, fake_client):
@@ -65,3 +66,40 @@ def test_get_config_does_not_parse_json(make_app, patched_create_client, fake_cl
     assert content == raw
     assert isinstance(content, str)
     assert not isinstance(content, dict)
+
+
+def test_get_config_uses_default_data_id_and_timeout(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app(
+        {"NACOS_CONFIG_DATA_ID": "defaults.yaml", "NACOS_REQUEST_TIMEOUT": 2.5}
+    )
+    nacos = FlaskNacos(app)
+
+    assert nacos.get_config() == "server:\n  port: 8000\n"
+    fake_client.get_config.assert_called_once_with(
+        "defaults.yaml", "DEFAULT_GROUP", timeout=2.5
+    )
+
+
+def test_get_config_disabled_skips_sdk_even_without_client(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_ENABLED": False, "NACOS_CONFIG_ENABLED": False})
+    nacos = FlaskNacos(app)
+
+    assert nacos.get_config() is None
+    fake_client.get_config.assert_not_called()
+
+
+def test_missing_default_data_id_honors_fail_fast(
+    make_app, patched_create_client, fake_client
+):
+    from flask_nacos.exceptions import NacosValidationError
+
+    app = make_app({"NACOS_CONFIG_DATA_ID": None, "NACOS_FAIL_FAST": True})
+    nacos = FlaskNacos(app)
+
+    with pytest.raises(NacosValidationError):
+        nacos.get_config()
+    fake_client.get_config.assert_not_called()

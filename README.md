@@ -29,7 +29,7 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
   manual TestPyPI/PyPI release workflow (0.6.0).
 - Full documentation set under [`docs/`](docs/), enhanced examples, a local
   Nacos Docker Compose file, and a documentation-consistency check (0.7.0).
-- Broad compatibility: Python 3.8-3.12 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
+- Broad compatibility: Python 3.8-3.13 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
   tolerant handling of different Nacos SDK response shapes, a Python-3.8
   compatibility checker, and a Python x Flask CI matrix (0.8.0).
 - Release Candidate preparation: frozen public API with an API-snapshot check,
@@ -55,7 +55,7 @@ will be added with defaults so existing code keeps working.
 
 ## Compatibility
 
-- Python: 3.8 - 3.12.
+- Python: 3.8 - 3.13.
 - Flask: `>=1.0, <4.0` (Flask 1.x, 2.x, and 3.x).
 - Nacos: server 2.x with the synchronous `nacos-sdk-python` client.
 - Service discovery tolerates different SDK response shapes (plain list,
@@ -145,7 +145,8 @@ def create_app():
 
 When `NACOS_REGISTER_ENABLED` and `NACOS_AUTO_REGISTER` are both `True`, the
 service is registered automatically during `init_app(app)`. You can also
-register manually:
+register manually. `NACOS_REGISTER_ENABLED` only controls init-time automatic
+registration; it does not disable an explicit `register_instance()` call:
 
 ```python
 nacos.register_instance()
@@ -239,16 +240,13 @@ control over auto-registration.
 
 Each failed attempt is logged at `warning` level. After the final failure the
 `NACOS_FAIL_FAST` rule decides whether to raise or return a safe default.
+Deterministic input and validation errors fail immediately without retrying or
+waiting for backoff.
 
 ### Request Timeout
 
-- `NACOS_REQUEST_TIMEOUT` (default `5.0`).
-
-> Reserved setting: the bundled synchronous `nacos-sdk-python` (2.x) client does
-> not expose a reliable per-request timeout, so this value is read and exposed
-> via `get_status()`/config but is not currently applied to SDK calls. It is
-> reserved so applications can configure it today and have it take effect in a
-> future release without config changes.
+- `NACOS_REQUEST_TIMEOUT` (default `5.0`) is passed to synchronous SDK 2.x
+  configuration-center `get_config(..., timeout=...)` calls.
 
 ### Health Check Route
 
@@ -503,7 +501,7 @@ JSON, or dict parsing is performed.
 | `NACOS_ACCESS_KEY` | `None` | Access key for authentication. |
 | `NACOS_SECRET_KEY` | `None` | Secret key for authentication. |
 | `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | Default group. |
-| `NACOS_REGISTER_ENABLED` | `True` | Enable service registration. |
+| `NACOS_REGISTER_ENABLED` | `True` | Enable init-time automatic registration; manual registration remains available. |
 | `NACOS_AUTO_REGISTER` | `True` | Auto register during `init_app`. |
 | `NACOS_AUTO_DEREGISTER` | `True` | Auto deregister on exit. |
 | `NACOS_SERVICE_NAME` | `None` | Service name (required to register). |
@@ -522,10 +520,10 @@ JSON, or dict parsing is performed.
 | `NACOS_RETRY_ENABLED` | `True` | Enable retries for Nacos operations. |
 | `NACOS_RETRY_TIMES` | `3` | Maximum number of attempts per operation. |
 | `NACOS_RETRY_INTERVAL` | `1.0` | Seconds between retry attempts. |
-| `NACOS_REQUEST_TIMEOUT` | `5.0` | Request timeout (reserved; see Production Readiness). |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | Timeout passed to config-center read calls. |
 | `NACOS_HEALTH_CHECK_ENABLED` | `False` | Register the Flask health-check route. |
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Path of the health-check route. |
-| `NACOS_STATUS_ENABLED` | `True` | Enable runtime status querying. |
+| `NACOS_STATUS_ENABLED` | `True` | Deprecated no-op retained for 1.x compatibility; planned for removal in 2.0. |
 | `NACOS_AUTO_REGISTER_ON_INIT` | `True` | Auto register during `init_app` (with `NACOS_AUTO_REGISTER`). |
 | `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | Register only once per process; a forked worker (new pid) may re-register. |
 | `NACOS_DEREGISTER_ON_EXIT` | `True` | Register an `atexit` handler to deregister on process exit. |

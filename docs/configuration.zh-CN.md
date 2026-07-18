@@ -45,7 +45,7 @@ app.config.update(
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否启用服务注册。 |
+| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否启用初始化阶段的自动注册；不影响手动注册。 |
 | `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 自动注册总开关。 |
 | `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 退出时自动注销。 |
 | `NACOS_SERVICE_NAME` | str | `None` | 是（注册时） | 服务名。 |
@@ -114,7 +114,7 @@ app.config.update(
 | `NACOS_RETRY_ENABLED` | bool | `True` | 否 | 是否为 Nacos 操作启用重试。 |
 | `NACOS_RETRY_TIMES` | int | `3` | 否 | 每个操作的最大尝试次数。 |
 | `NACOS_RETRY_INTERVAL` | float | `1.0` | 否 | 每次尝试之间的等待秒数。 |
-| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | 否 | 请求超时（预留；通过 `get_status()` 暴露，但当前内置 SDK 暂不应用）。 |
+| `NACOS_REQUEST_TIMEOUT` | float | `5.0` | 否 | 传给 SDK 2.x 配置中心读取调用的超时时间。 |
 
 示例：
 
@@ -130,7 +130,7 @@ app.config.update(
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | 否 | 是否启用 `get_status()` 运行状态查询。 |
+| `NACOS_STATUS_ENABLED` | bool | `True` | 否 | 已弃用的无操作兼容项；计划在 2.0 删除。 |
 
 ## 7. 生命周期
 
@@ -170,3 +170,5 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 `get_config()` 只返回配置的原始内容字符串，不做 YAML、JSON、dict 解析，也不会写入
 `app.config`。
+省略 `data_id` 时使用 `NACOS_CONFIG_DATA_ID`；关闭 `NACOS_CONFIG_ENABLED` 时跳过
+SDK 调用并返回 `None`。

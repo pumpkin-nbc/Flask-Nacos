@@ -15,6 +15,9 @@ When `NACOS_REGISTER_ENABLED`, `NACOS_AUTO_REGISTER`, and
 
 ## Manual registration
 
+`NACOS_REGISTER_ENABLED` only controls init-time automatic registration. It
+does not disable an explicit manual call.
+
 ```python
 nacos.register_instance()
 ```

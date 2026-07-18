@@ -4,7 +4,7 @@ import pytest
 
 import flask_nacos.retry as retry_module
 from flask_nacos import FlaskNacos
-from flask_nacos.exceptions import NacosConfigError
+from flask_nacos.exceptions import NacosConfigError, NacosValidationError
 
 
 def test_register_retries_until_success(make_app, patched_create_client, fake_client):
@@ -110,3 +110,27 @@ def test_get_config_uses_retry(make_app, patched_create_client, fake_client):
 
     assert nacos.get_config("application.yaml") == "content"
     assert fake_client.get_config.call_count == 2
+
+
+def test_validation_error_is_not_retried(monkeypatch):
+    calls = []
+    sleeps = []
+    monkeypatch.setattr(retry_module, "_sleep", lambda seconds: sleeps.append(seconds))
+
+    def invalid_operation():
+        calls.append(True)
+        raise NacosValidationError("invalid input")
+
+    with pytest.raises(NacosValidationError):
+        retry_module.run_with_retry(
+            invalid_operation,
+            "invalid operation",
+            {
+                "NACOS_RETRY_ENABLED": True,
+                "NACOS_RETRY_TIMES": 3,
+                "NACOS_RETRY_INTERVAL": 1.0,
+            },
+        )
+
+    assert len(calls) == 1
+    assert sleeps == []

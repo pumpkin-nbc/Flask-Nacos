@@ -71,7 +71,7 @@ def create_app():
 ## 服务注册
 
 当 `NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 都为 `True` 时，会在
-`init_app(app)` 期间自动注册。你也可以手动注册：
+`init_app(app)` 期间自动注册。前者只控制初始化阶段的行为，你始终可以手动注册：
 
 ```python
 nacos.register_instance()

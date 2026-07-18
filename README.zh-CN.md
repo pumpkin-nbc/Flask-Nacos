@@ -25,7 +25,7 @@
   扩展的 CI 检查，以及手动触发的 TestPyPI/PyPI 发布工作流（0.6.0）。
 - 完整的 [`docs/`](docs/) 文档集、增强的示例、本地 Nacos Docker Compose 文件，
   以及文档一致性检查（0.7.0）。
-- 广泛的兼容性：Python 3.8-3.12 与 Flask `>=1.0,<4.0`（1.x/2.x/3.x），兼容不同
+- 广泛的兼容性：Python 3.8-3.13 与 Flask `>=1.0,<4.0`（1.x/2.x/3.x），兼容不同
   Nacos SDK 返回结构，提供 Python 3.8 兼容性检查脚本以及 Python x Flask CI 矩阵
   （0.8.0）。
 - Release Candidate 准备：冻结公开 API 并提供 API 快照检查、向后兼容性测试、示例
@@ -47,7 +47,7 @@
 
 ## 兼容性
 
-- Python：3.8 - 3.12。
+- Python：3.8 - 3.13。
 - Flask：`>=1.0, <4.0`（Flask 1.x、2.x、3.x）。
 - Nacos：服务端 2.x，使用同步的 `nacos-sdk-python` 客户端。
 - 服务发现兼容不同的 SDK 返回结构（普通列表、`hosts`/`instances`，或带 `data`
@@ -134,7 +134,8 @@ def create_app():
 ## 服务注册
 
 当 `NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时为 `True` 时，会在
-`init_app(app)` 期间自动注册服务。你也可以手动注册：
+`init_app(app)` 期间自动注册服务。`NACOS_REGISTER_ENABLED` 只控制初始化阶段的
+自动注册，不会禁用显式调用 `register_instance()`：
 
 ```python
 nacos.register_instance()
@@ -219,15 +220,12 @@ dict 解析。
 - `NACOS_RETRY_INTERVAL`（默认 `1.0`）：每次尝试之间的等待秒数。
 
 每次失败都会记录 `warning` 日志。最终失败后由 `NACOS_FAIL_FAST` 决定抛出异常还是返回
-安全默认值。
+安全默认值。确定性的输入与校验错误会立即失败，不重试也不等待退避。
 
 ### 请求超时
 
-- `NACOS_REQUEST_TIMEOUT`（默认 `5.0`）。
-
-> 预留配置：当前内置的同步 `nacos-sdk-python`（2.x）客户端未提供可靠的单次请求超时，
-> 因此该值会被读取并通过 `get_status()` / 配置暴露，但暂不会应用到 SDK 调用。保留该
-> 配置项以便应用现在即可配置，未来版本无需改配置即可生效。
+- `NACOS_REQUEST_TIMEOUT`（默认 `5.0`）会传给同步 SDK 2.x 配置中心的
+  `get_config(..., timeout=...)` 调用。
 
 ### 健康检查路由
 
@@ -460,7 +458,7 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_ACCESS_KEY` | `None` | 认证 AccessKey。 |
 | `NACOS_SECRET_KEY` | `None` | 认证 SecretKey。 |
 | `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | 默认 group。 |
-| `NACOS_REGISTER_ENABLED` | `True` | 是否启用服务注册。 |
+| `NACOS_REGISTER_ENABLED` | `True` | 是否启用初始化阶段的自动注册；手动注册仍可使用。 |
 | `NACOS_AUTO_REGISTER` | `True` | 是否在 `init_app` 时自动注册。 |
 | `NACOS_AUTO_DEREGISTER` | `True` | 是否在退出时自动注销。 |
 | `NACOS_SERVICE_NAME` | `None` | 服务名（注册时必填）。 |
@@ -479,10 +477,10 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_RETRY_ENABLED` | `True` | 是否为 Nacos 操作启用重试。 |
 | `NACOS_RETRY_TIMES` | `3` | 每个操作的最大尝试次数。 |
 | `NACOS_RETRY_INTERVAL` | `1.0` | 每次重试之间的等待秒数。 |
-| `NACOS_REQUEST_TIMEOUT` | `5.0` | 请求超时（预留；参见生产可用性增强）。 |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置中心读取调用使用的超时时间。 |
 | `NACOS_HEALTH_CHECK_ENABLED` | `False` | 是否注册 Flask 健康检查路由。 |
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
-| `NACOS_STATUS_ENABLED` | `True` | 是否启用运行状态查询能力。 |
+| `NACOS_STATUS_ENABLED` | `True` | 已弃用的无操作兼容项；计划在 2.0 删除。 |
 | `NACOS_AUTO_REGISTER_ON_INIT` | `True` | 是否在 `init_app` 阶段自动注册（配合 `NACOS_AUTO_REGISTER`）。 |
 | `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | 同一进程内只注册一次；fork 出的新 worker（新 pid）可重新注册。 |
 | `NACOS_DEREGISTER_ON_EXIT` | `True` | 是否注册 `atexit` 处理器在进程退出时注销。 |

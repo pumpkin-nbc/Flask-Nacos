@@ -12,7 +12,7 @@
 
 ## 支持的 Python 版本
 
-flask-nacos 支持 **Python 3.8 - 3.12**。库代码的类型提示保持 Python 3.8 兼容：使用
+flask-nacos 支持 **Python 3.8 - 3.13**。库代码的类型提示保持 Python 3.8 兼容：使用
 `typing.Optional` / `typing.List` / `typing.Dict`，而不是 PEP 604 联合类型
 （`str | None`）或 PEP 585 内置泛型（`list[str]`），并且不使用 `match`/`case`。
 `scripts/check_compatibility.py` 静态检查会强制这一点，并在 CI 中运行。

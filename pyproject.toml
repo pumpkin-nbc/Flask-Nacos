@@ -90,6 +90,7 @@ source = ["flask_nacos"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+fail_under = 85
 
 [tool.mypy]
 python_version = "3.8"

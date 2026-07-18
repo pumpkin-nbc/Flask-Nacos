@@ -14,6 +14,8 @@ flask-nacos 如何注册与注销服务实例。
 
 ## 手动注册
 
+`NACOS_REGISTER_ENABLED` 只控制初始化阶段的自动注册，不会禁用显式手动调用。
+
 ```python
 nacos.register_instance()
 ```

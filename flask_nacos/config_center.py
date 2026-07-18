@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from .exceptions import NacosConfigError
+from .exceptions import NacosConfigError, NacosValidationError
 
 logger = logging.getLogger("flask_nacos")
 
@@ -11,7 +11,7 @@ logger = logging.getLogger("flask_nacos")
 def get_config(
     client: Any,
     config: Dict[str, Any],
-    data_id: str,
+    data_id: Optional[str],
     group: Optional[str] = None,
 ) -> Optional[str]:
     """Fetch the raw content of a config item from Nacos.
@@ -20,7 +20,7 @@ def get_config(
     level group) when not provided.
     """
     if not data_id:
-        raise NacosConfigError("data_id is required to fetch config from Nacos")
+        raise NacosValidationError("data_id is required to fetch config from Nacos")
 
     if client is None:
         raise NacosConfigError(
@@ -35,7 +35,11 @@ def get_config(
         or "DEFAULT_GROUP"
     )
     try:
-        content = client.get_config(data_id, group_name)
+        content = client.get_config(
+            data_id,
+            group_name,
+            timeout=config.get("NACOS_REQUEST_TIMEOUT"),
+        )
     except Exception as exc:
         logger.error("Config read failed (data_id=%s, group=%s)", data_id, group_name)
         raise NacosConfigError(

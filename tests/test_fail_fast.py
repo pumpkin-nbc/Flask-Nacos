@@ -6,7 +6,7 @@ import pytest
 
 import flask_nacos.extension as extension_module
 from flask_nacos import FlaskNacos
-from flask_nacos.exceptions import NacosConfigError
+from flask_nacos.exceptions import NacosClientError, NacosConfigError
 
 
 def _make_failing_factory():
@@ -29,8 +29,9 @@ def test_init_failure_raises_when_fail_fast(make_app, monkeypatch):
     monkeypatch.setattr(extension_module, "create_client", _make_failing_factory())
     app = make_app({"NACOS_FAIL_FAST": True})
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NacosClientError) as exc_info:
         FlaskNacos(app)
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 def test_get_config_error_returns_none_when_not_fail_fast(

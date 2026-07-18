@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added stable API documentation for the 1.0 series.
 - Added final release checklist for PyPI publishing.
 - Added stable installation and smoke test validation steps.
+- Added Python 3.13 CI coverage and an 85% coverage floor.
+- Added regression coverage for multi-app state, concurrent lifecycle calls,
+  post-fork locks, config defaults/timeouts, and SDK client construction.
 
 ### Changed
 
@@ -24,6 +27,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved README for PyPI display.
 - Improved release documentation for TestPyPI and PyPI publishing.
 - Improved final validation scripts for package release.
+- Split CI into one quality/package job and a lightweight Python/Flask test
+  matrix so expensive release checks run only once.
+- `get_config()` now accepts an omitted `data_id`, falling back to
+  `NACOS_CONFIG_DATA_ID`, and passes `NACOS_REQUEST_TIMEOUT` to SDK 2.x.
+- SDK import and client-construction failures now use `NacosClientError` while
+  preserving the original exception as the cause.
+
+### Fixed
+
+- Made runtime state, health reporting, registration flags, process IDs, locks,
+  and shutdown callbacks independent for every initialized Flask app.
+- Made repeated `init_app()` calls reuse the existing client and lifecycle
+  state, and reject extension-slot collisions explicitly.
+- Serialized concurrent registration and deregistration transitions with a
+  per-app `RLock`, replacing inherited locks after a process ID change.
+- Prevented deterministic `NacosValidationError` failures from being retried.
+- Made `NACOS_CONFIG_ENABLED=False` skip configuration-center SDK calls.
+
+### Deprecated
+
+- `NACOS_STATUS_ENABLED` is retained as a no-op for 1.x compatibility and is
+  planned for removal in 2.0; `get_status()` remains consistently available.
 
 ### Stable APIs
 
