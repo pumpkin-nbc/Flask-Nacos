@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving the original exception as the cause.
 - Clarified that `NACOS_SERVER_ADDR` locates Nacos while `NACOS_SERVICE_IP`
   advertises the Flask service to consumers.
+- Documented how to integrate Flask-Nacos through an existing centralized
+  `app/extensions.py` and `extension_config(app)` application-factory pattern.
 
 ### Fixed
 

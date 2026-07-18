@@ -79,6 +79,45 @@ def test_complete_example_guides_share_commands_and_defaults():
         assert marker in chinese
 
 
+def test_complete_guides_document_centralized_extension_initialization():
+    english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
+    shared_markers = (
+        "# app/extensions.py",
+        "nacos = FlaskNacos()",
+        "def extension_config(app):",
+        "# app/app.py",
+        "app.config.from_object(config_object)",
+        "# app/routes.py",
+        "from app.extensions import nacos",
+        "with app.app_context():",
+        'app.extensions["nacos"]',
+        "NACOS_SERVICE_IP",
+        "NACOS_REGISTER_ENABLED = False",
+        "NACOS_AUTO_REGISTER = False",
+    )
+
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
+
+    english_blocks = re.findall(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_blocks = re.findall(r"```python\n(.*?)```", chinese, re.DOTALL)
+    assert english_blocks == chinese_blocks
+    assert len(english_blocks) == 4
+
+    for index, code in enumerate(english_blocks):
+        compile(code, f"complete-example-{index}.py", "exec")
+
+    app_code = next(code for code in english_blocks if code.startswith("# app/app.py"))
+    assert app_code.index("app.config.from_object") < app_code.index(
+        "extension_config(app)"
+    )
+    assert app_code.index("extension_config(app)") < app_code.index(
+        "app.register_blueprint"
+    )
+
+
 def test_beginner_quickstarts_are_copyable_and_consistent():
     english = (DOCS_DIR / "quickstart.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "quickstart.zh-CN.md").read_text(encoding="utf-8")

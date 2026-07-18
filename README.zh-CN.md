@@ -128,6 +128,9 @@ def create_app():
     return app
 ```
 
+如果项目通过统一的 `app/extensions.py` 初始化 SQLAlchemy、Redis 等扩展，请参考
+[现有扩展管理模块接入方式](docs/complete-example.zh-CN.md#接入现有-flask-扩展管理模块)。
+
 ## 服务注册
 
 当 `NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时为 `True` 时，会在

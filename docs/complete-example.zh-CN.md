@@ -115,6 +115,91 @@ $env:NACOS_CONFIG_DATA_ID = "flask-nacos-demo.properties"
 [快速开始](quickstart.zh-CN.md#连接已有且开启认证的-nacos)；使用 AK/SK 时改为设置
 `NACOS_ACCESS_KEY` 与 `NACOS_SECRET_KEY`。
 
+### 接入现有 Flask 扩展管理模块
+
+如果应用已经在 `app/extensions.py` 中集中管理 Flask 扩展，可以把 Flask-Nacos 放入
+同一个模块。导入模块时只创建扩展对象，等到 `extension_config(app)` 执行时再绑定应用：
+
+```python
+# app/extensions.py
+from flask_nacos import FlaskNacos
+
+nacos = FlaskNacos()
+
+
+def extension_config(app):
+    """Initialize all Flask extensions for this application."""
+    # db.init_app(app)
+    # redis_client.init_app(app)
+    nacos.init_app(app)
+```
+
+初始化扩展前必须先加载所选的 Flask 配置，确保 Nacos client 和自动注册读取到最终的
+服务名、IP、端口、namespace 与认证配置；完成扩展初始化后再注册 Blueprint 和 API：
+
+```python
+# app/app.py
+from flask import Flask
+
+from app.extensions import extension_config
+from app.routes import api
+
+
+def create_app(config_object="config.Config"):
+    app = Flask(__name__)
+    app.config.from_object(config_object)
+    extension_config(app)
+    app.register_blueprint(api)
+    return app
+```
+
+业务模块像导入其他 Flask 扩展一样导入全局 `nacos` 对象。请求处理中调用时，扩展会
+自动选择当前 Flask 应用：
+
+```python
+# app/routes.py
+from flask import Blueprint, current_app, jsonify
+
+from app.extensions import nacos
+
+api = Blueprint("api", __name__)
+
+
+@api.route("/nacos/status", methods=["GET"])
+def nacos_status():
+    return jsonify(nacos.get_status())
+
+
+@api.route("/nacos/config", methods=["GET"])
+def nacos_config():
+    return jsonify({"content": nacos.get_config()})
+
+
+@api.route("/nacos/instances", methods=["GET"])
+def nacos_instances():
+    service_name = current_app.config["NACOS_SERVICE_NAME"]
+    return jsonify({"instances": nacos.list_instances(service_name)})
+
+
+def read_config_in_background(app):
+    with app.app_context():
+        return nacos.get_config()
+```
+
+Celery task、工作线程和独立脚本必须进入对应的 `app.app_context()`，除非现有集成已经
+自动提供应用上下文。`app.extensions["nacos"]` 保存的是包含 `config` 和 `client` 的
+内部状态映射，并不是 `FlaskNacos` 对象；业务代码应按上例从 `app.extensions` 模块导入
+全局 `nacos`。
+
+Nacos 配置应放在 Flask 配置类或环境变量中，不要写入 `app/extensions.py`。
+`NACOS_SERVICE_IP` 仍然可选：启用自动注册且未设置该值时，Flask-Nacos 会尝试自动识别
+本机 IP。如果应用只读取配置或发现其他服务，可以关闭自动注册并省略注册标识：
+
+```python
+NACOS_REGISTER_ENABLED = False
+NACOS_AUTO_REGISTER = False
+```
+
 ## 5. 运行应用
 
 ```bash

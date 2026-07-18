@@ -118,6 +118,98 @@ Use the namespace ID rather than its display name. The username/password flow
 is shown in the [Quickstart](quickstart.md#connecting-to-an-existing-authenticated-nacos);
 AK/SK can be supplied with `NACOS_ACCESS_KEY` and `NACOS_SECRET_KEY` instead.
 
+### Integrate with an existing Flask extension registry
+
+If the application already keeps Flask extensions in `app/extensions.py`, add
+Flask-Nacos to the same module. Create the extension object at import time, but
+do not connect it to an application until `extension_config(app)` runs:
+
+```python
+# app/extensions.py
+from flask_nacos import FlaskNacos
+
+nacos = FlaskNacos()
+
+
+def extension_config(app):
+    """Initialize all Flask extensions for this application."""
+    # db.init_app(app)
+    # redis_client.init_app(app)
+    nacos.init_app(app)
+```
+
+Load the selected Flask configuration before initializing extensions. This
+ensures the Nacos client and automatic registration see the final service name,
+IP, port, namespace, and authentication settings. Register blueprints and APIs
+afterwards:
+
+```python
+# app/app.py
+from flask import Flask
+
+from app.extensions import extension_config
+from app.routes import api
+
+
+def create_app(config_object="config.Config"):
+    app = Flask(__name__)
+    app.config.from_object(config_object)
+    extension_config(app)
+    app.register_blueprint(api)
+    return app
+```
+
+Business modules import the global `nacos` extension object just as they import
+other Flask extensions. Calls made by a request automatically select the current
+Flask application:
+
+```python
+# app/routes.py
+from flask import Blueprint, current_app, jsonify
+
+from app.extensions import nacos
+
+api = Blueprint("api", __name__)
+
+
+@api.route("/nacos/status", methods=["GET"])
+def nacos_status():
+    return jsonify(nacos.get_status())
+
+
+@api.route("/nacos/config", methods=["GET"])
+def nacos_config():
+    return jsonify({"content": nacos.get_config()})
+
+
+@api.route("/nacos/instances", methods=["GET"])
+def nacos_instances():
+    service_name = current_app.config["NACOS_SERVICE_NAME"]
+    return jsonify({"instances": nacos.list_instances(service_name)})
+
+
+def read_config_in_background(app):
+    with app.app_context():
+        return nacos.get_config()
+```
+
+Celery tasks, worker threads, and standalone scripts need the corresponding
+`app.app_context()` unless their integration already supplies one. The
+`app.extensions["nacos"]` entry is an internal state mapping containing
+`config` and `client`; it is not the `FlaskNacos` object. Application code should
+import `nacos` from `app.extensions` as shown above.
+
+Keep Nacos values in the Flask configuration class or environment variables,
+not in `app/extensions.py`. `NACOS_SERVICE_IP` remains optional: when automatic
+registration is enabled and it is unset, Flask-Nacos attempts local IP
+detection. If the application only reads configuration or discovers other
+services, disable automatic registration and omit the registration identity:
+
+```python
+NACOS_REGISTER_ENABLED = False
+NACOS_AUTO_REGISTER = False
+```
+
 ## 5. Run the application
 
 ```bash

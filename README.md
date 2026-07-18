@@ -141,6 +141,9 @@ def create_app():
     return app
 ```
 
+If your project initializes SQLAlchemy, Redis, and other extensions through a
+shared `app/extensions.py`, see the [existing extension registry pattern](docs/complete-example.md#integrate-with-an-existing-flask-extension-registry).
+
 ## Service Registration
 
 When `NACOS_REGISTER_ENABLED` and `NACOS_AUTO_REGISTER` are both `True`, the
