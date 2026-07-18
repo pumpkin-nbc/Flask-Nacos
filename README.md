@@ -1,6 +1,6 @@
 # Flask-Nacos
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/README.zh-CN.md)
 
 `flask-nacos` is a Flask extension that integrates Flask applications with
 [Nacos](https://nacos.io/), providing service registration, deregistration,
@@ -10,12 +10,12 @@ of common Flask extensions such as `Flask-SQLAlchemy` and `Flask-Redis`.
 ## New users start here
 
 - **New to Python or Flask-Nacos:** follow the
-  [beginner quickstart](docs/quickstart.md). It first runs Flask without Nacos,
+  [beginner quickstart](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/quickstart.md). It first runs Flask without Nacos,
   then adds registration, config reads, and discovery one step at a time.
 - **Ready to integrate a real project:** use the
-  [complete integration example](docs/complete-example.md) with factory mode and
+  [complete integration example](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/complete-example.md) with factory mode and
   environment-based configuration.
-- **Preparing for production:** read [Production](docs/production.md) for
+- **Preparing for production:** read [Production](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/production.md) for
   Gunicorn, containers, multiple workers, and security.
 
 You do not need to read every config key or API page first. Start by copying the
@@ -41,7 +41,7 @@ quickstart exactly as written.
 - Release tooling: version-consistency, package-content, and sensitive-info
   check scripts, a one-shot `release_check.sh`, expanded CI checks, and a
   manual TestPyPI/PyPI release workflow (0.6.0).
-- Full documentation set under [`docs/`](docs/), enhanced examples, a local
+- Full documentation set under [`docs/`](https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs), enhanced examples, a local
   Nacos Docker Compose file, and a documentation-consistency check (0.7.0).
 - Broad compatibility: Python 3.8-3.13 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
   tolerant handling of different Nacos SDK response shapes, a Python-3.8
@@ -65,7 +65,7 @@ will be added with defaults so existing code keeps working.
 - This version does not provide `load_config_to_flask()`.
 - Nacos configuration is never written into Flask `app.config` automatically.
 - See the full pre-release verification in
-  [docs/1.0-checklist.md](docs/1.0-checklist.md).
+  [docs/1.0-checklist.md](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/1.0-checklist.md).
 
 ## Compatibility
 
@@ -76,7 +76,7 @@ will be added with defaults so existing code keeps working.
   `hosts`/`instances`, or a nested `data` wrapper) and both camelCase and
   snake_case instance fields.
 
-See [Compatibility](docs/compatibility.md) for details.
+See [Compatibility](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/compatibility.md) for details.
 
 ## Installation
 
@@ -92,27 +92,27 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-Follow the [beginner quickstart](docs/quickstart.md). It includes Windows
+Follow the [beginner quickstart](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/quickstart.md). It includes Windows
 PowerShell and macOS/Linux commands, a complete copy-ready `app.py`, expected
 results for every step, and common-error fixes.
 
 ## Documentation
 
-Full documentation lives under [`docs/`](docs/):
+Full documentation lives under [`docs/`](https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs):
 
-- [Quickstart](docs/quickstart.md) - beginner path from Python setup through all core features.
-- [Complete Example](docs/complete-example.md) - end-to-end factory integration.
-- [Configuration](docs/configuration.md) - every config key, grouped.
-- [API Reference](docs/api-reference.md) - public methods and error behavior.
-- [Service Registration](docs/service-registration.md) - register/deregister.
-- [Service Discovery](docs/service-discovery.md) - listing and strategies.
-- [Health Check](docs/health-check.md) - the optional health route.
-- [Production](docs/production.md) - Gunicorn/uWSGI/Docker deployment.
-- [Troubleshooting](docs/troubleshooting.md) - common issues and fixes.
-- [Compatibility](docs/compatibility.md) - supported Python/Flask/Nacos versions.
-- [1.0.0 Checklist](docs/1.0-checklist.md) - release-candidate acceptance list.
-- [Release Guide](docs/release.md) - publishing to TestPyPI/PyPI.
-- [Changelog](docs/changelog.md) - links to the full changelog.
+- [Quickstart](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/quickstart.md) - beginner path from Python setup through all core features.
+- [Complete Example](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/complete-example.md) - end-to-end factory integration.
+- [Configuration](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/configuration.md) - every config key, grouped.
+- [API Reference](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/api-reference.md) - public methods and error behavior.
+- [Service Registration](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/service-registration.md) - register/deregister.
+- [Service Discovery](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/service-discovery.md) - listing and strategies.
+- [Health Check](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/health-check.md) - the optional health route.
+- [Production](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/production.md) - Gunicorn/uWSGI/Docker deployment.
+- [Troubleshooting](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/troubleshooting.md) - common issues and fixes.
+- [Compatibility](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/compatibility.md) - supported Python/Flask/Nacos versions.
+- [1.0.0 Checklist](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/1.0-checklist.md) - release-candidate acceptance list.
+- [Release Guide](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/release.md) - publishing to TestPyPI/PyPI.
+- [Changelog](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/changelog.md) - links to the full changelog.
 
 ## Flask Standard Mode
 
@@ -142,7 +142,7 @@ def create_app():
 ```
 
 If your project initializes SQLAlchemy, Redis, and other extensions through a
-shared `app/extensions.py`, see the [existing extension registry pattern](docs/complete-example.md#integrate-with-an-existing-flask-extension-registry).
+shared `app/extensions.py`, see the [existing extension registry pattern](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/complete-example.md#integrate-with-an-existing-flask-extension-registry).
 
 ## Service Registration
 
@@ -610,26 +610,26 @@ from flask_nacos import (
 
 ## Examples
 
-Runnable examples live in the [`examples/`](examples/) directory:
+Runnable examples live in the [`examples/`](https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/examples) directory:
 
-- [`examples/basic_app.py`](examples/basic_app.py) — Flask standard mode with
+- [`examples/basic_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/basic_app.py) — Flask standard mode with
   `FlaskNacos(app)`.
-- [`examples/beginner_app.py`](examples/beginner_app.py) — progressive first-run
-  example that starts without Nacos; follow the [quickstart](docs/quickstart.md).
-- [`examples/factory_app.py`](examples/factory_app.py) — Flask application
+- [`examples/beginner_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/beginner_app.py) — progressive first-run
+  example that starts without Nacos; follow the [quickstart](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/quickstart.md).
+- [`examples/factory_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/factory_app.py) — Flask application
   factory mode with `nacos.init_app(app)`.
-- [`examples/complete_factory_app.py`](examples/complete_factory_app.py) —
+- [`examples/complete_factory_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/complete_factory_app.py) —
   environment-driven, end-to-end factory integration; follow the
-  [complete guide](docs/complete-example.md).
-- [`examples/service_registration.py`](examples/service_registration.py) —
+  [complete guide](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/complete-example.md).
+- [`examples/service_registration.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/service_registration.py) —
   manual and automatic registration and deregistration.
-- [`examples/service_discovery.py`](examples/service_discovery.py) — listing
+- [`examples/service_discovery.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/service_discovery.py) — listing
   instances, cluster/metadata filtering, and `get_one_healthy_instance()`.
-- [`examples/health_check_app.py`](examples/health_check_app.py) — enabling the
+- [`examples/health_check_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/health_check_app.py) — enabling the
   health-check route via `NACOS_HEALTH_CHECK_ENABLED` / `NACOS_HEALTH_CHECK_PATH`.
-- [`examples/production_config.py`](examples/production_config.py) — env-var
+- [`examples/production_config.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/production_config.py) — env-var
   driven configuration for multi-worker deployments.
-- [`examples/docker-compose-nacos.yml`](examples/docker-compose-nacos.yml) — a
+- [`examples/docker-compose-nacos.yml`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/docker-compose-nacos.yml) — a
   local Nacos for manual testing (local use only).
 
 The bundled local Compose setup uses `127.0.0.1:8848` with authentication
@@ -688,20 +688,22 @@ This runs `ruff`, `mypy`, `pytest`, the version-consistency check, the
 sensitive-information scan, a clean `python -m build`, `twine check`, and the
 package-content check — without uploading anything. The individual scripts are:
 
-- [`scripts/check_version.py`](scripts/check_version.py) — verifies the version
+- [`scripts/check_version.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/scripts/check_version.py) — verifies the version
   is consistent across `pyproject.toml`, `__version__`, and `CHANGELOG.md`.
-- [`scripts/check_sensitive_info.py`](scripts/check_sensitive_info.py) — scans
+- [`scripts/check_sensitive_info.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/scripts/check_sensitive_info.py) — scans
   for hardcoded secrets, private IPs, internal domains, and `.env` files.
-- [`scripts/check_package.py`](scripts/check_package.py) — inspects the built
-  wheel to confirm `py.typed` and core modules ship and tests/caches do not.
+- [`scripts/check_package.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/scripts/check_package.py) — validates wheel/sdist
+  contents, metadata, licensing, PyPI-safe links, and artifact freshness.
 
-The manual `Release` workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml))
-reruns these checks and uploads to TestPyPI (default) or PyPI (explicit). See
-[`docs/release.md`](docs/release.md) for the full release procedure, TestPyPI/PyPI
-flow, and GitHub Secrets setup (`TEST_PYPI_API_TOKEN`, `PYPI_API_TOKEN`).
+The manual `Release` workflow ([`.github/workflows/release.yml`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/.github/workflows/release.yml))
+reruns these checks and publishes to TestPyPI through OIDC. A protected
+`vX.Y.Z` tag triggers the separately approved PyPI job. See
+[`docs/release.md`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/release.md) for the full release procedure, TestPyPI/PyPI
+flow, Trusted Publisher setup, and required GitHub Environments.
 
-Publishing to PyPI is never automated on push; CI only lints, type checks,
-tests, builds, and runs the release-check scripts.
+Ordinary branch pushes never publish packages. Only a protected version tag
+that passes every release check can reach the manually approved `pypi`
+environment.
 
 ## Compatibility
 
@@ -712,5 +714,7 @@ tests, builds, and runs the release-check scripts.
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
-[NOTICE](NOTICE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/LICENSE) and
+[NOTICE](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/NOTICE).
+Report suspected vulnerabilities privately as described in the
+[Security Policy](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SECURITY.md).

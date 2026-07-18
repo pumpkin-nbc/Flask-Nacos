@@ -62,7 +62,7 @@ echo "==> [11/13] Build distributions"
 "${PY}" -m build
 
 echo "==> [12/13] Twine check + package content check"
-"${PY}" -m twine check dist/*
+"${PY}" -m twine check --strict dist/*
 "${PY}" scripts/check_package.py
 
 echo "==> [13/13] Package smoke test"

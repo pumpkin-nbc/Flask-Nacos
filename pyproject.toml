@@ -24,6 +24,7 @@ classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Framework :: Flask",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
@@ -31,6 +32,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
   "Topic :: Internet :: WWW/HTTP :: WSGI",
   "Topic :: Software Development :: Libraries :: Python Modules"
 ]
@@ -52,8 +54,10 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/pumpkin-nbc/Flask-Nacos"
 Repository = "https://github.com/pumpkin-nbc/Flask-Nacos"
+Documentation = "https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs"
 Issues = "https://github.com/pumpkin-nbc/Flask-Nacos/issues"
-Changelog = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"
+Security = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SECURITY.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["flask_nacos"]
@@ -66,7 +70,9 @@ include = [
   "/scripts",
   "/docs",
   "/README.md",
+  "/README.zh-CN.md",
   "/CHANGELOG.md",
+  "/SECURITY.md",
   "/LICENSE",
   "/NOTICE",
 ]

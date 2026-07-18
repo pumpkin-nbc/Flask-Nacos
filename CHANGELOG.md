@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   username/password and AK/SK tests, and an opt-in real Nacos auth test.
 - Added `NACOS_SERVICE_HEARTBEAT_INTERVAL` with a validated `5.0` second default
   for SDK-managed ephemeral-instance heartbeat renewal.
+- Added a security policy and private vulnerability reporting guidance.
+- Added release-tag and package-index preflight checks for immutable versions.
 
 ### Changed
 
@@ -45,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advertises the Flask service to consumers.
 - Documented how to integrate Flask-Nacos through an existing centralized
   `app/extensions.py` and `extension_config(app)` application-factory pattern.
+- Replaced long-lived PyPI token publishing with protected OIDC Trusted
+  Publishing jobs for TestPyPI and PyPI.
+- Strengthened release validation to reject stale artifacts and broken PyPI
+  links, and to install-test both wheel and sdist distributions.
 
 ### Fixed
 
@@ -58,7 +64,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Nacos SDK 2.x, while leaving persistent-instance registration unchanged.
 - Aligned the beginner example's registered and listening ports at `3000` and
   removed hardcoded connection and authentication values.
-
 - Made runtime state, health reporting, registration flags, process IDs, locks,
   and shutdown callbacks independent for every initialized Flask app.
 - Made repeated `init_app()` calls reuse the existing client and lifecycle

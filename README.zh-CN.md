@@ -629,15 +629,16 @@ bash scripts/release_check.sh
   `__version__`、`CHANGELOG.md` 三处版本号一致。
 - [`scripts/check_sensitive_info.py`](scripts/check_sensitive_info.py) —— 扫描硬编码
   密钥、内部 IP、内部域名与 `.env` 文件。
-- [`scripts/check_package.py`](scripts/check_package.py) —— 检查构建出的 wheel，确认
-  包含 `py.typed` 与核心模块，且不含测试 / 缓存。
+- [`scripts/check_package.py`](scripts/check_package.py) —— 校验 wheel/sdist 内容、
+  元数据、许可证、适用于 PyPI 的链接以及产物是否与当前源码一致。
 
 手动触发的 `Release` 工作流（[`.github/workflows/release.yml`](.github/workflows/release.yml)）
-会重跑上述检查，并上传到 TestPyPI（默认）或 PyPI（需显式选择）。完整发布流程、
-TestPyPI/PyPI 步骤以及 GitHub Secrets 配置（`TEST_PYPI_API_TOKEN`、`PYPI_API_TOKEN`）
-详见 [`docs/release.md`](docs/release.md)。
+会重跑上述检查，并通过 OIDC 发布到 TestPyPI。受保护的 `vX.Y.Z` tag 会触发需要
+单独审批的 PyPI 发布任务。完整发布流程、Trusted Publisher 与 GitHub Environment
+配置详见 [`docs/release.zh-CN.md`](docs/release.zh-CN.md)。
 
-推送时绝不会自动发布到 PyPI；CI 仅执行代码检查、类型检查、测试、构建以及发布检查脚本。
+普通分支推送不会发布包；只有通过全部检查的受保护版本 tag，才能进入需要人工审批的
+`pypi` Environment。
 
 ## 版本兼容说明
 
@@ -649,3 +650,4 @@ TestPyPI/PyPI 步骤以及 GitHub Secrets 配置（`TEST_PYPI_API_TOKEN`、`PYPI
 ## 开源许可
 
 基于 Apache License 2.0 发布，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+疑似安全漏洞请勿创建公开 Issue；请按照 [安全策略](SECURITY.md) 私密报告。

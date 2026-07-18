@@ -58,6 +58,40 @@ def test_readme_references_docs():
     assert "docs/complete-example.md" in readme
 
 
+def test_pypi_readme_uses_absolute_repository_links():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    relative = re.findall(r"\]\((?!https?://|mailto:|#)([^)]+)\)", readme)
+    assert relative == []
+    assert "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/README.zh-CN.md" in readme
+
+
+def test_security_policy_exists_and_uses_private_reporting():
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert "Report a vulnerability" in security
+    assert "do not open a public issue" in security
+
+
+def test_bilingual_release_guides_document_oidc_gates():
+    english = (DOCS_DIR / "release.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "release.zh-CN.md").read_text(encoding="utf-8")
+    shared_markers = (
+        "Trusted Publisher",
+        "testpypi",
+        "pypi",
+        "release.yml",
+        "pumpkin-nbc",
+        "Flask-Nacos",
+        "v1.0.0",
+        "twine check --strict",
+        "FLASK_NACOS_RUN_AUTH_INTEGRATION",
+        "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
+        "SECURITY.md",
+    )
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
+
+
 def test_complete_example_guides_share_commands_and_defaults():
     english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
