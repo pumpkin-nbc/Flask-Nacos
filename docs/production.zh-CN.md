@@ -59,6 +59,22 @@ flask-nacos 会记录执行注册的进程 ID：
 
 控制是否安装 `atexit` 注销处理器（仅当 `NACOS_AUTO_DEREGISTER` 也为 `True` 时）。
 
+## 生产环境日志
+
+flask-nacos 使用统一的 `NACOS_LOG_*` 配置项控制自身日志与底层 `nacos-sdk-python` 日志。
+建议：
+
+1. 如需文件日志，使用 `NACOS_LOG_FILE` 显式配置（如需轮转再配合 `NACOS_LOG_MAX_BYTES`
+   与 `NACOS_LOG_BACKUP_COUNT`）。
+2. 容器环境优先输出到 stdout：设置 `NACOS_LOG_TO_CONSOLE=True` 且不设置 `NACOS_LOG_FILE`，
+   由平台日志系统采集。
+3. 若项目已有统一日志系统，设置 `NACOS_LOG_PROPAGATE=True` 且不配置 `NACOS_LOG_FILE`，
+   让现有 handler 负责格式化与路由。
+4. 若不希望 flask-nacos 与 nacos-sdk-python 产生任何日志，设置 `NACOS_LOG_ENABLED=False`。
+5. 生产环境不要依赖 nacos-sdk-python 的默认日志路径。
+6. nacos-sdk-python 默认日志 `~/logs/nacos/nacos-client-python.log` 默认会被 flask-nacos
+   阻止。
+
 ## 日志安全
 
 敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`）不会写入日志。

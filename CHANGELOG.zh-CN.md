@@ -7,6 +7,44 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 项目遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## 1.0.2
+
+### 修复
+
+- 修复 Flask 加载 `flask-nacos` 时意外生成日志文件的问题。
+- 修复底层 `nacos-sdk-python` 意外生成 `~/logs/nacos/nacos-client-python.log` 的问题。
+- 修复库级别日志配置带来的日志副作用。
+- 修复 Flask 应用初始化过程中的 SDK 级别日志副作用。
+- 修复重复调用 `init_app(app)` 时重复添加日志 handler 的问题。
+- 修复 `flask-nacos` 与 `nacos-sdk-python` 日志行为不一致的问题。
+
+### 新增
+
+- 新增可配置的日志控制能力。
+- 新增 `NACOS_LOG_ENABLED`。
+- 新增 `NACOS_LOG_TO_CONSOLE`。
+- 新增 `NACOS_LOG_FILE`。
+- 新增 `NACOS_LOG_FORMAT`。
+- 新增 `NACOS_LOG_PROPAGATE`。
+- 新增 `NACOS_LOG_USE_FLASK_LOGGER`。
+- 新增 `NACOS_LOG_MAX_BYTES`。
+- 新增 `NACOS_LOG_BACKUP_COUNT`。
+- 新增日志相关测试。
+
+### 变更
+
+- `NACOS_LOG_*` 配置项现在同时控制 `flask-nacos` 自身日志和底层 `nacos-sdk-python` 日志。
+- 未显式配置 `NACOS_LOG_FILE` 时，`flask-nacos` 不再创建任何日志文件。
+- 未显式配置 `NACOS_LOG_FILE` 时，`flask-nacos` 会阻止 `nacos-sdk-python` 写入其默认日志文件。
+- `flask-nacos` 不再配置 root logger。
+- `flask-nacos` 使用命名 logger：`flask_nacos`。
+
+### 说明
+
+- `get_config()` 仍然只返回原始配置内容。
+- 不支持 YAML、JSON、dict 配置解析。
+- 不支持将 Nacos 配置加载进 Flask `app.config`。
+
 ## 1.0.1
 
 ### 修复

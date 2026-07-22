@@ -7,6 +7,6 @@
 
 - [查看完整中文更新日志](../CHANGELOG.zh-CN.md)
 
-最新版本为 `1.0.1`。启用自动注册时，会在 `init_app()` 中预检注册配置，使 fail-fast
-配置错误在创建 client 或写入部分扩展状态之前抛出。该修复及稳定 1.0 API 的完整细节请见
-根目录的更新日志。
+最新版本为 `1.0.2`。修复了意外生成日志文件的问题（包括底层 `nacos-sdk-python` 的默认
+`~/logs/nacos/nacos-client-python.log`），并新增统一的 `NACOS_LOG_*` 日志控制，可同时管理
+`flask-nacos` 与 `nacos-sdk-python` 的日志。完整细节请见根目录的更新日志。

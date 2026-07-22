@@ -156,3 +156,71 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   SDK call failed.
 - Fix: address the specific cause reported. Error messages never contain
   passwords, access keys, or secret keys.
+
+## 15. Why does `~/logs/nacos/nacos-client-python.log` appear?
+
+- Symptom: a log file shows up at `~/logs/nacos/nacos-client-python.log` even
+  though your app never configured it.
+- Cause: the underlying `nacos-sdk-python` installs its own file handler when
+  its logger has no handlers at client construction time.
+- Investigate: confirm the file is created only after the Nacos client is built.
+- Fix: upgrade to flask-nacos 1.0.2+, which pre-configures the SDK loggers so
+  the SDK skips its default file handler. If you want SDK logs in a file, set
+  `NACOS_LOG_FILE` to your own path.
+
+## 16. How to turn off flask-nacos and nacos-sdk-python logging
+
+- Symptom: you want no logging at all from the extension or the SDK.
+- Cause: logging is enabled by default (at `INFO`, propagating to your handlers).
+- Investigate: check `NACOS_LOG_ENABLED`.
+- Fix: set `NACOS_LOG_ENABLED=False`. Both flask-nacos and nacos-sdk-python
+  loggers are silenced, no console/file handler is added, and the SDK default
+  file is not created.
+
+## 17. How to send logs to a specific file
+
+- Symptom: you want flask-nacos and SDK logs in one file.
+- Cause: no file is created unless you ask for one.
+- Investigate: confirm the target directory is writable.
+- Fix: set `NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log"` (the parent
+  directory is created if needed). For rotation, also set `NACOS_LOG_MAX_BYTES`
+  and `NACOS_LOG_BACKUP_COUNT`. The SDK no longer uses its default path.
+
+## 18. `nacos-client-python.log` still appears without `NACOS_LOG_FILE`
+
+- Symptom: the default SDK file appears even though you did not set
+  `NACOS_LOG_FILE`.
+- Cause: an older flask-nacos version, or another component created the SDK
+  client before flask-nacos configured logging.
+- Investigate: ensure `FlaskNacos(app)` / `init_app(app)` runs before any code
+  that constructs a `nacos.NacosClient` directly.
+- Fix: upgrade to 1.0.2+. flask-nacos configures the SDK loggers before creating
+  the client and also removes any default handler after client creation.
+
+## 19. Duplicate flask-nacos log lines
+
+- Symptom: each log line appears twice (or more).
+- Cause: both a flask-nacos handler and a propagated parent handler emit the
+  record, or multiple logging setups added handlers.
+- Investigate: check whether your app configured the root logger and whether
+  `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_FILE` overlap with your own handlers.
+- Fix: either use flask-nacos handlers (set `NACOS_LOG_TO_CONSOLE`/
+  `NACOS_LOG_FILE`) and set `NACOS_LOG_PROPAGATE=False`, or rely on your own
+  logging with `NACOS_LOG_PROPAGATE=True` and no flask-nacos handlers.
+
+## 20. Reusing the Flask `app.logger`
+
+- Symptom: you want flask-nacos logs to go through `app.logger`.
+- Cause: by default flask-nacos uses its own named logger.
+- Investigate: confirm `app.logger` already has the handlers you want.
+- Fix: set `NACOS_LOG_USE_FLASK_LOGGER=True`. flask-nacos reuses the existing
+  `app.logger` handlers without modifying `app.logger` or the root logger, and
+  still prevents the SDK default file.
+
+## 21. Logs duplicated after repeated `init_app`
+
+- Symptom: calling `init_app(app)` more than once multiplies handlers/log lines.
+- Cause: naive handler setup re-adds handlers on every call.
+- Investigate: count handlers on `logging.getLogger("flask_nacos")`.
+- Fix: none needed on 1.0.2+. flask-nacos de-duplicates handlers, so repeated
+  `init_app(app)` never adds a second console or file handler.

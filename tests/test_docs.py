@@ -93,7 +93,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.1",
+        "v1.0.2",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",

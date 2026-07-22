@@ -100,14 +100,14 @@ job pass on the resulting `master` commit.
 
 From the Actions tab on `master`, run the **Release** workflow manually. Manual
 dispatch is TestPyPI-only; the workflow rejects any branch other than `master`,
-rebuilds from a clean checkout, verifies that `1.0.1` does not already exist,
+rebuilds from a clean checkout, verifies that `1.0.2` does not already exist,
 and publishes the checked artifacts through the `testpypi` environment.
 
 Verify installation in clean Python 3.8 and 3.13 environments:
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.1
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.2
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
@@ -122,8 +122,8 @@ Create the protected tag on the verified `master` commit and push it:
 ```bash
 git switch master
 git pull --ff-only origin master
-git tag -a v1.0.1 -m "Flask-Nacos v1.0.1"
-git push origin v1.0.1
+git tag -a v1.0.2 -m "Flask-Nacos v1.0.2"
+git push origin v1.0.2
 ```
 
 The tag workflow checks that the tag is on `master` and exactly matches all
@@ -137,13 +137,13 @@ default.
 Install from PyPI in a fresh environment:
 
 ```bash
-python -m pip install flask-nacos==1.0.1
+python -m pip install flask-nacos==1.0.2
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 Confirm the PyPI files, hashes, provenance, license expression, license files,
 project URLs, README links, and version. Then create a GitHub Release named
-`Flask-Nacos v1.0.1` from `v1.0.1`, using the matching changelog section as the
+`Flask-Nacos v1.0.2` from `v1.0.2`, using the matching changelog section as the
 release notes.
 
 ## 9. Failure handling

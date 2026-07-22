@@ -7,7 +7,7 @@ the repository root. This page links to it for convenience.
 
 - [View the full changelog](../CHANGELOG.md)
 
-The latest release is `1.0.1`. It validates active automatic-registration
-settings during `init_app()` so fail-fast configuration errors occur before
-client creation or partial extension state. See the root changelog for complete
-details about this fix and the stable 1.0 API.
+The latest release is `1.0.2`. It fixes unexpected log file creation (including
+the underlying `nacos-sdk-python` default `~/logs/nacos/nacos-client-python.log`)
+and adds unified `NACOS_LOG_*` logging controls that govern both `flask-nacos`
+and `nacos-sdk-python` logging. See the root changelog for complete details.

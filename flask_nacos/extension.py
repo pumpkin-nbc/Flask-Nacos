@@ -15,6 +15,7 @@ from . import config_center, discovery, lifecycle, naming
 from .client import create_client
 from .exceptions import FlaskNacosError, NacosClientError, NacosConfigError
 from .health import register_health_route
+from .logging import cleanup_sdk_default_handlers, configure_logger
 from .retry import run_with_retry
 
 logger = logging.getLogger("flask_nacos")
@@ -96,7 +97,7 @@ class FlaskNacos:
             )
 
         cfg = config_module.load_config(app)
-        self._configure_logging(cfg)
+        self._configure_logging(app, cfg)
 
         should_auto_register = bool(
             cfg["NACOS_ENABLED"]
@@ -134,6 +135,9 @@ class FlaskNacos:
             return
 
         client = self._init_client(cfg)
+        # Failsafe: some SDK versions may install their default file handler
+        # during client construction; strip it again after the client exists.
+        cleanup_sdk_default_handlers(cfg)
         state["client"] = client
         self._sync_legacy_state(state)
 
@@ -161,12 +165,13 @@ class FlaskNacos:
                 cfg.get("NACOS_DEREGISTER_ON_EXIT", True),
             )
 
-    def _configure_logging(self, cfg: Dict[str, Any]) -> None:
-        level_name = str(cfg.get("NACOS_LOG_LEVEL") or "INFO").upper()
-        level = getattr(logging, level_name, logging.INFO)
-        logger.setLevel(level)
-        if not logger.handlers:
-            logger.addHandler(logging.NullHandler())
+    def _configure_logging(self, app, cfg: Dict[str, Any]) -> None:
+        """Apply unified NACOS_LOG_* logging control before client creation.
+
+        Configures both the flask-nacos logger and the underlying
+        nacos-sdk-python loggers so the SDK never creates its default log file.
+        """
+        configure_logger(app, cfg)
 
     def _preflight_auto_registration(self, cfg: Dict[str, Any]) -> bool:
         """Validate active init-time registration before creating a client."""

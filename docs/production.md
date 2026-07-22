@@ -67,6 +67,24 @@ example, from a post-fork hook or a management command) instead of implicitly at
 Controls whether the `atexit` deregistration handler is installed (only when
 `NACOS_AUTO_DEREGISTER` is also `True`).
 
+## Logging in production
+
+flask-nacos uses unified `NACOS_LOG_*` settings to control both its own logging
+and the underlying `nacos-sdk-python` logging. Recommendations:
+
+1. If you need file logs, configure them explicitly with `NACOS_LOG_FILE`
+   (optionally `NACOS_LOG_MAX_BYTES` + `NACOS_LOG_BACKUP_COUNT` for rotation).
+2. In containers, prefer stdout: set `NACOS_LOG_TO_CONSOLE=True` and leave
+   `NACOS_LOG_FILE` unset so the platform's log system collects the output.
+3. If your project already has a unified logging system, set
+   `NACOS_LOG_PROPAGATE=True` and do not set `NACOS_LOG_FILE`; let your existing
+   handlers format and route the records.
+4. To silence flask-nacos and nacos-sdk-python entirely, set
+   `NACOS_LOG_ENABLED=False`.
+5. Do not rely on the nacos-sdk-python default log path in production.
+6. The nacos-sdk-python default log `~/logs/nacos/nacos-client-python.log` is
+   prevented by flask-nacos by default.
+
 ## Logging safety
 
 Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never

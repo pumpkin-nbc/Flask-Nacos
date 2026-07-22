@@ -515,7 +515,40 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_DISCOVERY_METADATA` | `{}` | 服务发现默认 metadata 过滤。 |
 | `NACOS_INSTANCE_NORMALIZE` | `True` | `list_instances` 是否返回标准化实例 dict。 |
 | `NACOS_FAIL_FAST` | `False` | 为 `True` 时 Nacos 异常会抛出。 |
-| `NACOS_LOG_LEVEL` | `"INFO"` | `flask_nacos` 的日志级别。 |
+| `NACOS_LOG_ENABLED` | `True` | flask-nacos 与 nacos-sdk-python 的日志总开关。 |
+| `NACOS_LOG_LEVEL` | `"INFO"` | flask-nacos 与 SDK 日志级别（`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`）。 |
+| `NACOS_LOG_TO_CONSOLE` | `False` | 为 `True` 时添加控制台（`StreamHandler`）。 |
+| `NACOS_LOG_FILE` | `None` | 设置后日志写入该路径；未设置则不创建文件。 |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 日志格式字符串。 |
+| `NACOS_LOG_PROPAGATE` | `True` | 是否向父级 logger 传播；始终不修改 root logger。 |
+| `NACOS_LOG_USE_FLASK_LOGGER` | `False` | 复用 `app.logger` 的 handler，而不新建 handler。 |
+| `NACOS_LOG_MAX_BYTES` | `None` | 正整数时启用 `RotatingFileHandler`，否则使用普通 `FileHandler`。 |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | 轮转文件的备份数量。 |
+
+### 日志
+
+flask-nacos 使用 `NACOS_LOG_*` 配置项**统一控制**自身日志与底层 `nacos-sdk-python`
+日志。默认情况下不创建任何日志文件，不修改 root logger，并阻止 `nacos-sdk-python`
+生成其默认的 `~/logs/nacos/nacos-client-python.log`。如需文件日志，请显式配置
+`NACOS_LOG_FILE`。
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_TO_CONSOLE=False,
+    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_PROPAGATE=True,
+)
+```
+
+如果不希望产生任何日志（flask-nacos 与 nacos-sdk-python）：
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=False,
+)
+```
 
 ## 异常处理
 
@@ -543,6 +576,7 @@ from flask_nacos import (
     NacosRegistrationError,
     NacosDeregistrationError,
     NacosDiscoveryError,
+    NacosLoggingError,
 )
 ```
 
@@ -553,6 +587,7 @@ from flask_nacos import (
 - `NacosRegistrationError` —— 服务注册失败。
 - `NacosDeregistrationError` —— 服务注销失败。
 - `NacosDiscoveryError` —— 服务发现失败。
+- `NacosLoggingError` —— 日志配置失败（仅在 `NACOS_FAIL_FAST=True` 时抛出）。
 
 ## 生产部署注意事项
 

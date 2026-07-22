@@ -14,7 +14,7 @@ def test_py_typed_marker_present():
 
 
 def test_version_is_100():
-    assert flask_nacos.__version__ == "1.0.1"
+    assert flask_nacos.__version__ == "1.0.2"
 
 
 def test_no_get_config_as_dict_on_public_surface():

@@ -181,9 +181,57 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 ## 8. Logging
 
+These `NACOS_LOG_*` settings are the single entry point for logging. They
+control **both** the `flask_nacos` logger and the underlying
+`nacos-sdk-python` loggers (`nacos`, `nacos.client`, `nacos-sdk-python`).
+
+By default flask-nacos creates **no** log file and does not touch the root
+logger. It also prevents `nacos-sdk-python` from writing its default
+`~/logs/nacos/nacos-client-python.log` unless you explicitly configure
+`NACOS_LOG_FILE`. Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`,
+`NACOS_SECRET_KEY`, tokens) are never logged.
+
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Logging level for the `flask_nacos` logger. Secrets are never logged. |
+| `NACOS_LOG_ENABLED` | bool | `True` | no | Master switch. When `False`, both flask-nacos and nacos-sdk-python logging are silenced (no console/file handler, no default SDK file, no propagation). |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Level for both flask-nacos and SDK loggers. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
+| `NACOS_LOG_TO_CONSOLE` | bool | `False` | no | When `True`, add a `StreamHandler` (console output). When `False`, no console handler is added. |
+| `NACOS_LOG_FILE` | str \| None | `None` | no | When set, logs are written to this exact path (parent directory is created if needed). When unset, no file log is created. |
+| `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | no | Format string applied to flask-nacos handlers. |
+| `NACOS_LOG_PROPAGATE` | bool | `True` | no | Whether records propagate to parent loggers. Even when `True`, the root logger is never modified. |
+| `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | no | When `True`, reuse the Flask `app.logger` handlers instead of creating new ones. `app.logger` and the root logger are not modified. The SDK default file is still prevented. |
+| `NACOS_LOG_MAX_BYTES` | int \| None | `None` | no | When a positive int, use a `RotatingFileHandler` with this size limit; otherwise a plain `FileHandler`. |
+| `NACOS_LOG_BACKUP_COUNT` | int | `5` | no | Backup count for the `RotatingFileHandler`. |
+
+Repeated `init_app(app)` calls never add duplicate handlers.
+
+Examples:
+
+```python
+# File logging (rotating) to an explicit path.
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_MAX_BYTES=10485760,
+    NACOS_LOG_BACKUP_COUNT=5,
+)
+
+# Container-friendly: console only, no files.
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_TO_CONSOLE=True,
+    NACOS_LOG_FILE=None,
+)
+
+# Silence everything (flask-nacos and nacos-sdk-python).
+app.config.update(NACOS_LOG_ENABLED=False)
+```
+
+Production guidance: prefer console output (`NACOS_LOG_TO_CONSOLE=True`, no
+`NACOS_LOG_FILE`) in containers so the platform collects stdout. If your app
+already has a unified logging setup, keep `NACOS_LOG_PROPAGATE=True` and leave
+`NACOS_LOG_FILE` unset. Do not rely on the nacos-sdk-python default log path.
 
 ## 9. Behavior control
 

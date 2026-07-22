@@ -7,6 +7,44 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.2
+
+### Fixed
+
+- Fixed unexpected log file creation when Flask loads `flask-nacos`.
+- Fixed unexpected `~/logs/nacos/nacos-client-python.log` creation caused by the underlying `nacos-sdk-python`.
+- Fixed logging side effects caused by library-level logging configuration.
+- Fixed SDK-level logging side effects during Flask app initialization.
+- Fixed duplicate logging handlers on repeated `init_app(app)` calls.
+- Fixed inconsistent logging behavior between `flask-nacos` and `nacos-sdk-python`.
+
+### Added
+
+- Added configurable logging controls.
+- Added `NACOS_LOG_ENABLED`.
+- Added `NACOS_LOG_TO_CONSOLE`.
+- Added `NACOS_LOG_FILE`.
+- Added `NACOS_LOG_FORMAT`.
+- Added `NACOS_LOG_PROPAGATE`.
+- Added `NACOS_LOG_USE_FLASK_LOGGER`.
+- Added `NACOS_LOG_MAX_BYTES`.
+- Added `NACOS_LOG_BACKUP_COUNT`.
+- Added logging tests.
+
+### Changed
+
+- `NACOS_LOG_*` settings now control both `flask-nacos` logs and underlying `nacos-sdk-python` logs.
+- `flask-nacos` no longer creates log files unless `NACOS_LOG_FILE` is explicitly configured.
+- `flask-nacos` prevents `nacos-sdk-python` from writing to its default log file unless `NACOS_LOG_FILE` is explicitly configured.
+- `flask-nacos` no longer configures the root logger.
+- `flask-nacos` uses a named logger: `flask_nacos`.
+
+### Notes
+
+- `get_config()` continues to return raw config content only.
+- YAML, JSON, and dict config parsing are not supported.
+- Loading Nacos config into Flask `app.config` is not supported.
+
 ## 1.0.1
 
 ### Fixed

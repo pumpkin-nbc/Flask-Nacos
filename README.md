@@ -574,7 +574,44 @@ the same time.
 | `NACOS_DISCOVERY_METADATA` | `{}` | Default metadata filter for discovery. |
 | `NACOS_INSTANCE_NORMALIZE` | `True` | Return normalized instance dicts from `list_instances`. |
 | `NACOS_FAIL_FAST` | `False` | Raise on Nacos errors when `True`. |
-| `NACOS_LOG_LEVEL` | `"INFO"` | Logging level for `flask_nacos`. |
+| `NACOS_LOG_ENABLED` | `True` | Master logging switch for flask-nacos and nacos-sdk-python. |
+| `NACOS_LOG_LEVEL` | `"INFO"` | Level for flask-nacos and SDK loggers (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`). |
+| `NACOS_LOG_TO_CONSOLE` | `False` | Add a console (`StreamHandler`) when `True`. |
+| `NACOS_LOG_FILE` | `None` | When set, write logs to this exact path; otherwise no file is created. |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Log format string. |
+| `NACOS_LOG_PROPAGATE` | `True` | Propagate to parent loggers; the root logger is never modified. |
+| `NACOS_LOG_USE_FLASK_LOGGER` | `False` | Reuse `app.logger` handlers instead of creating new ones. |
+| `NACOS_LOG_MAX_BYTES` | `None` | Positive int enables a `RotatingFileHandler`; otherwise a plain `FileHandler`. |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | Backup count for the rotating file handler. |
+
+### Logging
+
+flask-nacos uses the `NACOS_LOG_*` settings to control **both** its own logging
+and the underlying `nacos-sdk-python` logging. By default it creates **no** log
+file, does not modify the root logger, and prevents `nacos-sdk-python` from
+creating its default `~/logs/nacos/nacos-client-python.log`. If you need file
+logs, configure `NACOS_LOG_FILE` explicitly.
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_TO_CONSOLE=False,
+    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_PROPAGATE=True,
+)
+```
+
+To disable all logging (flask-nacos and nacos-sdk-python):
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=False,
+)
+```
+
+See [Configuration](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/configuration.md)
+for the full logging reference.
 
 ## Exception Handling
 
@@ -604,6 +641,7 @@ from flask_nacos import (
     NacosRegistrationError,
     NacosDeregistrationError,
     NacosDiscoveryError,
+    NacosLoggingError,
 )
 ```
 
@@ -615,6 +653,7 @@ from flask_nacos import (
 - `NacosRegistrationError` — service registration failures.
 - `NacosDeregistrationError` — service deregistration failures.
 - `NacosDiscoveryError` — discovery failures.
+- `NacosLoggingError` — logging configuration failures (only when `NACOS_FAIL_FAST=True`).
 
 ## Production Notes
 

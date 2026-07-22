@@ -33,6 +33,10 @@ class NacosDiscoveryError(FlaskNacosError):
     """Raised when a service discovery operation fails."""
 
 
+class NacosLoggingError(FlaskNacosError):
+    """Raised when logging configuration is invalid or a logging setup step fails."""
+
+
 __all__ = [
     "FlaskNacosError",
     "NacosConfigError",
@@ -41,4 +45,5 @@ __all__ = [
     "NacosRegistrationError",
     "NacosDeregistrationError",
     "NacosDiscoveryError",
+    "NacosLoggingError",
 ]

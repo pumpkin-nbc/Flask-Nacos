@@ -142,3 +142,65 @@
   说明是服务名为空、SDK 查询失败，还是实例结构无法识别；配置读取错误会说明是 client
   不可用还是 SDK 调用失败。
 - 解决建议：针对报告的具体原因处理。错误信息中不包含密码、access key 或 secret key。
+
+## 15. 为什么会出现 `~/logs/nacos/nacos-client-python.log`？
+
+- 现象：即使应用没有配置，也在 `~/logs/nacos/nacos-client-python.log` 生成了日志文件。
+- 可能原因：底层 `nacos-sdk-python` 在创建 client 时，若其 logger 没有 handler 就会自行
+  添加文件 handler。
+- 排查方法：确认该文件是在创建 Nacos client 之后才出现。
+- 解决建议：升级到 flask-nacos 1.0.2+，它会预先配置 SDK logger，使 SDK 跳过默认文件
+  handler。若需要 SDK 文件日志，请设置 `NACOS_LOG_FILE` 到自己的路径。
+
+## 16. 如何关闭 flask-nacos 和 nacos-sdk-python 日志
+
+- 现象：希望扩展和 SDK 完全不产生日志。
+- 可能原因：日志默认开启（`INFO`，并向你的 handler 传播）。
+- 排查方法：检查 `NACOS_LOG_ENABLED`。
+- 解决建议：设置 `NACOS_LOG_ENABLED=False`。flask-nacos 与 nacos-sdk-python 的 logger
+  都会被静默，不添加 console/file handler，也不会生成 SDK 默认文件。
+
+## 17. 如何指定日志文件路径
+
+- 现象：希望 flask-nacos 与 SDK 日志写入同一个文件。
+- 可能原因：未显式请求时不会创建文件。
+- 排查方法：确认目标目录可写。
+- 解决建议：设置 `NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log"`（必要时会创建
+  父目录）。如需轮转，同时设置 `NACOS_LOG_MAX_BYTES` 与 `NACOS_LOG_BACKUP_COUNT`。SDK 将
+  不再使用默认路径。
+
+## 18. 没有配置 `NACOS_LOG_FILE` 仍出现 `nacos-client-python.log`
+
+- 现象：未设置 `NACOS_LOG_FILE`，但默认 SDK 文件仍然出现。
+- 可能原因：使用了旧版 flask-nacos，或其他组件在 flask-nacos 配置日志之前就创建了 client。
+- 排查方法：确保 `FlaskNacos(app)` / `init_app(app)` 在任何直接构造 `nacos.NacosClient`
+  的代码之前执行。
+- 解决建议：升级到 1.0.2+。flask-nacos 会在创建 client 之前配置 SDK logger，并在创建
+  client 之后再次移除默认 handler。
+
+## 19. flask-nacos 日志重复输出
+
+- 现象：每条日志出现两次或多次。
+- 可能原因：flask-nacos handler 与传播到父级的 handler 同时输出，或多套日志配置各自添加了
+  handler。
+- 排查方法：检查是否配置了 root logger，以及 `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_FILE` 是否
+  与你自己的 handler 重叠。
+- 解决建议：要么使用 flask-nacos 的 handler（设置 `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_FILE`）
+  并设置 `NACOS_LOG_PROPAGATE=False`；要么依赖自己的日志系统，设置
+  `NACOS_LOG_PROPAGATE=True` 且不使用 flask-nacos handler。
+
+## 20. 复用 Flask `app.logger`
+
+- 现象：希望 flask-nacos 日志走 `app.logger`。
+- 可能原因：默认情况下 flask-nacos 使用自己的命名 logger。
+- 排查方法：确认 `app.logger` 已有你想要的 handler。
+- 解决建议：设置 `NACOS_LOG_USE_FLASK_LOGGER=True`。flask-nacos 会复用现有的 `app.logger`
+  handler，而不修改 `app.logger` 或 root logger，并仍然阻止 SDK 默认文件。
+
+## 21. 重复 `init_app` 后日志重复
+
+- 现象：多次调用 `init_app(app)` 导致 handler / 日志行成倍增加。
+- 可能原因：简单的 handler 设置会在每次调用时重复添加。
+- 排查方法：统计 `logging.getLogger("flask_nacos")` 上的 handler 数量。
+- 解决建议：1.0.2+ 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
+  添加第二个 console 或 file handler。

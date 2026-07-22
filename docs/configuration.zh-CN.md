@@ -174,9 +174,55 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 ## 8. 日志
 
+这些 `NACOS_LOG_*` 配置项是日志的唯一入口，**同时控制** `flask_nacos` logger 和底层
+`nacos-sdk-python` 的 logger（`nacos`、`nacos.client`、`nacos-sdk-python`）。
+
+默认情况下 flask-nacos **不**创建任何日志文件，也不修改 root logger；并且会阻止
+`nacos-sdk-python` 生成默认的 `~/logs/nacos/nacos-client-python.log`，除非你显式配置
+`NACOS_LOG_FILE`。敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`、
+token）不会被记录。
+
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | `flask_nacos` logger 的日志级别。敏感信息不会被记录。 |
+| `NACOS_LOG_ENABLED` | bool | `True` | 否 | 总开关。为 `False` 时同时静默 flask-nacos 与 nacos-sdk-python 日志（不添加 console/file handler，不生成 SDK 默认文件，不传播）。 |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | flask-nacos 与 SDK logger 的日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
+| `NACOS_LOG_TO_CONSOLE` | bool | `False` | 否 | 为 `True` 时添加 `StreamHandler`（控制台输出）；为 `False` 时不添加。 |
+| `NACOS_LOG_FILE` | str \| None | `None` | 否 | 设置后日志写入该精确路径（必要时创建父目录）；未设置则不创建文件日志。 |
+| `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 否 | 应用于 flask-nacos handler 的格式字符串。 |
+| `NACOS_LOG_PROPAGATE` | bool | `True` | 否 | 是否向父级 logger 传播。即使为 `True` 也不会修改 root logger。 |
+| `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | 否 | 为 `True` 时复用 Flask `app.logger` 的 handler，而不新建 handler；不修改 `app.logger` 与 root logger；仍会阻止 SDK 默认文件。 |
+| `NACOS_LOG_MAX_BYTES` | int \| None | `None` | 否 | 为正整数时使用 `RotatingFileHandler`（按此大小轮转），否则使用普通 `FileHandler`。 |
+| `NACOS_LOG_BACKUP_COUNT` | int | `5` | 否 | `RotatingFileHandler` 的备份数量。 |
+
+重复调用 `init_app(app)` 不会重复添加 handler。
+
+示例：
+
+```python
+# 文件日志（轮转）到指定路径。
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_MAX_BYTES=10485760,
+    NACOS_LOG_BACKUP_COUNT=5,
+)
+
+# 容器友好：仅控制台，无文件。
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_TO_CONSOLE=True,
+    NACOS_LOG_FILE=None,
+)
+
+# 静默一切（flask-nacos 与 nacos-sdk-python）。
+app.config.update(NACOS_LOG_ENABLED=False)
+```
+
+生产建议：容器中优先使用控制台输出（`NACOS_LOG_TO_CONSOLE=True`，不设置
+`NACOS_LOG_FILE`），由平台采集 stdout。若项目已有统一日志系统，保持
+`NACOS_LOG_PROPAGATE=True` 且不设置 `NACOS_LOG_FILE`。不要依赖 nacos-sdk-python
+的默认日志路径。
 
 ## 9. 行为控制
 
