@@ -39,13 +39,18 @@ def resolve_instance_identity(config: Dict[str, Any]) -> Dict[str, Any]:
         "port": int(config["NACOS_SERVICE_PORT"]),
         "cluster_name": config.get("NACOS_SERVICE_CLUSTER") or "DEFAULT",
         "group_name": config.get("NACOS_SERVICE_GROUP") or "DEFAULT_GROUP",
+        "ephemeral": config.get("NACOS_SERVICE_EPHEMERAL", True),
     }
 
 
-def register_instance(client: Any, config: Dict[str, Any]) -> bool:
+def register_instance(
+    client: Any,
+    config: Dict[str, Any],
+    identity: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Register the current service instance with Nacos."""
-    identity = resolve_instance_identity(config)
-    ephemeral = config.get("NACOS_SERVICE_EPHEMERAL", True)
+    identity = identity or resolve_instance_identity(config)
+    ephemeral = identity.get("ephemeral", config.get("NACOS_SERVICE_EPHEMERAL", True))
     registration_options: Dict[str, Any] = {
         "cluster_name": identity["cluster_name"],
         "weight": config.get("NACOS_SERVICE_WEIGHT", 1.0),
@@ -100,9 +105,13 @@ def register_instance(client: Any, config: Dict[str, Any]) -> bool:
     return True
 
 
-def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
+def deregister_instance(
+    client: Any,
+    config: Dict[str, Any],
+    identity: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Deregister the current service instance from Nacos."""
-    identity = resolve_instance_identity(config)
+    identity = identity or resolve_instance_identity(config)
     logger.info(
         "Deregistering service instance (service=%s, ip=%s, port=%s, group=%s)",
         identity["service_name"],
@@ -116,7 +125,9 @@ def deregister_instance(client: Any, config: Dict[str, Any]) -> bool:
             identity["ip"],
             identity["port"],
             cluster_name=identity["cluster_name"],
-            ephemeral=config.get("NACOS_SERVICE_EPHEMERAL", True),
+            ephemeral=identity.get(
+                "ephemeral", config.get("NACOS_SERVICE_EPHEMERAL", True)
+            ),
             group_name=identity["group_name"],
         )
     except Exception as exc:
@@ -160,20 +171,38 @@ def list_instances(
     converted to a standard dict. A single instance that fails normalization is
     logged and skipped rather than failing the whole discovery call.
     """
-    if not service_name:
+    if not isinstance(service_name, str) or not service_name.strip():
         logger.error("Service discovery failed: service_name is required")
         raise NacosValidationError(
-            "Service discovery failed: service_name is empty (a non-empty "
-            "service name is required)"
+            "Service discovery failed: service_name must be a non-empty string"
         )
+    service_name = service_name.strip()
+
+    if group is not None and not isinstance(group, str):
+        raise NacosValidationError("Service discovery group must be a string or None")
+    if isinstance(group, str) and not group.strip():
+        raise NacosValidationError("Service discovery group must be a non-empty string")
+    if cluster is not None and not isinstance(cluster, str):
+        raise NacosValidationError("Service discovery cluster must be a string or None")
+    if not isinstance(healthy_only, bool):
+        raise NacosValidationError("healthy_only must be a bool")
+    if metadata is not None and not isinstance(metadata, dict):
+        raise NacosValidationError("Service discovery metadata must be a dict or None")
+
+    cluster = cluster.strip() if cluster and cluster.strip() else None
 
     group_name = group or config.get("NACOS_GROUP_NAME") or "DEFAULT_GROUP"
+    if not isinstance(group_name, str) or not group_name.strip():
+        raise NacosValidationError("Service discovery group must be a non-empty string")
+    group_name = group_name.strip()
     try:
-        result = client.list_naming_instance(
-            service_name,
-            group_name=group_name,
-            healthy_only=healthy_only,
-        )
+        options: Dict[str, Any] = {
+            "group_name": group_name,
+            "healthy_only": healthy_only,
+        }
+        if cluster is not None:
+            options["clusters"] = cluster
+        result = client.list_naming_instance(service_name, **options)
     except Exception as exc:
         logger.error("Service discovery failed for %s", service_name)
         raise NacosDiscoveryError(

@@ -119,6 +119,17 @@ def not_ready(feature):
     return jsonify({"available": False, "feature": feature, "hint": hint}), 503
 
 
+def public_status():
+    status = nacos.get_status()
+    return {
+        "nacos_enabled": status.get("nacos_enabled", False),
+        "client_initialized": status.get("client_initialized", False),
+        "registered": status.get("registered", False),
+        "service_name": status.get("service_name"),
+        "service_port": status.get("service_port"),
+    }
+
+
 @app.route("/")
 def index():
     return jsonify(
@@ -130,7 +141,7 @@ def index():
 
 @app.route("/nacos/status")
 def nacos_status():
-    return jsonify(nacos.get_status())
+    return jsonify(public_status())
 
 
 @app.route("/nacos/config")
@@ -159,6 +170,10 @@ def nacos_instances():
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=3000)
 ```
+
+The `/nacos/status` route deliberately returns an allowlist. Do not expose the
+complete `get_status()` mapping from a public endpoint because it also contains
+deployment details such as the Nacos address, namespace, service IP, and PID.
 
 Repository users can instead run
 [`examples/beginner_app.py`](../examples/beginner_app.py), which has the same

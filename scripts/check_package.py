@@ -15,6 +15,8 @@ from email.parser import Parser
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from check_version import read_pyproject_version
+
 ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_MEMBERS = (
@@ -42,7 +44,9 @@ REQUIRED_SDIST_DIRECTORIES = (
 )
 EXPECTED_LICENSE_EXPRESSION = "Apache-2.0"
 EXPECTED_NAME = "flask-nacos"
-EXPECTED_VERSION = "1.0.2"
+EXPECTED_VERSION = read_pyproject_version(ROOT)
+if EXPECTED_VERSION is None:
+    raise RuntimeError("could not read [project].version from pyproject.toml")
 EXPECTED_PROJECT_URLS = {
     "Changelog": (
         "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"

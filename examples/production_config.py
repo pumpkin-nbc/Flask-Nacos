@@ -30,11 +30,17 @@ def create_app() -> Flask:
         NACOS_SERVICE_NAME=os.environ.get("NACOS_SERVICE_NAME", "prod-service"),
         NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
         NACOS_SERVICE_PORT=int(os.environ.get("NACOS_SERVICE_PORT", "5000")),
-        # Register per worker; deregister on graceful exit.
+        # Workers sharing this IP:port map to one Nacos instance. Do not let an
+        # individual worker remove that shared endpoint during graceful exit.
         NACOS_AUTO_REGISTER=True,
         NACOS_AUTO_REGISTER_ON_INIT=True,
         NACOS_REGISTER_ONCE_PER_PROCESS=True,
-        NACOS_DEREGISTER_ON_EXIT=True,
+        NACOS_DEREGISTER_ON_EXIT=False,
+        NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
+        NACOS_LOG_DIR=os.environ.get("NACOS_LOG_DIR", "./logs"),
+        NACOS_LOG_FILENAME=os.environ.get(
+            "NACOS_LOG_FILENAME", "flask_nacos.log"
+        ),
         # Do not crash the app if Nacos is temporarily unavailable.
         NACOS_FAIL_FAST=False,
     )

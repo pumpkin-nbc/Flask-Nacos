@@ -4,6 +4,7 @@ from pathlib import Path
 
 import flask_nacos
 from flask_nacos import FlaskNacos
+from scripts.check_version import read_pyproject_version
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -13,8 +14,8 @@ def test_py_typed_marker_present():
     assert (package_dir / "py.typed").is_file()
 
 
-def test_version_is_100():
-    assert flask_nacos.__version__ == "1.0.2"
+def test_package_version_matches_pyproject():
+    assert flask_nacos.__version__ == read_pyproject_version(ROOT)
 
 
 def test_no_get_config_as_dict_on_public_surface():

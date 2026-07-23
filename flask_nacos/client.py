@@ -1,9 +1,12 @@
 """Nacos SDK client creation, isolating SDK specific details."""
 
 import logging
+import os
+import tempfile
 from typing import Any, Dict
 
 from .exceptions import NacosClientError
+from .logging import configure_sdk_loggers
 
 logger = logging.getLogger("flask_nacos")
 
@@ -16,6 +19,12 @@ def create_client(config: Dict[str, Any]) -> Any:
     specific import or construction detail is contained here so the rest of the
     extension only deals with a plain client object.
     """
+    # The synchronous SDK always prepares ``logDir`` during construction, even
+    # when its logger already has a handler. Point it at an existing controlled
+    # directory so it never creates ``~/logs/nacos``. SDK logging itself stays
+    # isolated by a NullHandler and cannot expose auth/configuration payloads.
+    configure_sdk_loggers()
+
     try:
         import nacos
     except ImportError as exc:  # pragma: no cover - exercised only without the SDK
@@ -26,7 +35,26 @@ def create_client(config: Dict[str, Any]) -> Any:
     server_addresses = config["NACOS_SERVER_ADDR"]
     namespace = config.get("NACOS_NAMESPACE_ID") or ""
 
-    kwargs: Dict[str, Any] = {"namespace": namespace}
+    configured_log_directory = config.get("NACOS_LOG_DIR", "./logs")
+    if (
+        config.get("NACOS_LOG_ENABLED", False)
+        and
+        isinstance(configured_log_directory, str)
+        and configured_log_directory.strip()
+    ):
+        candidate_log_dir = os.path.abspath(
+            os.path.expanduser(configured_log_directory.strip())
+        )
+        sdk_log_dir = (
+            candidate_log_dir
+            if not os.path.exists(candidate_log_dir)
+            or os.path.isdir(candidate_log_dir)
+            else tempfile.gettempdir()
+        )
+    else:
+        sdk_log_dir = tempfile.gettempdir()
+
+    kwargs: Dict[str, Any] = {"namespace": namespace, "logDir": sdk_log_dir}
     if config.get("NACOS_USERNAME"):
         kwargs["username"] = config["NACOS_USERNAME"]
     if config.get("NACOS_PASSWORD"):

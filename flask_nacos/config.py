@@ -72,12 +72,12 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_INSTANCE_NORMALIZE": True,
     # Behavior control.
     "NACOS_FAIL_FAST": False,
-    # Unified logging control (1.0.2). These settings control both the
-    # flask-nacos logger and the underlying nacos-sdk-python loggers.
-    "NACOS_LOG_ENABLED": True,
+    # Safe Flask-Nacos logging control (1.0.2). Raw SDK logs stay silent.
+    "NACOS_LOG_ENABLED": False,
     "NACOS_LOG_LEVEL": "INFO",
     "NACOS_LOG_TO_CONSOLE": False,
-    "NACOS_LOG_FILE": None,
+    "NACOS_LOG_DIR": "./logs",
+    "NACOS_LOG_FILENAME": "flask_nacos.log",
     "NACOS_LOG_FORMAT": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     "NACOS_LOG_PROPAGATE": True,
     "NACOS_LOG_USE_FLASK_LOGGER": False,
@@ -97,6 +97,11 @@ def load_config(app) -> Dict[str, Any]:
     for key in DEFAULTS:
         if key in app.config:
             merged[key] = app.config[key]
+
+    # Compatibility with the unreleased early 1.0.2 name. The canonical
+    # setting is NACOS_LOG_DIR; when both are present, the canonical name wins.
+    if "NACOS_LOG_DIR" not in app.config and "NACOS_LOG_FILE" in app.config:
+        merged["NACOS_LOG_DIR"] = app.config["NACOS_LOG_FILE"]
 
     # NACOS_SERVICE_EPHEMERAL is intentionally excluded: it must be a genuine
     # bool and is validated strictly at registration time.
@@ -233,14 +238,15 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
     # Raises NacosValidationError on illegal port / weight / metadata values.
     validate_port(config["NACOS_SERVICE_PORT"])
     validate_weight(config.get("NACOS_SERVICE_WEIGHT", 1.0))
-    validate_heartbeat_interval(
-        config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
-    )
     validate_metadata(config.get("NACOS_SERVICE_METADATA"))
 
     if not is_bool(config.get("NACOS_SERVICE_EPHEMERAL")):
         logger.error("Service registration failed: NACOS_SERVICE_EPHEMERAL must be a bool")
         raise NacosValidationError("NACOS_SERVICE_EPHEMERAL must be a bool")
+    if config.get("NACOS_SERVICE_EPHEMERAL"):
+        validate_heartbeat_interval(
+            config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
+        )
 
 
 __all__ = [

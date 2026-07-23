@@ -15,7 +15,11 @@ from . import config_center, discovery, lifecycle, naming
 from .client import create_client
 from .exceptions import FlaskNacosError, NacosClientError, NacosConfigError
 from .health import register_health_route
-from .logging import cleanup_sdk_default_handlers, configure_logger
+from .logging import (
+    cleanup_sdk_default_handlers,
+    configure_logger,
+    validate_logging_config,
+)
 from .retry import run_with_retry
 
 logger = logging.getLogger("flask_nacos")
@@ -23,6 +27,7 @@ logger = logging.getLogger("flask_nacos")
 EXTENSION_KEY = "nacos"
 _OWNER_KEY = "_extension"
 _RUNTIME_KEY = "_runtime"
+_INIT_LOCK = RLock()
 
 
 @dataclass
@@ -35,6 +40,7 @@ class _AppRuntimeState:
     lock: Any = field(default_factory=RLock)
     lock_pid: Optional[int] = field(default_factory=os.getpid)
     atexit_registered: bool = False
+    registered_identity: Optional[Dict[str, Any]] = None
 
 
 class FlaskNacos:
@@ -85,6 +91,11 @@ class FlaskNacos:
         An existing ``nacos`` extension slot owned by another object is rejected
         explicitly instead of silently replacing its client and lifecycle state.
         """
+        with _INIT_LOCK:
+            self._init_app_locked(app)
+
+    def _init_app_locked(self, app) -> None:
+        """Initialize one app while serializing process-global logger changes."""
         if EXTENSION_KEY in app.extensions:
             existing = app.extensions[EXTENSION_KEY]
             if self._is_owned_state(existing):
@@ -96,8 +107,15 @@ class FlaskNacos:
                 'app.extensions["nacos"] is already owned by another extension'
             )
 
+        previous_app = self._app
+        previous_state = None
+        if previous_app is not None:
+            candidate = previous_app.extensions.get(EXTENSION_KEY)
+            if self._is_owned_state(candidate):
+                previous_state = candidate
+
         cfg = config_module.load_config(app)
-        self._configure_logging(app, cfg)
+        validate_logging_config(cfg)
 
         should_auto_register = bool(
             cfg["NACOS_ENABLED"]
@@ -106,8 +124,6 @@ class FlaskNacos:
             and cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True)
         )
         registration_config_valid = True
-        if should_auto_register:
-            registration_config_valid = self._preflight_auto_registration(cfg)
 
         runtime = _AppRuntimeState()
         state = {
@@ -116,11 +132,38 @@ class FlaskNacos:
             _OWNER_KEY: self,
             _RUNTIME_KEY: runtime,
         }
-        app.extensions[EXTENSION_KEY] = state
-        self._app = app
-        self._sync_legacy_state(state)
+        logging_configured = False
+        try:
+            self._configure_logging(app, cfg)
+            logging_configured = True
 
-        def _maybe_register_health_route() -> None:
+            if should_auto_register:
+                registration_config_valid = self._preflight_auto_registration(cfg)
+
+            if cfg["NACOS_ENABLED"]:
+                state["client"] = self._init_client(cfg)
+                cleanup_sdk_default_handlers(cfg)
+
+                if state["client"] is not None:
+                    if should_auto_register and registration_config_valid:
+                        self._register_instance_for(app, state, runtime)
+                    elif cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
+                        if not cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
+                            logger.info(
+                                "Auto registration on init disabled by configuration "
+                                "(NACOS_AUTO_REGISTER_ON_INIT=False)"
+                            )
+            else:
+                logger.info(
+                    "Nacos is disabled (NACOS_ENABLED=False); skipping initialization"
+                )
+
+            # Commit application state only after all fail-fast client and
+            # automatic-registration work has completed successfully.
+            app.extensions[EXTENSION_KEY] = state
+            self._app = app
+            self._sync_legacy_state(state)
+
             if cfg.get("NACOS_HEALTH_CHECK_ENABLED"):
                 self._safe(
                     lambda: register_health_route(app, self),
@@ -129,48 +172,43 @@ class FlaskNacos:
                     retry=False,
                 )
 
-        if not cfg["NACOS_ENABLED"]:
-            logger.info("Nacos is disabled (NACOS_ENABLED=False); skipping initialization")
-            _maybe_register_health_route()
-            return
+            if state["client"] is None:
+                return
 
-        client = self._init_client(cfg)
-        # Failsafe: some SDK versions may install their default file handler
-        # during client construction; strip it again after the client exists.
-        cleanup_sdk_default_handlers(cfg)
-        state["client"] = client
-        self._sync_legacy_state(state)
-
-        _maybe_register_health_route()
-
-        if client is None:
-            return
-
-        if should_auto_register and registration_config_valid:
-            self._register_instance_for(app, state, runtime)
-        elif cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
-            if not cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
+            if cfg["NACOS_AUTO_DEREGISTER"] and cfg.get(
+                "NACOS_DEREGISTER_ON_EXIT", True
+            ):
+                self._register_atexit(app, state, runtime)
+            else:
                 logger.info(
-                    "Auto registration on init disabled by configuration "
-                    "(NACOS_AUTO_REGISTER_ON_INIT=False)"
+                    "atexit auto-deregister disabled by configuration "
+                    "(NACOS_AUTO_DEREGISTER=%s, NACOS_DEREGISTER_ON_EXIT=%s)",
+                    cfg["NACOS_AUTO_DEREGISTER"],
+                    cfg.get("NACOS_DEREGISTER_ON_EXIT", True),
                 )
-
-        if cfg["NACOS_AUTO_DEREGISTER"] and cfg.get("NACOS_DEREGISTER_ON_EXIT", True):
-            self._register_atexit(app, state, runtime)
-        else:
-            logger.info(
-                "atexit auto-deregister disabled by configuration "
-                "(NACOS_AUTO_DEREGISTER=%s, NACOS_DEREGISTER_ON_EXIT=%s)",
-                cfg["NACOS_AUTO_DEREGISTER"],
-                cfg.get("NACOS_DEREGISTER_ON_EXIT", True),
-            )
+        except Exception:
+            installed = app.extensions.get(EXTENSION_KEY)
+            if self._is_owned_state(installed) and installed is state:
+                app.extensions.pop(EXTENSION_KEY, None)
+            if runtime.registered and state["client"] is not None:
+                try:
+                    naming.deregister_instance(
+                        state["client"], cfg, identity=runtime.registered_identity
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to roll back service registration after init failure"
+                    )
+            self._restore_previous_state(previous_app, previous_state)
+            if logging_configured:
+                if previous_state is not None:
+                    configure_logger(previous_app, previous_state["config"])
+                else:
+                    configure_logger(None, config_module.DEFAULTS)
+            raise
 
     def _configure_logging(self, app, cfg: Dict[str, Any]) -> None:
-        """Apply unified NACOS_LOG_* logging control before client creation.
-
-        Configures both the flask-nacos logger and the underlying
-        nacos-sdk-python loggers so the SDK never creates its default log file.
-        """
+        """Configure safe extension logs and isolate raw SDK logs."""
         configure_logger(app, cfg)
 
     def _preflight_auto_registration(self, cfg: Dict[str, Any]) -> bool:
@@ -271,7 +309,9 @@ class FlaskNacos:
         process id (for example a forked worker) receives a fresh lock and may
         register its own instance.
         """
-        app, state, runtime = self._require_state(require_client=True)
+        app, state, runtime = self._require_state()
+        if not self._client_available(state):
+            return False
         return self._register_instance_for(app, state, runtime)
 
     def _register_instance_for(
@@ -304,9 +344,19 @@ class FlaskNacos:
                     current,
                 )
 
+            identity = self._safe(
+                lambda: naming.resolve_instance_identity(cfg),
+                cfg,
+                "Failed to resolve service instance identity",
+                default=None,
+                retry=False,
+            )
+            if identity is None:
+                return False
+
             logger.info("Process %s registering service instance", current)
             result = self._safe(
-                lambda: naming.register_instance(client, cfg),
+                lambda: naming.register_instance(client, cfg, identity=identity),
                 cfg,
                 "Failed to register service instance",
                 default=False,
@@ -315,6 +365,7 @@ class FlaskNacos:
                 runtime.registered = True
                 runtime.registered_pid = current
                 runtime.deregistered = False
+                runtime.registered_identity = dict(identity)
                 self._sync_legacy_if_latest(app, state)
                 logger.info("Process %s registered service instance", current)
                 return True
@@ -327,7 +378,9 @@ class FlaskNacos:
         the recorded registration pid differs from the current process, the call
         is logged and skipped so another process's instance is not affected.
         """
-        app, state, runtime = self._require_state(require_client=True)
+        app, state, runtime = self._require_state()
+        if not self._client_available(state):
+            return False
         return self._deregister_instance_for(app, state, runtime)
 
     def _deregister_instance_for(
@@ -351,7 +404,9 @@ class FlaskNacos:
                 return False
 
             result = self._safe(
-                lambda: naming.deregister_instance(client, cfg),
+                lambda: naming.deregister_instance(
+                    client, cfg, identity=runtime.registered_identity
+                ),
                 cfg,
                 "Failed to deregister service instance",
                 default=False,
@@ -360,6 +415,7 @@ class FlaskNacos:
                 runtime.registered = False
                 runtime.registered_pid = None
                 runtime.deregistered = True
+                runtime.registered_identity = None
                 self._sync_legacy_if_latest(app, state)
                 return True
             return False
@@ -377,7 +433,9 @@ class FlaskNacos:
         ``cluster`` falls back to ``NACOS_DISCOVERY_CLUSTER`` and ``metadata`` to
         ``NACOS_DISCOVERY_METADATA`` only when explicitly passed as ``None``.
         """
-        _, state, _ = self._require_state(require_client=True)
+        _, state, _ = self._require_state()
+        if not self._client_available(state):
+            return []
         client = state["client"]
         cfg = state["config"]
         if cluster is None:
@@ -410,7 +468,9 @@ class FlaskNacos:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Return a single healthy instance for ``service_name`` (or ``None``)."""
-        _, state, _ = self._require_state(require_client=True)
+        _, state, _ = self._require_state()
+        if not self._client_available(state):
+            return None
         cfg = state["config"]
         instances = self.list_instances(
             service_name,
@@ -451,8 +511,8 @@ class FlaskNacos:
         if not cfg.get("NACOS_CONFIG_ENABLED", True):
             logger.info("Nacos config center is disabled (NACOS_CONFIG_ENABLED=False)")
             return None
-        if state["client"] is None:
-            self._raise_client_unavailable()
+        if not self._client_available(state):
+            return None
         effective_data_id = data_id or cfg.get("NACOS_CONFIG_DATA_ID")
         return self._safe(
             lambda: config_center.get_config(
@@ -568,6 +628,33 @@ class FlaskNacos:
     def _sync_legacy_if_latest(self, app, state: Dict[str, Any]) -> None:
         if app is self._app:
             self._sync_legacy_state(state)
+
+    def _restore_previous_state(self, app, state: Optional[Dict[str, Any]]) -> None:
+        """Restore the latest-app compatibility mirrors after failed init."""
+        self._app = app
+        if state is not None:
+            self._sync_legacy_state(state)
+            return
+        self._client = None
+        self._config = None
+        self._registered = False
+        self._deregistered = False
+        self._registered_pid = None
+        self._atexit_registered = False
+
+    def _client_available(self, state: Dict[str, Any]) -> bool:
+        """Honor fail-fast when an initialized app has no usable client."""
+        if state.get("client") is not None:
+            return True
+        cfg = state["config"]
+        message = (
+            "Nacos client is not available "
+            "(NACOS_ENABLED=False or initialization failed)"
+        )
+        logger.error(message)
+        if cfg.get("NACOS_FAIL_FAST", False):
+            raise FlaskNacosError(message)
+        return False
 
     def _safe(
         self,

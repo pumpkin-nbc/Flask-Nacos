@@ -26,6 +26,8 @@ SKIP_DIRS = {
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
+    ".uv-cache",
+    ".uv-python",
     "__pycache__",
     ".cursor",
     ".idea",

@@ -16,28 +16,39 @@
 - 修复库级别日志配置带来的日志副作用。
 - 修复 Flask 应用初始化过程中的 SDK 级别日志副作用。
 - 修复重复调用 `init_app(app)` 时重复添加日志 handler 的问题。
-- 修复 `flask-nacos` 与 `nacos-sdk-python` 日志行为不一致的问题。
+- 修复 SDK 原生日志可能通过应用、root、控制台或文件 handler 泄露 token、请求参数或配置
+  正文的问题。
+- 修复 fail-fast 初始化失败后残留部分应用或扩展状态的问题。
+- 修复已初始化但 client 不可用时，非 fail-fast 操作仍抛出异常的问题。
+- 修复注销时重新解析服务身份、可能没有使用实际注册身份的问题。
 
 ### 新增
 
 - 新增可配置的日志控制能力。
 - 新增 `NACOS_LOG_ENABLED`。
 - 新增 `NACOS_LOG_TO_CONSOLE`。
-- 新增 `NACOS_LOG_FILE`。
+- 新增 `NACOS_LOG_DIR` 与 `NACOS_LOG_FILENAME`。
 - 新增 `NACOS_LOG_FORMAT`。
 - 新增 `NACOS_LOG_PROPAGATE`。
 - 新增 `NACOS_LOG_USE_FLASK_LOGGER`。
 - 新增 `NACOS_LOG_MAX_BYTES`。
 - 新增 `NACOS_LOG_BACKUP_COUNT`。
-- 新增日志相关测试。
+- 新增日志、事务式初始化、注册身份与服务发现校验回归测试。
 
 ### 变更
 
-- `NACOS_LOG_*` 配置项现在同时控制 `flask-nacos` 自身日志和底层 `nacos-sdk-python` 日志。
-- 未显式配置 `NACOS_LOG_FILE` 时，`flask-nacos` 不再创建任何日志文件。
-- 未显式配置 `NACOS_LOG_FILE` 时，`flask-nacos` 会阻止 `nacos-sdk-python` 写入其默认日志文件。
+- `NACOS_LOG_*` 现在只控制脱敏后的 Flask-Nacos 日志；SDK 原生 logger 始终静默。
+- `NACOS_LOG_ENABLED` 默认值改为 `False`；启用后 `NACOS_LOG_DIR` 默认使用 `./logs`，
+  `NACOS_LOG_FILENAME` 默认使用 `flask_nacos.log`。
+- 早期未发布名称 `NACOS_LOG_FILE` 保留为 `NACOS_LOG_DIR` 的兼容别名；新项目应使用规范名称。
+- 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。
 - `flask-nacos` 不再配置 root logger。
 - `flask-nacos` 使用命名 logger：`flask_nacos`。
+- 注册成功后缓存并在重试、注销时复用精确服务身份；持久实例忽略心跳配置。
+- 服务发现会在 SDK 调用前校验 service/group/cluster/filter，并把 cluster 过滤同时传给 SDK
+  2.x 和本地防御过滤。
+- 状态示例只公开安全字段白名单，注册示例不再暴露无鉴权的 HTTP 生命周期端点。
+- 生产文档补充多 worker 共享实例身份、SDK 2.x HTTPS 证书校验限制与安全日志默认行为。
 
 ### 说明
 

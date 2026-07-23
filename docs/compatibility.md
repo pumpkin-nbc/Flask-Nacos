@@ -64,9 +64,17 @@ raised.
 
 ## Gunicorn / uWSGI multi-worker notes
 
-Each worker is an independent process and registers its own instance;
-registration state is tracked per process. See [Production](production.md) for
-full deployment guidance.
+Each worker is an independent process and registration state is tracked per
+process. Workers advertising the same service/group/cluster/IP/port still map
+to one Nacos instance. Disable per-worker exit deregistration for a shared
+endpoint, or use one external lifecycle coordinator. See
+[Production](production.md) for full deployment guidance.
+
+## HTTPS limitation in SDK 2.x
+
+The synchronous SDK 2.x line does not expose reliable server-certificate
+verification controls. Use a trusted network or a certificate-validating TLS
+proxy/sidecar for HTTPS deployments.
 
 ## Unsupported capabilities
 

@@ -1,5 +1,7 @@
 """Tests for extension initialization in both standard and factory modes."""
 
+from concurrent.futures import ThreadPoolExecutor
+
 from flask import Flask
 
 from flask_nacos import FlaskNacos
@@ -54,3 +56,22 @@ def test_no_real_connection_on_import():
     nacos = FlaskNacos()
     assert nacos.client is None
     assert isinstance(Flask(__name__), Flask)
+
+
+def test_concurrent_initialization_commits_complete_state(
+    make_app, patched_create_client
+):
+    nacos = FlaskNacos()
+    apps = [
+        make_app({"NACOS_SERVICE_NAME": "service-a"}),
+        make_app({"NACOS_SERVICE_NAME": "service-b"}),
+    ]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(nacos.init_app, apps))
+
+    assert patched_create_client["count"] == 2
+    for app in apps:
+        state = app.extensions[EXTENSION_KEY]
+        assert state["client"] is not None
+        assert state["config"]["NACOS_SERVICE_NAME"] in {"service-a", "service-b"}

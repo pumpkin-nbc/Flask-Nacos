@@ -73,12 +73,14 @@ instance.
 ## Multi-process registration (Gunicorn / uWSGI)
 
 Under Gunicorn/uWSGI the master forks multiple workers; each worker runs
-`init_app` and registers its own instance. flask-nacos tracks the registering
-process id so a worker only deregisters the instance it registered. See
-[Production](production.md) for deployment guidance.
+`init_app` and keeps process-local registration state. Nacos identifies an
+instance by service/group/cluster/IP/port, so workers advertising the same IP
+and port refer to one shared instance rather than one instance per worker.
 
-If you prefer explicit control, set `NACOS_AUTO_REGISTER_ON_INIT=False` and call
-`nacos.register_instance()` from a post-fork hook.
+For a shared endpoint, set `NACOS_DEREGISTER_ON_EXIT=False` so one exiting
+worker cannot remove the instance while other workers still serve traffic, or
+use one external coordinator to own registration and deregistration. See
+[Production](production.md) for deployment guidance.
 
 Validation is guaranteed when `FlaskNacos(app)` or `init_app(app)` executes. A
 lazy-loading WSGI server can defer application construction until the first

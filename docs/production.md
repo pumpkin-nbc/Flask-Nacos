@@ -14,24 +14,31 @@ See also: [Configuration](configuration.md) -
 gunicorn "app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
-Each worker is an independent process and runs `init_app`, so registration state
-is tracked per process.
+Each worker is an independent process and runs `init_app`, so local registration
+state is tracked per process. Nacos still treats workers advertising the same
+service/group/cluster/IP/port as one shared instance.
 
 ## uWSGI
 
-uWSGI behaves like Gunicorn: each worker process registers and deregisters its
-own instance. If you prefer explicit control, set
-`NACOS_AUTO_REGISTER_ON_INIT=False` and register from a post-fork hook.
+uWSGI behaves like Gunicorn: each worker initializes the extension, but workers
+advertising the same IP and port refer to one Nacos instance. For a shared
+endpoint, disable worker exit deregistration or use one external lifecycle
+coordinator.
 
 ## Multi-worker registration
 
-Under multi-worker servers, the master forks workers and each worker registers
-its own instance. flask-nacos records the registering process id:
+Under multi-worker servers, the master forks workers and Flask-Nacos records
+registration state per process:
 
 - `NACOS_REGISTER_ONCE_PER_PROCESS=True`: within a process, repeated
   `register_instance()` calls after the first success are skipped; a forked
   worker with a new pid may register its own instance.
-- On shutdown, a process only deregisters the instance it registered.
+- On shutdown, a process only attempts to deregister the identity it registered.
+
+Process-local state does not create distinct Nacos identities. If workers share
+one advertised endpoint, an exiting worker can remove that shared instance while
+other workers still serve traffic. Set `NACOS_DEREGISTER_ON_EXIT=False` for the
+workers, or let one external coordinator own registration and deregistration.
 
 ## Docker
 
@@ -69,26 +76,34 @@ Controls whether the `atexit` deregistration handler is installed (only when
 
 ## Logging in production
 
-flask-nacos uses unified `NACOS_LOG_*` settings to control both its own logging
-and the underlying `nacos-sdk-python` logging. Recommendations:
+`NACOS_LOG_*` controls sanitized Flask-Nacos records only. Native SDK logging
+from `nacos-sdk-python` is always silenced because it may contain sensitive
+request or response data. Recommendations:
 
-1. If you need file logs, configure them explicitly with `NACOS_LOG_FILE`
-   (optionally `NACOS_LOG_MAX_BYTES` + `NACOS_LOG_BACKUP_COUNT` for rotation).
-2. In containers, prefer stdout: set `NACOS_LOG_TO_CONSOLE=True` and leave
-   `NACOS_LOG_FILE` unset so the platform's log system collects the output.
+1. If you need file logs, set `NACOS_LOG_ENABLED=True` and configure
+   `NACOS_LOG_DIR`/`NACOS_LOG_FILENAME` (plus rotation settings when needed).
+2. In containers, prefer stdout: set `NACOS_LOG_ENABLED=True`,
+   `NACOS_LOG_TO_CONSOLE=True`, and `NACOS_LOG_DIR=None`.
 3. If your project already has a unified logging system, set
-   `NACOS_LOG_PROPAGATE=True` and do not set `NACOS_LOG_FILE`; let your existing
+   `NACOS_LOG_PROPAGATE=True` and `NACOS_LOG_DIR=None`; let your existing
    handlers format and route the records.
-4. To silence flask-nacos and nacos-sdk-python entirely, set
-   `NACOS_LOG_ENABLED=False`.
+4. To silence Flask-Nacos safety logs as well, set `NACOS_LOG_ENABLED=False`.
 5. Do not rely on the nacos-sdk-python default log path in production.
-6. The nacos-sdk-python default log `~/logs/nacos/nacos-client-python.log` is
-   prevented by flask-nacos by default.
+6. Logging defaults to disabled, so no configured directory or `~/logs/nacos`
+   directory is created. When enabled, the defaults write
+   `./logs/flask_nacos.log`.
 
 ## Logging safety
 
 Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never
 written to logs. Keep your own application logs free of credentials too.
+
+## HTTPS certificate verification
+
+Synchronous `nacos-sdk-python` 2.x does not expose reliable HTTPS certificate-
+verification controls. Use a trusted network or terminate TLS through a proxy or
+sidecar that validates the Nacos server certificate. Do not assume that an
+`https://` address alone provides server-identity verification.
 
 ## Keep secrets out of source control
 

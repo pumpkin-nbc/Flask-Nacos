@@ -15,6 +15,9 @@ def test_defaults_loaded():
     assert cfg["NACOS_GROUP_NAME"] == "DEFAULT_GROUP"
     assert cfg["NACOS_FAIL_FAST"] is False
     assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
+    assert cfg["NACOS_LOG_ENABLED"] is False
+    assert cfg["NACOS_LOG_DIR"] == "./logs"
+    assert cfg["NACOS_LOG_FILENAME"] == "flask_nacos.log"
     # Every default key should be present.
     for key in DEFAULTS:
         assert key in cfg
@@ -33,6 +36,25 @@ def test_user_overrides_defaults():
     assert cfg["NACOS_GROUP_NAME"] == "MY_GROUP"
     # String port coerced to int.
     assert cfg["NACOS_SERVICE_PORT"] == 9000
+
+
+def test_legacy_log_file_setting_falls_back_to_log_directory():
+    app = Flask(__name__)
+    app.config["NACOS_LOG_FILE"] = "legacy-logs"
+
+    cfg = load_config(app)
+
+    assert cfg["NACOS_LOG_DIR"] == "legacy-logs"
+    assert "NACOS_LOG_FILE" not in cfg
+
+
+def test_canonical_log_directory_wins_over_legacy_setting():
+    app = Flask(__name__)
+    app.config.update(NACOS_LOG_DIR="canonical-logs", NACOS_LOG_FILE="legacy-logs")
+
+    cfg = load_config(app)
+
+    assert cfg["NACOS_LOG_DIR"] == "canonical-logs"
 
 
 def test_bool_coercion_from_string():

@@ -123,7 +123,9 @@ def test_list_instances_raw_when_normalize_disabled(
     assert "cluster_name" not in instances[0]
 
 
-def test_list_instances_filter_by_cluster(make_app, patched_create_client):
+def test_list_instances_filter_by_cluster(
+    make_app, patched_create_client, fake_client
+):
     app = make_app()
     nacos = FlaskNacos(app)
 
@@ -131,6 +133,29 @@ def test_list_instances_filter_by_cluster(make_app, patched_create_client):
     assert len(instances) == 1
     assert instances[0]["port"] == 8001
     assert instances[0]["cluster_name"] == "CANARY"
+    _, kwargs = fake_client.list_naming_instance.call_args
+    assert kwargs["clusters"] == "CANARY"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"service_name": None},
+        {"service_name": "users", "group": 1},
+        {"service_name": "users", "group": "   "},
+        {"service_name": "users", "cluster": 1},
+        {"service_name": "users", "healthy_only": "true"},
+        {"service_name": "users", "metadata": []},
+    ],
+)
+def test_invalid_discovery_parameters_never_call_sdk(
+    make_app, patched_create_client, fake_client, arguments
+):
+    app = make_app({"NACOS_FAIL_FAST": False})
+    nacos = FlaskNacos(app)
+
+    assert nacos.list_instances(**arguments) == []
+    fake_client.list_naming_instance.assert_not_called()
 
 
 def test_list_instances_filter_by_metadata(make_app, patched_create_client):

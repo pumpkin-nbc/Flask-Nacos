@@ -53,9 +53,16 @@ def create_app() -> Flask:
         NACOS_AUTO_REGISTER=True,
         NACOS_AUTO_DEREGISTER=True,
         NACOS_REGISTER_ONCE_PER_PROCESS=True,
-        NACOS_DEREGISTER_ON_EXIT=True,
+        NACOS_DEREGISTER_ON_EXIT=os.environ.get(
+            "NACOS_DEREGISTER_ON_EXIT", "true"
+        ),
         NACOS_HEALTH_CHECK_ENABLED=True,
         NACOS_HEALTH_CHECK_PATH="/health/nacos",
+        NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
+        NACOS_LOG_DIR=os.environ.get("NACOS_LOG_DIR", "./logs"),
+        NACOS_LOG_FILENAME=os.environ.get(
+            "NACOS_LOG_FILENAME", "flask_nacos.log"
+        ),
         # Keep the Flask app available while Nacos is temporarily unavailable.
         NACOS_FAIL_FAST=False,
     )
@@ -79,7 +86,16 @@ def create_app() -> Flask:
 
     @app.route("/api/nacos/status", methods=["GET"])
     def nacos_status():
-        return jsonify(nacos.get_status())
+        status = nacos.get_status()
+        return jsonify(
+            {
+                "nacos_enabled": status.get("nacos_enabled", False),
+                "client_initialized": status.get("client_initialized", False),
+                "registered": status.get("registered", False),
+                "service_name": status.get("service_name"),
+                "service_port": status.get("service_port"),
+            }
+        )
 
     @app.route("/api/nacos/config", methods=["GET"])
     def nacos_config():

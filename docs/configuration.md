@@ -181,22 +181,23 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 ## 8. Logging
 
-These `NACOS_LOG_*` settings are the single entry point for logging. They
-control **both** the `flask_nacos` logger and the underlying
-`nacos-sdk-python` loggers (`nacos`, `nacos.client`, `nacos-sdk-python`).
+These `NACOS_LOG_*` settings control the sanitized records emitted by the
+`flask_nacos` logger. The underlying `nacos-sdk-python` loggers (`nacos`,
+`nacos.client`, `nacos-sdk-python`) are always silenced because their native
+records may contain tokens, request parameters, or configuration content.
 
-By default flask-nacos creates **no** log file and does not touch the root
-logger. It also prevents `nacos-sdk-python` from writing its default
-`~/logs/nacos/nacos-client-python.log` unless you explicitly configure
-`NACOS_LOG_FILE`. Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`,
-`NACOS_SECRET_KEY`, tokens) are never logged.
+By default logging is disabled, Flask-Nacos creates no log file, does not touch
+the root logger, and does not create the SDK's `~/logs/nacos` directory. When
+`NACOS_LOG_ENABLED=True`, it creates `NACOS_LOG_DIR` and writes
+`NACOS_LOG_FILENAME` there. The defaults produce `./logs/flask_nacos.log`.
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_LOG_ENABLED` | bool | `True` | no | Master switch. When `False`, both flask-nacos and nacos-sdk-python logging are silenced (no console/file handler, no default SDK file, no propagation). |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Level for both flask-nacos and SDK loggers. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
+| `NACOS_LOG_ENABLED` | bool | `False` | no | Master switch for Flask-Nacos safety logs. SDK-native logging remains silent in either state. |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
 | `NACOS_LOG_TO_CONSOLE` | bool | `False` | no | When `True`, add a `StreamHandler` (console output). When `False`, no console handler is added. |
-| `NACOS_LOG_FILE` | str \| None | `None` | no | When set, logs are written to this exact path (parent directory is created if needed). When unset, no file log is created. |
+| `NACOS_LOG_DIR` | str \| None | `"./logs"` | no | Directory for Flask-Nacos safety logs. It is created only when logging is enabled; explicit `None` disables file output. |
+| `NACOS_LOG_FILENAME` | str | `"flask_nacos.log"` | no | Filename inside `NACOS_LOG_DIR`; must not contain a path or directory traversal. |
 | `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | no | Format string applied to flask-nacos handlers. |
 | `NACOS_LOG_PROPAGATE` | bool | `True` | no | Whether records propagate to parent loggers. Even when `True`, the root logger is never modified. |
 | `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | no | When `True`, reuse the Flask `app.logger` handlers instead of creating new ones. `app.logger` and the root logger are not modified. The SDK default file is still prevented. |
@@ -208,11 +209,12 @@ Repeated `init_app(app)` calls never add duplicate handlers.
 Examples:
 
 ```python
-# File logging (rotating) to an explicit path.
+# File logging (rotating) in an explicit directory.
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_MAX_BYTES=10485760,
     NACOS_LOG_BACKUP_COUNT=5,
 )
@@ -221,17 +223,25 @@ app.config.update(
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_TO_CONSOLE=True,
-    NACOS_LOG_FILE=None,
+    NACOS_LOG_DIR=None,
 )
 
-# Silence everything (flask-nacos and nacos-sdk-python).
+# Silence Flask-Nacos safety logs too (SDK-native logs are always silent).
 app.config.update(NACOS_LOG_ENABLED=False)
 ```
 
-Production guidance: prefer console output (`NACOS_LOG_TO_CONSOLE=True`, no
-`NACOS_LOG_FILE`) in containers so the platform collects stdout. If your app
-already has a unified logging setup, keep `NACOS_LOG_PROPAGATE=True` and leave
-`NACOS_LOG_FILE` unset. Do not rely on the nacos-sdk-python default log path.
+Production guidance: prefer console output in containers so the platform
+collects stdout. If a file is not wanted while logging is enabled, set
+`NACOS_LOG_DIR=None`; otherwise the default file is `./logs/flask_nacos.log`.
+Do not rely on the nacos-sdk-python default log path.
+
+## HTTPS limitation in synchronous SDK 2.x
+
+The synchronous `nacos-sdk-python` 2.x client does not expose reliable HTTPS
+certificate-verification controls. Do not treat an `https://` server address
+alone as sufficient transport security. In production, connect only through a
+trusted network or a TLS proxy/sidecar that validates the Nacos server
+certificate.
 
 ## 9. Behavior control
 

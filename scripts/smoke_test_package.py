@@ -80,6 +80,7 @@ def _test_artifact(kind: str, artifact: str, expected: str, parent: Path) -> boo
             "install",
             "--quiet",
             "--disable-pip-version-check",
+            "--no-cache-dir",
             artifact,
         ],
         check=False,

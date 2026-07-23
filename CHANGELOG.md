@@ -16,28 +16,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed logging side effects caused by library-level logging configuration.
 - Fixed SDK-level logging side effects during Flask app initialization.
 - Fixed duplicate logging handlers on repeated `init_app(app)` calls.
-- Fixed inconsistent logging behavior between `flask-nacos` and `nacos-sdk-python`.
+- Fixed SDK-native logs potentially exposing tokens, request parameters, or
+  configuration content through application, root, console, or file handlers.
+- Fixed fail-fast initialization leaving partial application or extension state.
+- Fixed non-fail-fast operations raising when an initialized client is unavailable.
+- Fixed deregistration using a newly resolved identity instead of the exact
+  identity that was registered.
 
 ### Added
 
 - Added configurable logging controls.
 - Added `NACOS_LOG_ENABLED`.
 - Added `NACOS_LOG_TO_CONSOLE`.
-- Added `NACOS_LOG_FILE`.
+- Added `NACOS_LOG_DIR` and `NACOS_LOG_FILENAME`.
 - Added `NACOS_LOG_FORMAT`.
 - Added `NACOS_LOG_PROPAGATE`.
 - Added `NACOS_LOG_USE_FLASK_LOGGER`.
 - Added `NACOS_LOG_MAX_BYTES`.
 - Added `NACOS_LOG_BACKUP_COUNT`.
-- Added logging tests.
+- Added logging, transactional initialization, registration-identity, and
+  discovery-validation regression tests.
 
 ### Changed
 
-- `NACOS_LOG_*` settings now control both `flask-nacos` logs and underlying `nacos-sdk-python` logs.
-- `flask-nacos` no longer creates log files unless `NACOS_LOG_FILE` is explicitly configured.
-- `flask-nacos` prevents `nacos-sdk-python` from writing to its default log file unless `NACOS_LOG_FILE` is explicitly configured.
+- `NACOS_LOG_*` settings now control only sanitized Flask-Nacos logs; native SDK
+  loggers are always silent.
+- `NACOS_LOG_ENABLED` now defaults to `False`. When enabled, `NACOS_LOG_DIR`
+  defaults to `./logs` and `NACOS_LOG_FILENAME` defaults to `flask_nacos.log`.
+- The early unreleased `NACOS_LOG_FILE` name remains a compatibility alias for
+  `NACOS_LOG_DIR`; new applications should use the canonical name.
+- Flask-Nacos never creates the configured log directory while logging is
+  disabled. Generated files contain only Flask-Nacos safety logs.
 - `flask-nacos` no longer configures the root logger.
 - `flask-nacos` uses a named logger: `flask_nacos`.
+- Registration caches and reuses the exact successful service identity for
+  retries and deregistration; persistent instances ignore heartbeat settings.
+- Discovery validates service/group/cluster/filter inputs before SDK calls and
+  forwards cluster filters to SDK 2.x as well as applying defensive local filtering.
+- Status examples expose only a safe field allowlist, and the registration
+  example no longer exposes unauthenticated HTTP lifecycle endpoints.
+- Production documentation now explains shared multi-worker instance identity,
+  SDK 2.x HTTPS certificate-verification limitations, and safe logging defaults.
 
 ### Notes
 

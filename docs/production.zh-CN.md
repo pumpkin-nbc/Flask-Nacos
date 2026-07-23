@@ -13,21 +13,25 @@
 gunicorn "app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
-每个 worker 都是独立进程并各自执行 `init_app`，因此注册状态按进程区分。
+每个 worker 都是独立进程并各自执行 `init_app`，因此本地注册状态按进程区分。但公布相同
+service/group/cluster/IP/port 的 worker 在 Nacos 中仍对应同一个共享实例。
 
 ## uWSGI
 
-uWSGI 的行为与 Gunicorn 类似：每个 worker 进程各自注册和注销自己的实例。如果希望
-显式控制，可设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 post-fork 钩子中注册。
+uWSGI 的行为与 Gunicorn 类似：每个 worker 都会初始化扩展，但公布相同 IP 和端口的 worker
+指向同一个 Nacos 实例。共享端点应关闭 worker 退出注销，或交给单一外部协调者管理生命周期。
 
 ## 多 worker 注册
 
-在多 worker 服务器下，主进程 fork 出多个 worker，每个 worker 各自注册自己的实例。
-flask-nacos 会记录执行注册的进程 ID：
+在多 worker 服务器下，主进程 fork 出多个 worker，flask-nacos 会按进程记录注册状态：
 
 - `NACOS_REGISTER_ONCE_PER_PROCESS=True`：同一进程内，`register_instance()` 首次
   成功后重复调用会被跳过；fork 出的新 worker（新 pid）可注册自己的实例。
-- 退出时，某个进程只会注销它自己注册的实例。
+- 退出时，某个进程只会尝试注销它注册时使用的实例标识。
+
+进程状态相互独立不代表 Nacos 实例相互独立。多个 worker 共享同一个注册地址时，某个 worker
+退出可能在其他 worker 仍提供服务时删除共享实例。请设置 `NACOS_DEREGISTER_ON_EXIT=False`，
+或由单一外部协调者负责注册与注销。
 
 ## Docker
 
@@ -61,24 +65,30 @@ flask-nacos 会记录执行注册的进程 ID：
 
 ## 生产环境日志
 
-flask-nacos 使用统一的 `NACOS_LOG_*` 配置项控制自身日志与底层 `nacos-sdk-python` 日志。
-建议：
+`NACOS_LOG_*` 只控制 Flask-Nacos 生成的脱敏安全日志。SDK 原生日志（来自
+`nacos-sdk-python`）可能包含敏感请求或响应数据，因此始终静默。建议：
 
-1. 如需文件日志，使用 `NACOS_LOG_FILE` 显式配置（如需轮转再配合 `NACOS_LOG_MAX_BYTES`
-   与 `NACOS_LOG_BACKUP_COUNT`）。
-2. 容器环境优先输出到 stdout：设置 `NACOS_LOG_TO_CONSOLE=True` 且不设置 `NACOS_LOG_FILE`，
-   由平台日志系统采集。
-3. 若项目已有统一日志系统，设置 `NACOS_LOG_PROPAGATE=True` 且不配置 `NACOS_LOG_FILE`，
+1. 如需文件日志，设置 `NACOS_LOG_ENABLED=True` 并配置 `NACOS_LOG_DIR` 与
+   `NACOS_LOG_FILENAME`（如需轮转再配置相关参数）。
+2. 容器环境优先输出到 stdout：设置 `NACOS_LOG_ENABLED=True`、
+   `NACOS_LOG_TO_CONSOLE=True` 和 `NACOS_LOG_DIR=None`。
+3. 若项目已有统一日志系统，设置 `NACOS_LOG_PROPAGATE=True` 和 `NACOS_LOG_DIR=None`，
    让现有 handler 负责格式化与路由。
-4. 若不希望 flask-nacos 与 nacos-sdk-python 产生任何日志，设置 `NACOS_LOG_ENABLED=False`。
+4. 若连 Flask-Nacos 安全日志也不希望产生，设置 `NACOS_LOG_ENABLED=False`。
 5. 生产环境不要依赖 nacos-sdk-python 的默认日志路径。
-6. nacos-sdk-python 默认日志 `~/logs/nacos/nacos-client-python.log` 默认会被 flask-nacos
-   阻止。
+6. 日志默认关闭，因此不创建用户配置的目录或 `~/logs/nacos`；启用后默认写入
+   `./logs/flask_nacos.log`。
 
 ## 日志安全
 
 敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`）不会写入日志。
 也请保持你自己的应用日志中不含凭据。
+
+## HTTPS 证书校验
+
+同步 `nacos-sdk-python` 2.x 没有提供可靠的 HTTPS 证书校验控制。请使用受信网络，或通过
+能够验证 Nacos 服务端证书的 TLS 代理 / sidecar 终止 TLS。不要认为地址使用 `https://`
+就已经验证了服务端身份。
 
 ## 敏感信息不要进入代码仓库
 

@@ -174,20 +174,21 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 ## 8. 日志
 
-这些 `NACOS_LOG_*` 配置项是日志的唯一入口，**同时控制** `flask_nacos` logger 和底层
-`nacos-sdk-python` 的 logger（`nacos`、`nacos.client`、`nacos-sdk-python`）。
+这些 `NACOS_LOG_*` 配置项仅控制 `flask_nacos` logger 生成的脱敏安全日志。底层
+`nacos-sdk-python` logger（`nacos`、`nacos.client`、`nacos-sdk-python`）的原生日志可能
+包含 token、请求参数或配置正文，因此始终静默。
 
-默认情况下 flask-nacos **不**创建任何日志文件，也不修改 root logger；并且会阻止
-`nacos-sdk-python` 生成默认的 `~/logs/nacos/nacos-client-python.log`，除非你显式配置
-`NACOS_LOG_FILE`。敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`、
-token）不会被记录。
+默认关闭 Flask-Nacos 日志，不创建任何日志文件、不修改 root logger，也不会创建 SDK 的
+`~/logs/nacos` 目录。设置 `NACOS_LOG_ENABLED=True` 后才会创建 `NACOS_LOG_DIR`，并在其中
+写入 `NACOS_LOG_FILENAME`；默认结果为 `./logs/flask_nacos.log`。
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_LOG_ENABLED` | bool | `True` | 否 | 总开关。为 `False` 时同时静默 flask-nacos 与 nacos-sdk-python 日志（不添加 console/file handler，不生成 SDK 默认文件，不传播）。 |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | flask-nacos 与 SDK logger 的日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
+| `NACOS_LOG_ENABLED` | bool | `False` | 否 | Flask-Nacos 安全日志总开关；无论取值如何，SDK 原生日志始终静默。 |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
 | `NACOS_LOG_TO_CONSOLE` | bool | `False` | 否 | 为 `True` 时添加 `StreamHandler`（控制台输出）；为 `False` 时不添加。 |
-| `NACOS_LOG_FILE` | str \| None | `None` | 否 | 设置后日志写入该精确路径（必要时创建父目录）；未设置则不创建文件日志。 |
+| `NACOS_LOG_DIR` | str \| None | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志启用时创建，显式设为 `None` 可禁用文件输出。 |
+| `NACOS_LOG_FILENAME` | str | `"flask_nacos.log"` | 否 | `NACOS_LOG_DIR` 内的文件名；不能包含路径或目录穿越。 |
 | `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 否 | 应用于 flask-nacos handler 的格式字符串。 |
 | `NACOS_LOG_PROPAGATE` | bool | `True` | 否 | 是否向父级 logger 传播。即使为 `True` 也不会修改 root logger。 |
 | `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | 否 | 为 `True` 时复用 Flask `app.logger` 的 handler，而不新建 handler；不修改 `app.logger` 与 root logger；仍会阻止 SDK 默认文件。 |
@@ -199,11 +200,12 @@ token）不会被记录。
 示例：
 
 ```python
-# 文件日志（轮转）到指定路径。
+# 文件日志（轮转）写入指定目录。
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_FILE="/var/log/flask-nacos/flask-nacos.log",
+    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_MAX_BYTES=10485760,
     NACOS_LOG_BACKUP_COUNT=5,
 )
@@ -212,17 +214,22 @@ app.config.update(
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_TO_CONSOLE=True,
-    NACOS_LOG_FILE=None,
+    NACOS_LOG_DIR=None,
 )
 
-# 静默一切（flask-nacos 与 nacos-sdk-python）。
+# 同时静默 Flask-Nacos 安全日志（SDK 原生日志始终静默）。
 app.config.update(NACOS_LOG_ENABLED=False)
 ```
 
-生产建议：容器中优先使用控制台输出（`NACOS_LOG_TO_CONSOLE=True`，不设置
-`NACOS_LOG_FILE`），由平台采集 stdout。若项目已有统一日志系统，保持
-`NACOS_LOG_PROPAGATE=True` 且不设置 `NACOS_LOG_FILE`。不要依赖 nacos-sdk-python
-的默认日志路径。
+生产建议：容器中优先使用平台统一日志。若启用日志但不希望创建文件，请设置
+`NACOS_LOG_DIR=None`；否则默认文件为 `./logs/flask_nacos.log`。不要依赖
+nacos-sdk-python 的默认日志路径。
+
+## 同步 SDK 2.x 的 HTTPS 限制
+
+同步 `nacos-sdk-python` 2.x 没有提供可靠的 HTTPS 证书校验控制。不能仅凭
+`NACOS_SERVER_ADDR` 使用 `https://` 就认为传输已经安全。生产环境请仅通过受信网络连接，
+或使用能够验证 Nacos 服务端证书的 TLS 代理 / sidecar。
 
 ## 9. 行为控制
 

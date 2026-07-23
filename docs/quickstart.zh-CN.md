@@ -126,6 +126,17 @@ def not_ready(feature):
     return jsonify({"available": False, "feature": feature, "hint": hint}), 503
 
 
+def public_status():
+    status = nacos.get_status()
+    return {
+        "nacos_enabled": status.get("nacos_enabled", False),
+        "client_initialized": status.get("client_initialized", False),
+        "registered": status.get("registered", False),
+        "service_name": status.get("service_name"),
+        "service_port": status.get("service_port"),
+    }
+
+
 @app.route("/")
 def index():
     return jsonify(
@@ -137,7 +148,7 @@ def index():
 
 @app.route("/nacos/status")
 def nacos_status():
-    return jsonify(nacos.get_status())
+    return jsonify(public_status())
 
 
 @app.route("/nacos/config")
@@ -166,6 +177,9 @@ def nacos_instances():
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=3000)
 ```
+
+`/nacos/status` 路由有意只返回字段白名单。不要在公网接口直接返回完整的 `get_status()`
+映射，因为其中还包含 Nacos 地址、namespace、服务 IP 和 PID 等部署信息。
 
 仓库源码用户也可以直接运行
 [`examples/beginner_app.py`](../examples/beginner_app.py)，它与上面的代码行为一致。
