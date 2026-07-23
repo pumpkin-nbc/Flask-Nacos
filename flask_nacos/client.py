@@ -11,6 +11,68 @@ from .logging import configure_sdk_loggers
 logger = logging.getLogger("flask_nacos")
 
 
+def _heartbeat_argument(
+    args: Any, kwargs: Dict[str, Any], position: int, name: str, default: Any
+) -> Any:
+    if len(args) > position:
+        return args[position]
+    return kwargs.get(name, default)
+
+
+def _install_heartbeat_logging(client: Any) -> None:
+    """Wrap SDK heartbeat calls with sanitized success/failure records."""
+    if getattr(client, "_flask_nacos_heartbeat_logging", False):
+        return
+
+    send_heartbeat = getattr(client, "send_heartbeat", None)
+    if not callable(send_heartbeat):
+        return
+
+    def logged_send_heartbeat(*args: Any, **kwargs: Any) -> Any:
+        service_name = _heartbeat_argument(
+            args, kwargs, 0, "service_name", "<unknown>"
+        )
+        ip = _heartbeat_argument(args, kwargs, 1, "ip", "<unknown>")
+        port = _heartbeat_argument(args, kwargs, 2, "port", "<unknown>")
+        group_name = _heartbeat_argument(
+            args, kwargs, 7, "group_name", "DEFAULT_GROUP"
+        )
+        try:
+            result = send_heartbeat(*args, **kwargs)
+        except Exception as exc:
+            # Do not include the exception message: SDK/network exceptions can
+            # contain request parameters, tokens, signatures, or response data.
+            logger.error(
+                "Nacos heartbeat failed "
+                "(service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
+                service_name,
+                ip,
+                port,
+                group_name,
+                type(exc).__name__,
+            )
+            raise
+
+        logger.info(
+            "Nacos heartbeat succeeded (service=%s, ip=%s, port=%s, group=%s)",
+            service_name,
+            ip,
+            port,
+            group_name,
+        )
+        return result
+
+    try:
+        client.send_heartbeat = logged_send_heartbeat
+        client._flask_nacos_heartbeat_logging = True
+    except (AttributeError, TypeError):
+        # Defensive compatibility for an SDK client implementation that
+        # disallows instance attributes. Client creation must remain usable.
+        logger.warning(
+            "Nacos heartbeat status logging is unavailable for this SDK client"
+        )
+
+
 def create_client(config: Dict[str, Any]) -> Any:
     """Create the underlying synchronous Nacos client.
 
@@ -69,6 +131,7 @@ def create_client(config: Dict[str, Any]) -> Any:
         client = nacos.NacosClient(server_addresses, **kwargs)
     except Exception as exc:
         raise NacosClientError("Failed to construct the Nacos SDK client") from exc
+    _install_heartbeat_logging(client)
     logger.info(
         "Nacos client initialized (server_addr=%s, namespace=%s)",
         server_addresses,

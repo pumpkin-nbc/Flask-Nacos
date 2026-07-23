@@ -173,6 +173,13 @@ Ephemeral instances use SDK heartbeats every `5.0` seconds by default. The
 initial healthy flag does not replace heartbeat renewal; persistent instances
 do not receive a heartbeat interval.
 
+When `NACOS_LOG_ENABLED=True`, every temporary-instance heartbeat emits a
+sanitized status record: success at `INFO` and failure at `ERROR`. Records
+include only service, IP, port, group, and (on failure) the exception type.
+SDK responses, exception messages, credentials, tokens, signatures, metadata,
+and configuration content are never logged. The SDK heartbeat thread keeps
+retrying after a failed request.
+
 Registration and deregistration succeed only when SDK 2.x explicitly returns
 `True`. A `False` result follows the normal retry and `NACOS_FAIL_FAST` flow and
 does not update the extension's registered state.

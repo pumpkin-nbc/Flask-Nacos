@@ -96,6 +96,10 @@ app.config.update(
 `NACOS_SERVICE_HEARTBEAT_INTERVAL` 仅在临时实例注册时传给 SDK 2.x；持久实例
 （`NACOS_SERVICE_EPHEMERAL=False`）会忽略它。初始健康标识不能让临时实例持续存活。
 
+当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录每次实际 SDK 心跳：成功请求使用
+`INFO`，失败请求使用 `ERROR`。日志经过脱敏，只包含服务身份以及失败时的异常类型，
+刻意省略响应正文和异常消息。失败会原样抛回 SDK 心跳线程，由 SDK 按配置间隔继续重试。
+
 ## 3. 服务发现
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |

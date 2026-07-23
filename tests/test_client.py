@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import flask_nacos.client as client_module
 from flask_nacos import FlaskNacos
 from flask_nacos.client import create_client
 from flask_nacos.exceptions import NacosClientError, NacosConfigError
@@ -171,6 +172,82 @@ def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(
     assert client is not None
     assert not configured_directory.exists()
     assert not (sdk_temp / "nacos-client-python.log").exists()
+
+
+def test_heartbeat_wrapper_logs_success_and_preserves_result(monkeypatch):
+    sdk_client = SimpleNamespace()
+    sdk_client.send_heartbeat = MagicMock(
+        return_value={"clientBeatInterval": 5000}
+    )
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    client_module._install_heartbeat_logging(sdk_client)
+    result = sdk_client.send_heartbeat(
+        "orders",
+        "10.0.0.8",
+        8080,
+        "BLUE",
+        1.0,
+        {"zone": "a"},
+        True,
+        "PROD",
+    )
+
+    assert result == {"clientBeatInterval": 5000}
+    safe_logger.info.assert_called_once_with(
+        "Nacos heartbeat succeeded (service=%s, ip=%s, port=%s, group=%s)",
+        "orders",
+        "10.0.0.8",
+        8080,
+        "PROD",
+    )
+    safe_logger.error.assert_not_called()
+
+
+def test_heartbeat_wrapper_logs_sanitized_failure_and_reraises(monkeypatch):
+    credential = "must-not-appear-in-heartbeat-log"
+
+    def fail_heartbeat(*args, **kwargs):
+        raise RuntimeError(credential)
+
+    sdk_client = SimpleNamespace(send_heartbeat=fail_heartbeat)
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+    client_module._install_heartbeat_logging(sdk_client)
+
+    with pytest.raises(RuntimeError, match=credential):
+        sdk_client.send_heartbeat(
+            service_name="orders",
+            ip="10.0.0.8",
+            port=8080,
+            group_name="PROD",
+        )
+
+    safe_logger.error.assert_called_once_with(
+        "Nacos heartbeat failed "
+        "(service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
+        "orders",
+        "10.0.0.8",
+        8080,
+        "PROD",
+        "RuntimeError",
+    )
+    assert credential not in str(safe_logger.mock_calls)
+
+
+def test_heartbeat_wrapper_is_installed_only_once(monkeypatch):
+    sdk_client = SimpleNamespace(send_heartbeat=MagicMock(return_value={}))
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    client_module._install_heartbeat_logging(sdk_client)
+    wrapped = sdk_client.send_heartbeat
+    client_module._install_heartbeat_logging(sdk_client)
+
+    assert sdk_client.send_heartbeat is wrapped
+    sdk_client.send_heartbeat("orders", "127.0.0.1", 8080)
+    safe_logger.info.assert_called_once()
 
 
 @pytest.mark.parametrize(

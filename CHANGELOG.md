@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Console records use level-specific ANSI colors: blue for `DEBUG`, green for
   `INFO`, yellow for `WARNING`, red for `ERROR`, and bold red for `CRITICAL`.
   File logs remain plain text without ANSI escape sequences.
+- Added sanitized temporary-instance heartbeat status logs: successful SDK
+  heartbeats use `INFO`, failures use `ERROR`, and failures continue through
+  the SDK retry loop without logging response bodies or exception messages.
 - Removed the unreleased `NACOS_LOG_TO_CONSOLE`, `NACOS_LOG_DIR`,
   `NACOS_LOG_FILE`, and `NACOS_LOG_USE_FLASK_LOGGER` settings before release.
 - Flask-Nacos never creates the configured log directory while logging is

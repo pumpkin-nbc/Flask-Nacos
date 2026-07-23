@@ -42,6 +42,8 @@
 - 轮转日志默认每个文件 10 MiB，并保留五个备份。
 - 控制台日志按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
   `ERROR` 红色、`CRITICAL` 加粗红色；文件日志保持纯文本，不包含 ANSI 转义符。
+- 新增脱敏的临时实例心跳状态日志：SDK 心跳成功使用 `INFO`、失败使用 `ERROR`；
+  失败仍进入 SDK 后续重试，并且不会记录响应正文或异常消息。
 - 在发布前移除未发布的 `NACOS_LOG_TO_CONSOLE`、`NACOS_LOG_DIR`、
   `NACOS_LOG_FILE` 与 `NACOS_LOG_USE_FLASK_LOGGER` 配置。
 - 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。

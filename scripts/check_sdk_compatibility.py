@@ -43,6 +43,16 @@ REQUIRED_PARAMETERS: Dict[str, Set[str]] = {
         "ephemeral",
         "group_name",
     },
+    "send_heartbeat": {
+        "service_name",
+        "ip",
+        "port",
+        "cluster_name",
+        "weight",
+        "metadata",
+        "ephemeral",
+        "group_name",
+    },
     "list_naming_instance": {
         "service_name",
         "clusters",
