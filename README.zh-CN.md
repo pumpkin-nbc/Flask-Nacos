@@ -519,29 +519,30 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_FAIL_FAST` | `False` | 为 `True` 时 Nacos 异常会抛出。 |
 | `NACOS_LOG_ENABLED` | `False` | Flask-Nacos 安全日志总开关；SDK 原生日志始终静默。 |
 | `NACOS_LOG_LEVEL` | `"INFO"` | Flask-Nacos 日志级别（`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`）。 |
-| `NACOS_LOG_TO_CONSOLE` | `False` | 为 `True` 时添加控制台（`StreamHandler`）。 |
-| `NACOS_LOG_DIR` | `"./logs"` | 日志目录；显式设为 `None` 可禁用文件输出。 |
-| `NACOS_LOG_FILENAME` | `"flask_nacos.log"` | 日志文件名；拒绝路径和目录穿越。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | 日志启用时，向控制台输出正常日志和异常日志。 |
+| `NACOS_LOG_FILE_ENABLED` | `True` | 日志启用时，写入轮转日志文件。 |
+| `NACOS_LOG_PATH` | `"./logs"` | Flask-Nacos 日志文件所在目录。 |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | 日志文件名；拒绝路径和目录穿越。 |
 | `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 日志格式字符串。 |
 | `NACOS_LOG_PROPAGATE` | `True` | 是否向父级 logger 传播；始终不修改 root logger。 |
-| `NACOS_LOG_USE_FLASK_LOGGER` | `False` | 复用 `app.logger` 的 handler，而不新建 handler。 |
-| `NACOS_LOG_MAX_BYTES` | `None` | 正整数时启用 `RotatingFileHandler`，否则使用普通 `FileHandler`。 |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | 正整数设置轮转文件大小；`None` 使用普通 `FileHandler`。 |
 | `NACOS_LOG_BACKUP_COUNT` | `5` | 轮转文件的备份数量。 |
 
 ### 日志
 
 `NACOS_LOG_*` 仅控制 Flask-Nacos 生成的脱敏安全日志。底层 SDK 原生日志可能包含 token、
 请求参数或配置正文，因此始终静默。默认不创建日志文件或 `~/logs/nacos` 目录，也不修改
-root logger。仅当 `NACOS_LOG_ENABLED=True` 时才会创建 `NACOS_LOG_DIR` 并写入
-`NACOS_LOG_FILENAME`；默认结果为 `./logs/flask_nacos.log`。日志关闭时，即使配置了目录也
+root logger。`NACOS_LOG_ENABLED=True` 时默认同时开启控制台和轮转文件输出，并创建
+`NACOS_LOG_PATH` 后写入 `NACOS_LOG_FILENAME`；默认结果为 `./logs/flask-nacos.log`。日志关闭时，即使配置了目录也
 不会创建。文件中只包含 Flask-Nacos 安全日志，不包含 SDK 原始通信内容。
 
 ```python
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_TO_CONSOLE=False,
-    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
     NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_PROPAGATE=True,
 )

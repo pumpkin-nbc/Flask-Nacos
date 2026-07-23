@@ -188,20 +188,21 @@ records may contain tokens, request parameters, or configuration content.
 
 By default logging is disabled, Flask-Nacos creates no log file, does not touch
 the root logger, and does not create the SDK's `~/logs/nacos` directory. When
-`NACOS_LOG_ENABLED=True`, it creates `NACOS_LOG_DIR` and writes
-`NACOS_LOG_FILENAME` there. The defaults produce `./logs/flask_nacos.log`.
+`NACOS_LOG_ENABLED=True`, console and rotating-file output are both enabled by
+default. It creates `NACOS_LOG_PATH` for `NACOS_LOG_FILENAME`; the defaults
+produce `./logs/flask-nacos.log`.
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | no | Master switch for Flask-Nacos safety logs. SDK-native logging remains silent in either state. |
 | `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
-| `NACOS_LOG_TO_CONSOLE` | bool | `False` | no | When `True`, add a `StreamHandler` (console output). When `False`, no console handler is added. |
-| `NACOS_LOG_DIR` | str \| None | `"./logs"` | no | Directory for Flask-Nacos safety logs. It is created only when logging is enabled; explicit `None` disables file output. |
-| `NACOS_LOG_FILENAME` | str | `"flask_nacos.log"` | no | Filename inside `NACOS_LOG_DIR`; must not contain a path or directory traversal. |
+| `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | no | Print both normal and error records to the console when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | bool | `True` | no | Write a rotating log file when logging is enabled. |
+| `NACOS_LOG_PATH` | str | `"./logs"` | no | Directory for Flask-Nacos safety logs. It is created only when both logging and file output are enabled. |
+| `NACOS_LOG_FILENAME` | str | `"flask-nacos.log"` | no | Filename inside `NACOS_LOG_PATH`; must not contain a path or directory traversal. |
 | `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | no | Format string applied to flask-nacos handlers. |
 | `NACOS_LOG_PROPAGATE` | bool | `True` | no | Whether records propagate to parent loggers. Even when `True`, the root logger is never modified. |
-| `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | no | When `True`, reuse the Flask `app.logger` handlers instead of creating new ones. `app.logger` and the root logger are not modified. The SDK default file is still prevented. |
-| `NACOS_LOG_MAX_BYTES` | int \| None | `None` | no | When a positive int, use a `RotatingFileHandler` with this size limit; otherwise a plain `FileHandler`. |
+| `NACOS_LOG_MAX_BYTES` | int \| None | `10485760` | no | Positive int sets the `RotatingFileHandler` size limit; `None` uses a plain `FileHandler`. |
 | `NACOS_LOG_BACKUP_COUNT` | int | `5` | no | Backup count for the `RotatingFileHandler`. |
 
 Repeated `init_app(app)` calls never add duplicate handlers.
@@ -213,7 +214,8 @@ Examples:
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
     NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_MAX_BYTES=10485760,
     NACOS_LOG_BACKUP_COUNT=5,
@@ -222,8 +224,8 @@ app.config.update(
 # Container-friendly: console only, no files.
 app.config.update(
     NACOS_LOG_ENABLED=True,
-    NACOS_LOG_TO_CONSOLE=True,
-    NACOS_LOG_DIR=None,
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=False,
 )
 
 # Silence Flask-Nacos safety logs too (SDK-native logs are always silent).
@@ -232,7 +234,8 @@ app.config.update(NACOS_LOG_ENABLED=False)
 
 Production guidance: prefer console output in containers so the platform
 collects stdout. If a file is not wanted while logging is enabled, set
-`NACOS_LOG_DIR=None`; otherwise the default file is `./logs/flask_nacos.log`.
+`NACOS_LOG_FILE_ENABLED=False`; otherwise the default file is
+`./logs/flask-nacos.log`.
 Do not rely on the nacos-sdk-python default log path.
 
 ## HTTPS limitation in synchronous SDK 2.x

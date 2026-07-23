@@ -118,7 +118,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
 def test_beginner_example_hides_client_failure_details(monkeypatch, caplog, tmp_path):
     monkeypatch.setenv("NACOS_ENABLED", "true")
     monkeypatch.setenv("NACOS_LOG_ENABLED", "true")
-    monkeypatch.setenv("NACOS_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setenv("NACOS_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("NACOS_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("NACOS_USERNAME", "private-example-user")
     monkeypatch.setenv("NACOS_PASSWORD", "private-example-password")

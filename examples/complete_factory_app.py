@@ -59,9 +59,15 @@ def create_app() -> Flask:
         NACOS_HEALTH_CHECK_ENABLED=True,
         NACOS_HEALTH_CHECK_PATH="/health/nacos",
         NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
-        NACOS_LOG_DIR=os.environ.get("NACOS_LOG_DIR", "./logs"),
+        NACOS_LOG_CONSOLE_ENABLED=os.environ.get(
+            "NACOS_LOG_CONSOLE_ENABLED", "true"
+        ),
+        NACOS_LOG_FILE_ENABLED=os.environ.get(
+            "NACOS_LOG_FILE_ENABLED", "true"
+        ),
+        NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
         NACOS_LOG_FILENAME=os.environ.get(
-            "NACOS_LOG_FILENAME", "flask_nacos.log"
+            "NACOS_LOG_FILENAME", "flask-nacos.log"
         ),
         # Keep the Flask app available while Nacos is temporarily unavailable.
         NACOS_FAIL_FAST=False,

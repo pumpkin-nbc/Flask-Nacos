@@ -16,8 +16,11 @@ def test_defaults_loaded():
     assert cfg["NACOS_FAIL_FAST"] is False
     assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
     assert cfg["NACOS_LOG_ENABLED"] is False
-    assert cfg["NACOS_LOG_DIR"] == "./logs"
-    assert cfg["NACOS_LOG_FILENAME"] == "flask_nacos.log"
+    assert cfg["NACOS_LOG_CONSOLE_ENABLED"] is True
+    assert cfg["NACOS_LOG_FILE_ENABLED"] is True
+    assert cfg["NACOS_LOG_PATH"] == "./logs"
+    assert cfg["NACOS_LOG_FILENAME"] == "flask-nacos.log"
+    assert cfg["NACOS_LOG_MAX_BYTES"] == 10485760
     # Every default key should be present.
     for key in DEFAULTS:
         assert key in cfg
@@ -38,23 +41,23 @@ def test_user_overrides_defaults():
     assert cfg["NACOS_SERVICE_PORT"] == 9000
 
 
-def test_legacy_log_file_setting_falls_back_to_log_directory():
+def test_removed_log_file_setting_is_ignored():
     app = Flask(__name__)
     app.config["NACOS_LOG_FILE"] = "legacy-logs"
 
     cfg = load_config(app)
 
-    assert cfg["NACOS_LOG_DIR"] == "legacy-logs"
+    assert cfg["NACOS_LOG_PATH"] == "./logs"
     assert "NACOS_LOG_FILE" not in cfg
 
 
-def test_canonical_log_directory_wins_over_legacy_setting():
+def test_removed_log_directory_settings_are_ignored():
     app = Flask(__name__)
     app.config.update(NACOS_LOG_DIR="canonical-logs", NACOS_LOG_FILE="legacy-logs")
 
     cfg = load_config(app)
 
-    assert cfg["NACOS_LOG_DIR"] == "canonical-logs"
+    assert cfg["NACOS_LOG_PATH"] == "./logs"
 
 
 def test_bool_coercion_from_string():
@@ -64,6 +67,19 @@ def test_bool_coercion_from_string():
 
     assert cfg["NACOS_ENABLED"] is False
     assert cfg["NACOS_FAIL_FAST"] is True
+
+
+def test_log_output_switches_are_coerced_from_strings():
+    app = Flask(__name__)
+    app.config.update(
+        NACOS_LOG_CONSOLE_ENABLED="false",
+        NACOS_LOG_FILE_ENABLED="false",
+    )
+
+    cfg = load_config(app)
+
+    assert cfg["NACOS_LOG_CONSOLE_ENABLED"] is False
+    assert cfg["NACOS_LOG_FILE_ENABLED"] is False
 
 
 def test_weight_coercion():

@@ -35,9 +35,10 @@ def create_client(config: Dict[str, Any]) -> Any:
     server_addresses = config["NACOS_SERVER_ADDR"]
     namespace = config.get("NACOS_NAMESPACE_ID") or ""
 
-    configured_log_directory = config.get("NACOS_LOG_DIR", "./logs")
+    configured_log_directory = config.get("NACOS_LOG_PATH", "./logs")
     if (
         config.get("NACOS_LOG_ENABLED", False)
+        and config.get("NACOS_LOG_FILE_ENABLED", True)
         and
         isinstance(configured_log_directory, str)
         and configured_log_directory.strip()

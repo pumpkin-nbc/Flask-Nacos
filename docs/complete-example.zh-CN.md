@@ -287,8 +287,9 @@ worker 内不会重复执行 SDK 注册，fork 后也会重建进程锁。共享
 
 SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`NACOS_LOG_*` 只控制 Flask-Nacos
 安全日志；默认既不创建 `~/logs/nacos`，也不创建日志文件。设置
-`NACOS_LOG_ENABLED=True` 后默认写入 `./logs/flask_nacos.log`，可分别通过
-`NACOS_LOG_DIR` 与 `NACOS_LOG_FILENAME` 覆盖目录和文件名。
+`NACOS_LOG_ENABLED=True` 后默认同时启用控制台和轮转文件输出，文件写入
+`./logs/flask-nacos.log`，可分别通过 `NACOS_LOG_PATH` 与
+`NACOS_LOG_FILENAME` 覆盖目录和文件名。
 
 同步 SDK 2.x client 没有提供可靠的 HTTPS 证书校验控制。生产 HTTPS 部署应使用受信网络，
 或通过能够校验证书的 TLS 代理 / sidecar 连接。

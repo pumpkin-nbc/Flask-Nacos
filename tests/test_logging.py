@@ -151,7 +151,7 @@ def test_disabled_ignores_configured_path_and_filename(tmp_path):
     log_directory = tmp_path / "must-not-exist"
     app, cfg = _cfg(
         NACOS_LOG_ENABLED=False,
-        NACOS_LOG_DIR=str(log_directory),
+        NACOS_LOG_PATH=str(log_directory),
         NACOS_LOG_FILENAME="nested/invalid.log",
         NACOS_FAIL_FAST=True,
     )
@@ -191,11 +191,11 @@ def test_invalid_level_with_fail_fast_raises():
 @pytest.mark.parametrize(
     ("key", "value"),
     [
-        ("NACOS_LOG_DIR", ""),
-        ("NACOS_LOG_DIR", 123),
+        ("NACOS_LOG_PATH", ""),
+        ("NACOS_LOG_PATH", 123),
         ("NACOS_LOG_FILENAME", ""),
-        ("NACOS_LOG_FILENAME", "nested/flask_nacos.log"),
-        ("NACOS_LOG_FILENAME", "nested\\flask_nacos.log"),
+        ("NACOS_LOG_FILENAME", "nested/flask-nacos.log"),
+        ("NACOS_LOG_FILENAME", "nested\\flask-nacos.log"),
         ("NACOS_LOG_MAX_BYTES", True),
         ("NACOS_LOG_MAX_BYTES", -1),
         ("NACOS_LOG_MAX_BYTES", 1.5),
@@ -214,7 +214,7 @@ def test_invalid_log_file_and_rotation_settings_fail_fast(key, value):
 def test_valid_string_rotation_settings_are_coerced(tmp_path):
     log_directory = tmp_path / "rotating"
     app, cfg = _cfg(
-        NACOS_LOG_DIR=str(log_directory),
+        NACOS_LOG_PATH=str(log_directory),
         NACOS_LOG_MAX_BYTES="1024",
         NACOS_LOG_BACKUP_COUNT="2",
         NACOS_FAIL_FAST=True,
@@ -238,7 +238,7 @@ def test_get_log_level_helper():
 # 11-12: console handler + dedup ---------------------------------------------
 
 def test_console_enabled_adds_stream_handler():
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=True)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True)
     nlog.configure_logger(app, cfg)
     logger = _flask_logger()
     consoles = _console_handlers(logger)
@@ -246,19 +246,32 @@ def test_console_enabled_adds_stream_handler():
     assert isinstance(consoles[0], logging.StreamHandler)
 
 
+def test_default_console_prints_normal_and_error_records(capsys):
+    app, cfg = _cfg(NACOS_LOG_FILE_ENABLED=False)
+    nlog.configure_logger(app, cfg)
+
+    logger = _flask_logger()
+    logger.info("normal-record")
+    logger.error("error-record")
+
+    output = capsys.readouterr().err
+    assert "normal-record" in output
+    assert "error-record" in output
+
+
 def test_repeated_configuration_does_not_duplicate_console_handler():
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=True)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True)
     nlog.configure_logger(app, cfg)
     nlog.configure_logger(app, cfg)
     assert len(_console_handlers(_flask_logger())) == 1
 
 
 def test_last_configuration_atomically_removes_console_handler():
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=True)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True)
     nlog.configure_logger(app, cfg)
     assert len(_console_handlers(_flask_logger())) == 1
 
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=False)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=False)
     nlog.configure_logger(app, cfg)
     assert _console_handlers(_flask_logger()) == []
 
@@ -276,8 +289,8 @@ def test_repeated_init_app_does_not_duplicate_handlers(monkeypatch):
         NACOS_AUTO_DEREGISTER=False,
         NACOS_SERVER_ADDR="127.0.0.1:8848",
         NACOS_LOG_ENABLED=True,
-        NACOS_LOG_TO_CONSOLE=True,
-        NACOS_LOG_DIR=None,
+        NACOS_LOG_CONSOLE_ENABLED=True,
+        NACOS_LOG_FILE_ENABLED=False,
     )
     nacos = FlaskNacos()
     nacos.init_app(app)
@@ -290,7 +303,7 @@ def test_repeated_init_app_does_not_duplicate_handlers(monkeypatch):
 def test_enabled_without_directory_uses_default_path(tmp_path):
     app, cfg = _cfg()
     nlog.configure_logger(app, cfg)
-    expected = tmp_path / "logs" / "flask_nacos.log"
+    expected = tmp_path / "logs" / "flask-nacos.log"
     assert expected.exists()
     assert len(_file_handlers(_flask_logger())) == 1
 
@@ -298,7 +311,7 @@ def test_enabled_without_directory_uses_default_path(tmp_path):
 def test_file_configured_adds_file_handler(tmp_path):
     log_directory = tmp_path / "sub"
     app, cfg = _cfg(
-        NACOS_LOG_DIR=str(log_directory), NACOS_LOG_FILENAME="custom.log"
+        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_FILENAME="custom.log"
     )
     nlog.configure_logger(app, cfg)
     files = _file_handlers(_flask_logger())
@@ -307,10 +320,26 @@ def test_file_configured_adds_file_handler(tmp_path):
     assert log_directory.is_dir()
 
 
+def test_file_logging_can_be_disabled_without_creating_path(tmp_path):
+    log_directory = tmp_path / "must-not-exist"
+    app, cfg = _cfg(
+        NACOS_LOG_FILE_ENABLED=False,
+        NACOS_LOG_PATH=123,
+        NACOS_LOG_FILENAME="nested/invalid.log",
+        NACOS_FAIL_FAST=True,
+    )
+
+    nlog.configure_logger(app, cfg)
+
+    assert not log_directory.exists()
+    assert _file_handlers(_flask_logger()) == []
+    assert len(_console_handlers(_flask_logger())) == 1
+
+
 def test_existing_file_cannot_be_used_as_log_directory(tmp_path):
     legacy_file = tmp_path / "logs"
     legacy_file.write_text("legacy log content", encoding="utf-8")
-    app, cfg = _cfg(NACOS_LOG_DIR=str(legacy_file), NACOS_FAIL_FAST=True)
+    app, cfg = _cfg(NACOS_LOG_PATH=str(legacy_file), NACOS_FAIL_FAST=True)
 
     with pytest.raises(NacosLoggingError, match="must point to a directory"):
         nlog.validate_logging_config(cfg)
@@ -322,7 +351,7 @@ def test_file_configured_blocks_sdk_default(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     log_directory = tmp_path / "flask-nacos"
-    app, cfg = _cfg(NACOS_LOG_DIR=str(log_directory))
+    app, cfg = _cfg(NACOS_LOG_PATH=str(log_directory))
     nlog.configure_logger(app, cfg)
     for name in nlog.SDK_LOGGER_NAMES:
         assert logging.getLogger(name).hasHandlers()
@@ -335,8 +364,8 @@ def test_non_fail_fast_file_failure_keeps_requested_console_logging(monkeypatch)
 
     monkeypatch.setattr(nlog, "_create_file_handler", fail_file_handler)
     app, cfg = _cfg(
-        NACOS_LOG_TO_CONSOLE=True,
-        NACOS_LOG_DIR="unwritable",
+        NACOS_LOG_CONSOLE_ENABLED=True,
+        NACOS_LOG_PATH="unwritable",
         NACOS_FAIL_FAST=False,
     )
 
@@ -351,7 +380,7 @@ def test_non_fail_fast_file_failure_keeps_requested_console_logging(monkeypatch)
 def test_max_bytes_uses_rotating_file_handler(tmp_path):
     log_directory = tmp_path / "rotating"
     app, cfg = _cfg(
-        NACOS_LOG_DIR=str(log_directory),
+        NACOS_LOG_PATH=str(log_directory),
         NACOS_LOG_MAX_BYTES=1024,
         NACOS_LOG_BACKUP_COUNT=3,
     )
@@ -363,7 +392,9 @@ def test_max_bytes_uses_rotating_file_handler(tmp_path):
 
 def test_no_max_bytes_uses_plain_file_handler(tmp_path):
     log_directory = tmp_path / "plain"
-    app, cfg = _cfg(NACOS_LOG_DIR=str(log_directory))
+    app, cfg = _cfg(
+        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_MAX_BYTES=None
+    )
     nlog.configure_logger(app, cfg)
     handler = _file_handlers(_flask_logger())[0]
     assert isinstance(handler, logging.FileHandler)
@@ -374,7 +405,7 @@ def test_no_max_bytes_uses_plain_file_handler(tmp_path):
 
 def test_repeated_configuration_does_not_duplicate_file_handler(tmp_path):
     log_directory = tmp_path / "dedup"
-    app, cfg = _cfg(NACOS_LOG_DIR=str(log_directory))
+    app, cfg = _cfg(NACOS_LOG_PATH=str(log_directory))
     nlog.configure_logger(app, cfg)
     nlog.configure_logger(app, cfg)
     assert len(_file_handlers(_flask_logger())) == 1
@@ -383,14 +414,14 @@ def test_repeated_configuration_does_not_duplicate_file_handler(tmp_path):
 def test_last_configuration_replaces_and_then_removes_file_handler(tmp_path):
     first = tmp_path / "first"
     second = tmp_path / "second"
-    app, cfg = _cfg(NACOS_LOG_DIR=str(first))
+    app, cfg = _cfg(NACOS_LOG_PATH=str(first))
     nlog.configure_logger(app, cfg)
 
-    app, cfg = _cfg(NACOS_LOG_DIR=str(second))
+    app, cfg = _cfg(NACOS_LOG_PATH=str(second))
     nlog.configure_logger(app, cfg)
     files = _file_handlers(_flask_logger())
     assert len(files) == 1
-    assert files[0].baseFilename == str((second / "flask_nacos.log").resolve())
+    assert files[0].baseFilename == str((second / "flask-nacos.log").resolve())
 
     app, cfg = _cfg(NACOS_LOG_ENABLED=False)
     nlog.configure_logger(app, cfg)
@@ -414,9 +445,9 @@ def test_propagate_true_never_enables_sdk_propagation():
         assert logging.getLogger(name).propagate is False
 
 
-# 21: use flask app.logger ---------------------------------------------------
+# 21: Flask logger remains independent --------------------------------------
 
-def test_use_flask_logger_adds_no_new_handler():
+def test_flask_app_logger_handlers_are_not_reused_or_modified():
     app = Flask(__name__)
     app_handler = logging.StreamHandler(StringIO())
     app.logger.addHandler(app_handler)
@@ -424,15 +455,13 @@ def test_use_flask_logger_adds_no_new_handler():
 
     cfg = nconfig.load_config(app)
     cfg["NACOS_LOG_ENABLED"] = True
-    cfg["NACOS_LOG_USE_FLASK_LOGGER"] = True
+    cfg["NACOS_LOG_CONSOLE_ENABLED"] = True
     nlog.configure_logger(app, cfg)
 
     logger = _flask_logger()
-    # No flask-nacos owned console/file handler was created.
-    assert _console_handlers(logger) == []
-    assert _file_handlers(logger) == []
-    # The app.logger handler is reused by reference and app.logger is untouched.
-    assert app_handler in logger.handlers
+    assert len(_console_handlers(logger)) == 1
+    assert len(_file_handlers(logger)) == 1
+    assert app_handler not in logger.handlers
     assert app.logger.handlers == app_handlers_before
 
 
@@ -462,7 +491,7 @@ def test_sdk_records_never_reach_root_or_flask_nacos_handlers():
     logging.getLogger().addHandler(root_handler)
     _flask_logger().addHandler(wrapper_handler)
 
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=False, NACOS_LOG_PROPAGATE=True)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=False, NACOS_LOG_PROPAGATE=True)
     nlog.configure_logger(app, cfg)
     logging.getLogger("nacos.client").critical("credential-and-config-content")
 
@@ -494,9 +523,9 @@ def test_configured_file_contains_only_safe_wrapper_records(tmp_path):
         "private-config-body",
     )
     log_directory = tmp_path / "logs"
-    log_file = log_directory / "flask_nacos.log"
+    log_file = log_directory / "flask-nacos.log"
     app, cfg = _cfg(
-        NACOS_LOG_DIR=str(log_directory), NACOS_LOG_LEVEL="DEBUG"
+        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_LEVEL="DEBUG"
     )
     nlog.configure_logger(app, cfg)
 
@@ -527,7 +556,7 @@ def test_does_not_modify_root_logger_handlers():
     sentinel = logging.StreamHandler(StringIO())
     root.addHandler(sentinel)
     before = list(root.handlers)
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=True)
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True)
     nlog.configure_logger(app, cfg)
     assert root.handlers == before
 
@@ -556,8 +585,8 @@ def test_logs_do_not_contain_secrets(monkeypatch):
         NACOS_PASSWORD="supersecret-password",
         NACOS_LOG_ENABLED=True,
         NACOS_LOG_LEVEL="DEBUG",
-        NACOS_LOG_TO_CONSOLE=True,
-        NACOS_LOG_DIR=None,
+        NACOS_LOG_CONSOLE_ENABLED=True,
+        NACOS_LOG_FILE_ENABLED=False,
     )
     FlaskNacos(app)
     output = buffer.getvalue()
@@ -569,7 +598,9 @@ def test_logs_do_not_contain_secrets(monkeypatch):
 def test_no_file_created_outside_configured_path(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    app, cfg = _cfg(NACOS_LOG_TO_CONSOLE=True, NACOS_LOG_DIR=None)
+    app, cfg = _cfg(
+        NACOS_LOG_CONSOLE_ENABLED=True, NACOS_LOG_FILE_ENABLED=False
+    )
     nlog.configure_logger(app, cfg)
     # Only console logging requested: nothing on disk anywhere under HOME.
     assert list(tmp_path.rglob("*.log")) == []

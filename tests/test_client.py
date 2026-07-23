@@ -86,7 +86,7 @@ def test_create_client_uses_configured_log_directory(monkeypatch, tmp_path):
     log_directory = tmp_path / "logs"
 
     create_client(
-        _config(NACOS_LOG_ENABLED=True, NACOS_LOG_DIR=str(log_directory))
+        _config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(log_directory))
     )
 
     constructor.assert_called_once_with(
@@ -104,7 +104,7 @@ def test_create_client_does_not_pass_an_existing_file_as_log_directory(
     legacy_file = tmp_path / "logs"
     legacy_file.write_text("legacy", encoding="utf-8")
 
-    create_client(_config(NACOS_LOG_ENABLED=True, NACOS_LOG_DIR=str(legacy_file)))
+    create_client(_config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(legacy_file)))
 
     constructor.assert_called_once_with(
         "nacos.example:8848",
@@ -164,7 +164,7 @@ def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(
         _config(
             NACOS_SERVER_ADDR="127.0.0.1:8848",
             NACOS_LOG_ENABLED=False,
-            NACOS_LOG_DIR=str(configured_directory),
+            NACOS_LOG_PATH=str(configured_directory),
         )
     )
 
@@ -237,7 +237,7 @@ def test_invalid_authentication_does_not_log_credentials(
             "NACOS_SECRET_KEY": credentials[3],
             "NACOS_FAIL_FAST": False,
             "NACOS_LOG_ENABLED": True,
-            "NACOS_LOG_DIR": None,
+            "NACOS_LOG_FILE_ENABLED": False,
         }
     )
 

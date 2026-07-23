@@ -179,20 +179,20 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 包含 token、请求参数或配置正文，因此始终静默。
 
 默认关闭 Flask-Nacos 日志，不创建任何日志文件、不修改 root logger，也不会创建 SDK 的
-`~/logs/nacos` 目录。设置 `NACOS_LOG_ENABLED=True` 后才会创建 `NACOS_LOG_DIR`，并在其中
-写入 `NACOS_LOG_FILENAME`；默认结果为 `./logs/flask_nacos.log`。
+`~/logs/nacos` 目录。设置 `NACOS_LOG_ENABLED=True` 后，控制台和轮转文件输出默认同时开启；
+创建 `NACOS_LOG_PATH` 后写入 `NACOS_LOG_FILENAME`，默认结果为 `./logs/flask-nacos.log`。
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | 否 | Flask-Nacos 安全日志总开关；无论取值如何，SDK 原生日志始终静默。 |
 | `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
-| `NACOS_LOG_TO_CONSOLE` | bool | `False` | 否 | 为 `True` 时添加 `StreamHandler`（控制台输出）；为 `False` 时不添加。 |
-| `NACOS_LOG_DIR` | str \| None | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志启用时创建，显式设为 `None` 可禁用文件输出。 |
-| `NACOS_LOG_FILENAME` | str | `"flask_nacos.log"` | 否 | `NACOS_LOG_DIR` 内的文件名；不能包含路径或目录穿越。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | 否 | 日志启用时，向控制台输出正常日志和异常日志。 |
+| `NACOS_LOG_FILE_ENABLED` | bool | `True` | 否 | 日志启用时，写入轮转日志文件。 |
+| `NACOS_LOG_PATH` | str | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志和文件输出均启用时创建。 |
+| `NACOS_LOG_FILENAME` | str | `"flask-nacos.log"` | 否 | `NACOS_LOG_PATH` 内的文件名；不能包含路径或目录穿越。 |
 | `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 否 | 应用于 flask-nacos handler 的格式字符串。 |
 | `NACOS_LOG_PROPAGATE` | bool | `True` | 否 | 是否向父级 logger 传播。即使为 `True` 也不会修改 root logger。 |
-| `NACOS_LOG_USE_FLASK_LOGGER` | bool | `False` | 否 | 为 `True` 时复用 Flask `app.logger` 的 handler，而不新建 handler；不修改 `app.logger` 与 root logger；仍会阻止 SDK 默认文件。 |
-| `NACOS_LOG_MAX_BYTES` | int \| None | `None` | 否 | 为正整数时使用 `RotatingFileHandler`（按此大小轮转），否则使用普通 `FileHandler`。 |
+| `NACOS_LOG_MAX_BYTES` | int \| None | `10485760` | 否 | 正整数设置 `RotatingFileHandler` 的轮转大小；`None` 使用普通 `FileHandler`。 |
 | `NACOS_LOG_BACKUP_COUNT` | int | `5` | 否 | `RotatingFileHandler` 的备份数量。 |
 
 重复调用 `init_app(app)` 不会重复添加 handler。
@@ -204,7 +204,8 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
     NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_MAX_BYTES=10485760,
     NACOS_LOG_BACKUP_COUNT=5,
@@ -213,8 +214,8 @@ app.config.update(
 # 容器友好：仅控制台，无文件。
 app.config.update(
     NACOS_LOG_ENABLED=True,
-    NACOS_LOG_TO_CONSOLE=True,
-    NACOS_LOG_DIR=None,
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=False,
 )
 
 # 同时静默 Flask-Nacos 安全日志（SDK 原生日志始终静默）。
@@ -222,7 +223,7 @@ app.config.update(NACOS_LOG_ENABLED=False)
 ```
 
 生产建议：容器中优先使用平台统一日志。若启用日志但不希望创建文件，请设置
-`NACOS_LOG_DIR=None`；否则默认文件为 `./logs/flask_nacos.log`。不要依赖
+`NACOS_LOG_FILE_ENABLED=False`；否则默认文件为 `./logs/flask-nacos.log`。不要依赖
 nacos-sdk-python 的默认日志路径。
 
 ## 同步 SDK 2.x 的 HTTPS 限制

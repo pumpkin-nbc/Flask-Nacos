@@ -169,7 +169,7 @@
 - 现象：希望 Flask-Nacos 安全日志写入指定目录。
 - 可能原因：未显式请求时不会创建文件。
 - 排查方法：确认目标目录可写。
-- 解决建议：设置 `NACOS_LOG_ENABLED=True`、`NACOS_LOG_DIR="/var/log/flask-nacos"`，
+- 解决建议：设置 `NACOS_LOG_ENABLED=True`、`NACOS_LOG_PATH="/var/log/flask-nacos"`，
   并可用 `NACOS_LOG_FILENAME="service.log"` 自定义文件名。如需轮转，同时设置
   `NACOS_LOG_MAX_BYTES` 与
   `NACOS_LOG_BACKUP_COUNT`。SDK 原生日志不会写入该文件。
@@ -190,9 +190,9 @@
 - 现象：每条日志出现两次或多次。
 - 可能原因：flask-nacos handler 与传播到父级的 handler 同时输出，或多套日志配置各自添加了
   handler。
-- 排查方法：检查是否配置了 root logger，以及 `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_DIR` 是否
+- 排查方法：检查是否配置了 root logger，以及 `NACOS_LOG_CONSOLE_ENABLED`/`NACOS_LOG_FILE_ENABLED` 是否
   与你自己的 handler 重叠。
-- 解决建议：要么使用 flask-nacos 的 handler（设置 `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_DIR`）
+- 解决建议：要么使用 flask-nacos 的 handler（设置 `NACOS_LOG_CONSOLE_ENABLED`/`NACOS_LOG_FILE_ENABLED`）
   并设置 `NACOS_LOG_PROPAGATE=False`；要么依赖自己的日志系统，设置
   `NACOS_LOG_PROPAGATE=True` 且不使用 flask-nacos handler。
 
@@ -201,9 +201,9 @@
 - 现象：希望 flask-nacos 日志走 `app.logger`。
 - 可能原因：默认情况下 flask-nacos 使用自己的命名 logger。
 - 排查方法：确认 `app.logger` 已有你想要的 handler。
-- 解决建议：设置 `NACOS_LOG_USE_FLASK_LOGGER=True`。flask-nacos 会复用现有的 `app.logger`
-  handler，而不修改 `app.logger` 或 root logger。SDK 原生日志仍保持静默，不会转发到
-  `app.logger`。
+- 解决建议：按需配置 `NACOS_LOG_CONSOLE_ENABLED`、`NACOS_LOG_FILE_ENABLED`
+  和 `NACOS_LOG_PROPAGATE`。Flask-Nacos 不复用或修改 `app.logger` handler；
+  SDK 原生日志仍保持静默。
 
 ## 21. HTTPS 能否校验 Nacos 服务端证书？
 

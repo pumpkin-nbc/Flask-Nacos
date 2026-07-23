@@ -75,13 +75,13 @@ DEFAULTS: Dict[str, Any] = {
     # Safe Flask-Nacos logging control (1.0.2). Raw SDK logs stay silent.
     "NACOS_LOG_ENABLED": False,
     "NACOS_LOG_LEVEL": "INFO",
-    "NACOS_LOG_TO_CONSOLE": False,
-    "NACOS_LOG_DIR": "./logs",
-    "NACOS_LOG_FILENAME": "flask_nacos.log",
+    "NACOS_LOG_CONSOLE_ENABLED": True,
+    "NACOS_LOG_FILE_ENABLED": True,
+    "NACOS_LOG_PATH": "./logs",
+    "NACOS_LOG_FILENAME": "flask-nacos.log",
     "NACOS_LOG_FORMAT": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     "NACOS_LOG_PROPAGATE": True,
-    "NACOS_LOG_USE_FLASK_LOGGER": False,
-    "NACOS_LOG_MAX_BYTES": None,
+    "NACOS_LOG_MAX_BYTES": 10485760,
     "NACOS_LOG_BACKUP_COUNT": 5,
 }
 
@@ -97,11 +97,6 @@ def load_config(app) -> Dict[str, Any]:
     for key in DEFAULTS:
         if key in app.config:
             merged[key] = app.config[key]
-
-    # Compatibility with the unreleased early 1.0.2 name. The canonical
-    # setting is NACOS_LOG_DIR; when both are present, the canonical name wins.
-    if "NACOS_LOG_DIR" not in app.config and "NACOS_LOG_FILE" in app.config:
-        merged["NACOS_LOG_DIR"] = app.config["NACOS_LOG_FILE"]
 
     # NACOS_SERVICE_EPHEMERAL is intentionally excluded: it must be a genuine
     # bool and is validated strictly at registration time.
@@ -122,9 +117,9 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_INSTANCE_NORMALIZE",
         "NACOS_FAIL_FAST",
         "NACOS_LOG_ENABLED",
-        "NACOS_LOG_TO_CONSOLE",
+        "NACOS_LOG_CONSOLE_ENABLED",
+        "NACOS_LOG_FILE_ENABLED",
         "NACOS_LOG_PROPAGATE",
-        "NACOS_LOG_USE_FLASK_LOGGER",
     )
     for key in bool_keys:
         merged[key] = to_bool(merged[key], DEFAULTS[key])

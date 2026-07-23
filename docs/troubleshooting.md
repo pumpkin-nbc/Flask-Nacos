@@ -186,7 +186,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Symptom: you want Flask-Nacos safety logs in a specific directory.
 - Cause: no file is created unless you ask for one.
 - Investigate: confirm the target directory is writable.
-- Fix: set `NACOS_LOG_ENABLED=True`, `NACOS_LOG_DIR="/var/log/flask-nacos"`,
+- Fix: set `NACOS_LOG_ENABLED=True`, `NACOS_LOG_PATH="/var/log/flask-nacos"`,
   and optionally `NACOS_LOG_FILENAME="service.log"`. For rotation, also set
   `NACOS_LOG_MAX_BYTES` and `NACOS_LOG_BACKUP_COUNT`. Native SDK records are
   never written there.
@@ -211,19 +211,19 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: both a flask-nacos handler and a propagated parent handler emit the
   record, or multiple logging setups added handlers.
 - Investigate: check whether your app configured the root logger and whether
-  `NACOS_LOG_TO_CONSOLE`/`NACOS_LOG_DIR` overlap with your own handlers.
-- Fix: either use flask-nacos handlers (set `NACOS_LOG_TO_CONSOLE`/
-  `NACOS_LOG_DIR`) and set `NACOS_LOG_PROPAGATE=False`, or rely on your own
+  `NACOS_LOG_CONSOLE_ENABLED`/`NACOS_LOG_FILE_ENABLED` overlap with your own handlers.
+- Fix: either use flask-nacos handlers (set `NACOS_LOG_CONSOLE_ENABLED`/
+  `NACOS_LOG_FILE_ENABLED`) and set `NACOS_LOG_PROPAGATE=False`, or rely on your own
   logging with `NACOS_LOG_PROPAGATE=True` and no flask-nacos handlers.
 
-## 20. Reusing the Flask `app.logger`
+## 20. Integrating with application logging
 
-- Symptom: you want flask-nacos logs to go through `app.logger`.
+- Symptom: you want flask-nacos logs to follow the application's logging topology.
 - Cause: by default flask-nacos uses its own named logger.
-- Investigate: confirm `app.logger` already has the handlers you want.
-- Fix: set `NACOS_LOG_USE_FLASK_LOGGER=True`. flask-nacos reuses the existing
-  `app.logger` handlers without modifying `app.logger` or the root logger.
-  SDK-native records remain silent and are not forwarded to `app.logger`.
+- Investigate: check the console/file switches and parent logger propagation.
+- Fix: configure `NACOS_LOG_CONSOLE_ENABLED`, `NACOS_LOG_FILE_ENABLED`, and
+  `NACOS_LOG_PROPAGATE` for the desired topology. Flask-Nacos does not reuse or
+  modify `app.logger` handlers. SDK-native records remain silent.
 
 ## 21. Can HTTPS verify the Nacos server certificate?
 

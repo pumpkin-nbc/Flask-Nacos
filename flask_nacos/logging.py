@@ -10,7 +10,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 from threading import RLock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .exceptions import NacosLoggingError
 
@@ -21,13 +21,12 @@ DEFAULT_SDK_LOG_PATH = os.path.abspath(
     os.path.expanduser(os.path.join("~", "logs", "nacos", "nacos-client-python.log"))
 )
 DEFAULT_SDK_LOG_DIR = os.path.dirname(DEFAULT_SDK_LOG_PATH)
-FLASK_NACOS_LOG_FILENAME = "flask_nacos.log"
+FLASK_NACOS_LOG_FILENAME = "flask-nacos.log"
 DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _CONFIG_LOCK = RLock()
 _internal_logger = logging.getLogger(FLASK_NACOS_LOGGER_NAME)
-_borrowed_handlers: List[logging.Handler] = []
 
 
 def _warn_or_raise(message: str, fail_fast: bool) -> None:
@@ -90,14 +89,10 @@ def _optional_non_negative_int(
     return parsed
 
 
-def _normalize_log_file(
-    directory: Any, filename: Any, fail_fast: bool
-) -> Optional[str]:
-    if directory is None:
-        return None
-    if not isinstance(directory, str) or not directory.strip():
+def _normalize_log_file(path: Any, filename: Any, fail_fast: bool) -> Optional[str]:
+    if not isinstance(path, str) or not path.strip():
         _warn_or_raise(
-            "NACOS_LOG_DIR must be a non-empty directory path or None",
+            "NACOS_LOG_PATH must be a non-empty directory path",
             fail_fast,
         )
         return None
@@ -114,10 +109,10 @@ def _normalize_log_file(
             fail_fast,
         )
         return None
-    log_directory = os.path.abspath(os.path.expanduser(directory.strip()))
+    log_directory = os.path.abspath(os.path.expanduser(path.strip()))
     if os.path.exists(log_directory) and not os.path.isdir(log_directory):
         _warn_or_raise(
-            "NACOS_LOG_DIR must point to a directory, but an existing file "
+            "NACOS_LOG_PATH must point to a directory, but an existing file "
             f"was found at {log_directory!r}",
             fail_fast,
         )
@@ -133,10 +128,10 @@ def _build_settings(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "enabled": False,
             "level": logging.INFO,
             "formatter": logging.Formatter(DEFAULT_LOG_FORMAT),
-            "to_console": False,
+            "console_enabled": False,
+            "file_enabled": False,
             "file": None,
             "propagate": False,
-            "use_flask_logger": False,
             "max_bytes": None,
             "backup_count": 0,
             "fail_fast": fail_fast,
@@ -154,14 +149,18 @@ def _build_settings(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "enabled": True,
         "level": get_log_level(cfg.get("NACOS_LOG_LEVEL", "INFO"), fail_fast),
         "formatter": _make_formatter(cfg.get("NACOS_LOG_FORMAT"), fail_fast),
-        "to_console": bool(cfg.get("NACOS_LOG_TO_CONSOLE", False)),
-        "file": _normalize_log_file(
-            cfg.get("NACOS_LOG_DIR", "./logs"),
-            cfg.get("NACOS_LOG_FILENAME", FLASK_NACOS_LOG_FILENAME),
-            fail_fast,
+        "console_enabled": bool(cfg.get("NACOS_LOG_CONSOLE_ENABLED", True)),
+        "file_enabled": bool(cfg.get("NACOS_LOG_FILE_ENABLED", True)),
+        "file": (
+            _normalize_log_file(
+                cfg.get("NACOS_LOG_PATH", "./logs"),
+                cfg.get("NACOS_LOG_FILENAME", FLASK_NACOS_LOG_FILENAME),
+                fail_fast,
+            )
+            if cfg.get("NACOS_LOG_FILE_ENABLED", True)
+            else None
         ),
         "propagate": bool(cfg.get("NACOS_LOG_PROPAGATE", True)),
-        "use_flask_logger": bool(cfg.get("NACOS_LOG_USE_FLASK_LOGGER", False)),
         "max_bytes": max_bytes,
         "backup_count": backup_count,
         "fail_fast": fail_fast,
@@ -303,34 +302,16 @@ def _remove_owned_handlers(logger: logging.Logger) -> None:
             pass
 
 
-def _detach_borrowed_handlers(logger: logging.Logger) -> None:
-    global _borrowed_handlers
-    for handler in _borrowed_handlers:
-        if handler in logger.handlers:
-            logger.removeHandler(handler)
-    _borrowed_handlers = []
-
-
-def _desired_handlers(
-    settings: Dict[str, Any], app: Any
-) -> Tuple[List[logging.Handler], List[logging.Handler]]:
+def _desired_handlers(settings: Dict[str, Any]) -> List[logging.Handler]:
     owned: List[logging.Handler] = []
-    borrowed: List[logging.Handler] = []
     if not settings["enabled"]:
-        return [_mark_owned(logging.NullHandler(), "null")], borrowed
-    if settings["use_flask_logger"]:
-        app_logger = getattr(app, "logger", None)
-        if app_logger is not None:
-            borrowed = list(app_logger.handlers)
-        if not borrowed:
-            owned.append(_mark_owned(logging.NullHandler(), "null"))
-        return owned, borrowed
-    if settings["to_console"]:
+        return [_mark_owned(logging.NullHandler(), "null")]
+    if settings["console_enabled"]:
         handler = _mark_owned(logging.StreamHandler(), "console")
         handler.setLevel(settings["level"])
         handler.setFormatter(settings["formatter"])
         owned.append(handler)
-    if settings["file"]:
+    if settings["file_enabled"] and settings["file"]:
         try:
             owned.append(
                 _create_file_handler(
@@ -354,24 +335,20 @@ def _desired_handlers(
             )
     if not owned:
         owned.append(_mark_owned(logging.NullHandler(), "null"))
-    return owned, borrowed
+    return owned
 
 
 def configure_named_logger(
     logger: logging.Logger, settings: Dict[str, Any], app: Any = None
 ) -> None:
     """Atomically reconcile one logger to the requested Flask-Nacos state."""
-    global _borrowed_handlers
+    del app
     with _CONFIG_LOCK:
-        owned, borrowed = _desired_handlers(settings, app)
-        if logger.name == FLASK_NACOS_LOGGER_NAME:
-            _detach_borrowed_handlers(logger)
+        owned = _desired_handlers(settings)
         _remove_owned_handlers(logger)
-        for handler in owned + borrowed:
+        for handler in owned:
             if handler not in logger.handlers:
                 logger.addHandler(handler)
-        if logger.name == FLASK_NACOS_LOGGER_NAME:
-            _borrowed_handlers = borrowed
         logger.setLevel(settings["level"])
         logger.propagate = bool(settings["propagate"]) if settings["enabled"] else False
         logger.disabled = not settings["enabled"]

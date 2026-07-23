@@ -38,9 +38,13 @@ app.config.update(
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
     NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
     NACOS_LOG_LEVEL=os.environ.get("NACOS_LOG_LEVEL", "INFO"),
-    NACOS_LOG_DIR=os.environ.get("NACOS_LOG_DIR", "./logs"),
+    NACOS_LOG_CONSOLE_ENABLED=os.environ.get(
+        "NACOS_LOG_CONSOLE_ENABLED", "true"
+    ),
+    NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
+    NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
     NACOS_LOG_FILENAME=os.environ.get(
-        "NACOS_LOG_FILENAME", "flask_nacos.log"
+        "NACOS_LOG_FILENAME", "flask-nacos.log"
     ),
     # Temporarily set NACOS_FAIL_FAST=true when an exact startup error is needed.
     NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),

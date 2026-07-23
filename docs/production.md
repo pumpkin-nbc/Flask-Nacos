@@ -81,17 +81,17 @@ from `nacos-sdk-python` is always silenced because it may contain sensitive
 request or response data. Recommendations:
 
 1. If you need file logs, set `NACOS_LOG_ENABLED=True` and configure
-   `NACOS_LOG_DIR`/`NACOS_LOG_FILENAME` (plus rotation settings when needed).
+   `NACOS_LOG_PATH`/`NACOS_LOG_FILENAME` (plus rotation settings when needed).
 2. In containers, prefer stdout: set `NACOS_LOG_ENABLED=True`,
-   `NACOS_LOG_TO_CONSOLE=True`, and `NACOS_LOG_DIR=None`.
+   `NACOS_LOG_CONSOLE_ENABLED=True`, and `NACOS_LOG_FILE_ENABLED=False`.
 3. If your project already has a unified logging system, set
-   `NACOS_LOG_PROPAGATE=True` and `NACOS_LOG_DIR=None`; let your existing
+   `NACOS_LOG_PROPAGATE=True` and `NACOS_LOG_FILE_ENABLED=False`; let your existing
    handlers format and route the records.
 4. To silence Flask-Nacos safety logs as well, set `NACOS_LOG_ENABLED=False`.
 5. Do not rely on the nacos-sdk-python default log path in production.
 6. Logging defaults to disabled, so no configured directory or `~/logs/nacos`
    directory is created. When enabled, the defaults write
-   `./logs/flask_nacos.log`.
+   `./logs/flask-nacos.log`.
 
 ## Logging safety
 

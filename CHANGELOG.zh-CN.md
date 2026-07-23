@@ -26,11 +26,10 @@
 
 - 新增可配置的日志控制能力。
 - 新增 `NACOS_LOG_ENABLED`。
-- 新增 `NACOS_LOG_TO_CONSOLE`。
-- 新增 `NACOS_LOG_DIR` 与 `NACOS_LOG_FILENAME`。
+- 新增 `NACOS_LOG_CONSOLE_ENABLED` 与 `NACOS_LOG_FILE_ENABLED`。
+- 新增 `NACOS_LOG_PATH` 与 `NACOS_LOG_FILENAME`。
 - 新增 `NACOS_LOG_FORMAT`。
 - 新增 `NACOS_LOG_PROPAGATE`。
-- 新增 `NACOS_LOG_USE_FLASK_LOGGER`。
 - 新增 `NACOS_LOG_MAX_BYTES`。
 - 新增 `NACOS_LOG_BACKUP_COUNT`。
 - 新增日志、事务式初始化、注册身份与服务发现校验回归测试。
@@ -38,9 +37,11 @@
 ### 变更
 
 - `NACOS_LOG_*` 现在只控制脱敏后的 Flask-Nacos 日志；SDK 原生 logger 始终静默。
-- `NACOS_LOG_ENABLED` 默认值改为 `False`；启用后 `NACOS_LOG_DIR` 默认使用 `./logs`，
-  `NACOS_LOG_FILENAME` 默认使用 `flask_nacos.log`。
-- 早期未发布名称 `NACOS_LOG_FILE` 保留为 `NACOS_LOG_DIR` 的兼容别名；新项目应使用规范名称。
+- `NACOS_LOG_ENABLED` 默认值为 `False`；启用后控制台与轮转文件输出均默认开启，
+  `NACOS_LOG_PATH` 默认使用 `./logs`，`NACOS_LOG_FILENAME` 默认使用 `flask-nacos.log`。
+- 轮转日志默认每个文件 10 MiB，并保留五个备份。
+- 在发布前移除未发布的 `NACOS_LOG_TO_CONSOLE`、`NACOS_LOG_DIR`、
+  `NACOS_LOG_FILE` 与 `NACOS_LOG_USE_FLASK_LOGGER` 配置。
 - 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。
 - `flask-nacos` 不再配置 root logger。
 - `flask-nacos` 使用命名 logger：`flask_nacos`。

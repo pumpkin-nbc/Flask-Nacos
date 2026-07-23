@@ -109,7 +109,7 @@ def test_invalid_auto_registration_logs_and_continues_when_not_fail_fast(
             "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": False,
             "NACOS_LOG_ENABLED": True,
-            "NACOS_LOG_DIR": None,
+            "NACOS_LOG_FILE_ENABLED": False,
         }
     )
 

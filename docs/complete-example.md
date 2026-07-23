@@ -306,8 +306,9 @@ coordinator to own registration and deregistration.
 Native SDK logging is always silent because it may include sensitive request or
 configuration data. `NACOS_LOG_*` controls only Flask-Nacos safety logs; by
 default neither `~/logs/nacos` nor a log file is created. Enable logging with
-`NACOS_LOG_ENABLED=True`; the defaults then write `./logs/flask_nacos.log`, and
-`NACOS_LOG_DIR`/`NACOS_LOG_FILENAME` can override both parts.
+`NACOS_LOG_ENABLED=True`; console and rotating-file output are then enabled by
+default. The file defaults to `./logs/flask-nacos.log`, and
+`NACOS_LOG_PATH`/`NACOS_LOG_FILENAME` can override both parts.
 
 The synchronous SDK 2.x client does not provide reliable HTTPS certificate-
 verification controls. Production HTTPS deployments should use a trusted

@@ -27,11 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added configurable logging controls.
 - Added `NACOS_LOG_ENABLED`.
-- Added `NACOS_LOG_TO_CONSOLE`.
-- Added `NACOS_LOG_DIR` and `NACOS_LOG_FILENAME`.
+- Added `NACOS_LOG_CONSOLE_ENABLED` and `NACOS_LOG_FILE_ENABLED`.
+- Added `NACOS_LOG_PATH` and `NACOS_LOG_FILENAME`.
 - Added `NACOS_LOG_FORMAT`.
 - Added `NACOS_LOG_PROPAGATE`.
-- Added `NACOS_LOG_USE_FLASK_LOGGER`.
 - Added `NACOS_LOG_MAX_BYTES`.
 - Added `NACOS_LOG_BACKUP_COUNT`.
 - Added logging, transactional initialization, registration-identity, and
@@ -41,10 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `NACOS_LOG_*` settings now control only sanitized Flask-Nacos logs; native SDK
   loggers are always silent.
-- `NACOS_LOG_ENABLED` now defaults to `False`. When enabled, `NACOS_LOG_DIR`
-  defaults to `./logs` and `NACOS_LOG_FILENAME` defaults to `flask_nacos.log`.
-- The early unreleased `NACOS_LOG_FILE` name remains a compatibility alias for
-  `NACOS_LOG_DIR`; new applications should use the canonical name.
+- `NACOS_LOG_ENABLED` defaults to `False`. When enabled, console and rotating
+  file output both default to `True`, `NACOS_LOG_PATH` defaults to `./logs`,
+  and `NACOS_LOG_FILENAME` defaults to `flask-nacos.log`.
+- Rotating file output defaults to 10 MiB per file and five backups.
+- Removed the unreleased `NACOS_LOG_TO_CONSOLE`, `NACOS_LOG_DIR`,
+  `NACOS_LOG_FILE`, and `NACOS_LOG_USE_FLASK_LOGGER` settings before release.
 - Flask-Nacos never creates the configured log directory while logging is
   disabled. Generated files contain only Flask-Nacos safety logs.
 - `flask-nacos` no longer configures the root logger.

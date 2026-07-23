@@ -177,7 +177,7 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
                 "NACOS_AUTO_REGISTER": True,
                 "NACOS_HEALTH_CHECK_ENABLED": True,
                 "NACOS_LOG_ENABLED": True,
-                "NACOS_LOG_DIR": None,
+                "NACOS_LOG_FILE_ENABLED": False,
             }
         )
         nacos = FlaskNacos(app)
@@ -217,7 +217,7 @@ def test_retry_final_failure_logs_no_secrets(
                 "NACOS_RETRY_TIMES": 3,
                 "NACOS_FAIL_FAST": False,
                 "NACOS_LOG_ENABLED": True,
-                "NACOS_LOG_DIR": None,
+                "NACOS_LOG_FILE_ENABLED": False,
             }
         )
         FlaskNacos(app)

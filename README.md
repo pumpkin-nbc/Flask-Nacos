@@ -578,13 +578,13 @@ the same time.
 | `NACOS_FAIL_FAST` | `False` | Raise on Nacos errors when `True`. |
 | `NACOS_LOG_ENABLED` | `False` | Master switch for Flask-Nacos safety logs; SDK-native logs remain silent. |
 | `NACOS_LOG_LEVEL` | `"INFO"` | Flask-Nacos log level (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`). |
-| `NACOS_LOG_TO_CONSOLE` | `False` | Add a console (`StreamHandler`) when `True`. |
-| `NACOS_LOG_DIR` | `"./logs"` | Log directory; explicit `None` disables file output. |
-| `NACOS_LOG_FILENAME` | `"flask_nacos.log"` | Log filename; paths and directory traversal are rejected. |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Print normal and error records to the console when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `True` | Write a rotating log file when logging is enabled. |
+| `NACOS_LOG_PATH` | `"./logs"` | Directory for the Flask-Nacos log file. |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | Log filename; paths and directory traversal are rejected. |
 | `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Log format string. |
 | `NACOS_LOG_PROPAGATE` | `True` | Propagate to parent loggers; the root logger is never modified. |
-| `NACOS_LOG_USE_FLASK_LOGGER` | `False` | Reuse `app.logger` handlers instead of creating new ones. |
-| `NACOS_LOG_MAX_BYTES` | `None` | Positive int enables a `RotatingFileHandler`; otherwise a plain `FileHandler`. |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | Positive int sets the rotating file size; `None` uses a plain `FileHandler`. |
 | `NACOS_LOG_BACKUP_COUNT` | `5` | Backup count for the rotating file handler. |
 
 ### Logging
@@ -593,16 +593,18 @@ the same time.
 underlying SDK-native loggers are always silent because they may include tokens,
 request parameters, or configuration content. By default no log file or
 `~/logs/nacos` directory is created and the root logger is not modified. Only an
-when `NACOS_LOG_ENABLED=True`, `NACOS_LOG_DIR` is created and Flask-Nacos writes
-`NACOS_LOG_FILENAME` there. The defaults produce `./logs/flask_nacos.log`. When
+when `NACOS_LOG_ENABLED=True`, console and rotating-file output are enabled by
+default. `NACOS_LOG_PATH` is created for `NACOS_LOG_FILENAME`; the defaults
+produce `./logs/flask-nacos.log`. When
 logging is disabled, the configured directory is never created.
 
 ```python
 app.config.update(
     NACOS_LOG_ENABLED=True,
     NACOS_LOG_LEVEL="INFO",
-    NACOS_LOG_TO_CONSOLE=False,
-    NACOS_LOG_DIR="/var/log/flask-nacos",
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
     NACOS_LOG_FILENAME="service.log",
     NACOS_LOG_PROPAGATE=True,
 )

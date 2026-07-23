@@ -287,19 +287,21 @@ def test_bilingual_docs_describe_safe_logging_and_multi_worker_identity():
         text = path.read_text(encoding="utf-8")
         assert "SDK-native" in text or "Native SDK" in text
         assert "~/logs/nacos" in text
-        assert "NACOS_LOG_DIR" in text
+        assert "NACOS_LOG_PATH" in text
+        assert "NACOS_LOG_FILE_ENABLED" in text
         assert "NACOS_LOG_FILENAME" in text
 
     for path in chinese_files:
         text = path.read_text(encoding="utf-8")
         assert "SDK 原生" in text
         assert "~/logs/nacos" in text
-        assert "NACOS_LOG_DIR" in text
+        assert "NACOS_LOG_PATH" in text
+        assert "NACOS_LOG_FILE_ENABLED" in text
         assert "NACOS_LOG_FILENAME" in text
 
     for path in english_files + chinese_files:
         text = path.read_text(encoding="utf-8")
-        assert "flask_nacos.log" in text
+        assert "flask-nacos.log" in text
 
     for path in (english_files[0], english_files[2]):
         text = path.read_text(encoding="utf-8")
