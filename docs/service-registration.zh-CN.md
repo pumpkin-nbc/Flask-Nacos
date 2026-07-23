@@ -63,11 +63,12 @@ nacos.register_instance()
 ## 多进程注册（Gunicorn / uWSGI）
 
 在 Gunicorn / uWSGI 下，主进程会 fork 多个 worker，每个 worker 都会执行 `init_app`
-并注册自己的实例。flask-nacos 会记录执行注册的进程 ID，因此某个 worker 只会注销它
-自己注册的实例。部署建议见[生产部署](production.zh-CN.md)。
+并维护本进程的注册状态。但 Nacos 使用 service/group/cluster/IP/port 标识实例，因此公布
+相同 IP 和端口的 worker 对应同一个共享实例，而不是每个 worker 一个实例。
 
-如果希望显式控制，可设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 post-fork 钩子中
-调用 `nacos.register_instance()`。
+对于共享端点，请设置 `NACOS_DEREGISTER_ON_EXIT=False`，避免单个 worker 退出时在其他
+worker 仍提供服务的情况下删除实例；或者由单一外部协调者负责注册与注销。部署建议见
+[生产部署](production.zh-CN.md)。
 
 校验保证发生在 `FlaskNacos(app)` 或 `init_app(app)` 实际执行时。延迟加载的 WSGI 服务器
 可能直到第一次请求才创建应用；如果非法配置必须在接收流量前阻止进程启动，请使用 eager

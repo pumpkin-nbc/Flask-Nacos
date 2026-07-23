@@ -87,14 +87,14 @@ bash scripts/release_check.sh
 ## 6. TestPyPI 预演
 
 在 `master` 的 Actions 页面手动运行 **Release** 工作流。手动触发只会发布到
-TestPyPI；工作流会拒绝其他分支，从干净 checkout 重建，检查 `1.0.1` 尚不存在，并
+TestPyPI；工作流会拒绝其他分支，从干净 checkout 重建，检查 `1.0.2` 尚不存在，并
 通过 `testpypi` Environment 和 OIDC 上传。
 
 在全新的 Python 3.8、3.13 环境中验证：
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.1
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.0.2
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
@@ -108,8 +108,8 @@ python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_n
 ```bash
 git switch master
 git pull --ff-only origin master
-git tag -a v1.0.1 -m "Flask-Nacos v1.0.1"
-git push origin v1.0.1
+git tag -a v1.0.2 -m "Flask-Nacos v1.0.2"
+git push origin v1.0.2
 ```
 
 tag 工作流会确认提交属于 `master`，并且 tag 与所有版本声明完全一致。重新构建和
@@ -121,12 +121,12 @@ Action 默认生成 PEP 740 provenance。
 在干净环境中从 PyPI 安装：
 
 ```bash
-python -m pip install flask-nacos==1.0.1
+python -m pip install flask-nacos==1.0.2
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 确认 PyPI 文件、哈希、provenance、许可证表达式、许可文件、项目 URL、README 链接和
-版本号。随后从 `v1.0.1` 创建名为 `Flask-Nacos v1.0.1` 的 GitHub Release，说明使用
+版本号。随后从 `v1.0.2` 创建名为 `Flask-Nacos v1.0.2` 的 GitHub Release，说明使用
 对应 Changelog 章节。
 
 ## 9. 失败处理

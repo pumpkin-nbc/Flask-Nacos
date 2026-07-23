@@ -7,6 +7,13 @@ from pathlib import Path
 import flask_nacos.extension as extension_module
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "beginner_app.py"
+PUBLIC_STATUS_FIELDS = {
+    "nacos_enabled",
+    "client_initialized",
+    "registered",
+    "service_name",
+    "service_port",
+}
 
 
 def _load_example():
@@ -30,6 +37,7 @@ def test_beginner_example_runs_without_nacos(monkeypatch):
 
     status = client.get("/nacos/status")
     assert status.status_code == 200
+    assert set(status.get_json()) == PUBLIC_STATUS_FIELDS
     assert status.get_json()["client_initialized"] is False
 
     health = client.get("/health/nacos")
@@ -78,6 +86,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
     assert register_kwargs["heartbeat_interval"] == 5.0
 
     status = client.get("/nacos/status").get_json()
+    assert set(status) == PUBLIC_STATUS_FIELDS
     assert status["client_initialized"] is True
     assert status["registered"] is True
 
@@ -106,8 +115,10 @@ def test_beginner_example_covers_registration_config_and_discovery(
     )
 
 
-def test_beginner_example_hides_client_failure_details(monkeypatch, caplog):
+def test_beginner_example_hides_client_failure_details(monkeypatch, caplog, tmp_path):
     monkeypatch.setenv("NACOS_ENABLED", "true")
+    monkeypatch.setenv("NACOS_LOG_ENABLED", "true")
+    monkeypatch.setenv("NACOS_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("NACOS_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("NACOS_USERNAME", "private-example-user")
     monkeypatch.setenv("NACOS_PASSWORD", "private-example-password")

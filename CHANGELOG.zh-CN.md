@@ -7,6 +7,60 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 项目遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## 1.0.2
+
+### 修复
+
+- 修复 Flask 加载 `flask-nacos` 时意外生成日志文件的问题。
+- 修复底层 `nacos-sdk-python` 意外生成 `~/logs/nacos/nacos-client-python.log` 的问题。
+- 修复库级别日志配置带来的日志副作用。
+- 修复 Flask 应用初始化过程中的 SDK 级别日志副作用。
+- 修复重复调用 `init_app(app)` 时重复添加日志 handler 的问题。
+- 修复 SDK 原生日志可能通过应用、root、控制台或文件 handler 泄露 token、请求参数或配置
+  正文的问题。
+- 修复 fail-fast 初始化失败后残留部分应用或扩展状态的问题。
+- 修复已初始化但 client 不可用时，非 fail-fast 操作仍抛出异常的问题。
+- 修复注销时重新解析服务身份、可能没有使用实际注册身份的问题。
+
+### 新增
+
+- 新增可配置的日志控制能力。
+- 新增 `NACOS_LOG_ENABLED`。
+- 新增 `NACOS_LOG_CONSOLE_ENABLED` 与 `NACOS_LOG_FILE_ENABLED`。
+- 新增 `NACOS_LOG_PATH` 与 `NACOS_LOG_FILENAME`。
+- 新增 `NACOS_LOG_FORMAT`。
+- 新增 `NACOS_LOG_PROPAGATE`。
+- 新增 `NACOS_LOG_MAX_BYTES`。
+- 新增 `NACOS_LOG_BACKUP_COUNT`。
+- 新增日志、事务式初始化、注册身份与服务发现校验回归测试。
+
+### 变更
+
+- `NACOS_LOG_*` 现在只控制脱敏后的 Flask-Nacos 日志；SDK 原生 logger 始终静默。
+- `NACOS_LOG_ENABLED` 默认值为 `False`；启用后控制台与轮转文件输出均默认开启，
+  `NACOS_LOG_PATH` 默认使用 `./logs`，`NACOS_LOG_FILENAME` 默认使用 `flask-nacos.log`。
+- 轮转日志默认每个文件 10 MiB，并保留五个备份。
+- 控制台日志按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
+  `ERROR` 红色、`CRITICAL` 加粗红色；文件日志保持纯文本，不包含 ANSI 转义符。
+- 新增脱敏的临时实例心跳状态日志：SDK 心跳成功使用 `INFO`、失败使用 `ERROR`；
+  失败仍进入 SDK 后续重试，并且不会记录响应正文或异常消息。
+- 在发布前移除未发布的 `NACOS_LOG_TO_CONSOLE`、`NACOS_LOG_DIR`、
+  `NACOS_LOG_FILE` 与 `NACOS_LOG_USE_FLASK_LOGGER` 配置。
+- 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。
+- `flask-nacos` 不再配置 root logger。
+- `flask-nacos` 使用命名 logger：`flask_nacos`。
+- 注册成功后缓存并在重试、注销时复用精确服务身份；持久实例忽略心跳配置。
+- 服务发现会在 SDK 调用前校验 service/group/cluster/filter，并把 cluster 过滤同时传给 SDK
+  2.x 和本地防御过滤。
+- 状态示例只公开安全字段白名单，注册示例不再暴露无鉴权的 HTTP 生命周期端点。
+- 生产文档补充多 worker 共享实例身份、SDK 2.x HTTPS 证书校验限制与安全日志默认行为。
+
+### 说明
+
+- `get_config()` 仍然只返回原始配置内容。
+- 不支持 YAML、JSON、dict 配置解析。
+- 不支持将 Nacos 配置加载进 Flask `app.config`。
+
 ## 1.0.1
 
 ### 修复

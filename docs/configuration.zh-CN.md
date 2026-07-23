@@ -96,6 +96,10 @@ app.config.update(
 `NACOS_SERVICE_HEARTBEAT_INTERVAL` 仅在临时实例注册时传给 SDK 2.x；持久实例
 （`NACOS_SERVICE_EPHEMERAL=False`）会忽略它。初始健康标识不能让临时实例持续存活。
 
+当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录每次实际 SDK 心跳：成功请求使用
+`INFO`，失败请求使用 `ERROR`。日志经过脱敏，只包含服务身份以及失败时的异常类型，
+刻意省略响应正文和异常消息。失败会原样抛回 SDK 心跳线程，由 SDK 按配置间隔继续重试。
+
 ## 3. 服务发现
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
@@ -174,9 +178,65 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 
 ## 8. 日志
 
+这些 `NACOS_LOG_*` 配置项仅控制 `flask_nacos` logger 生成的脱敏安全日志。底层
+`nacos-sdk-python` logger（`nacos`、`nacos.client`、`nacos-sdk-python`）的原生日志可能
+包含 token、请求参数或配置正文，因此始终静默。
+
+默认关闭 Flask-Nacos 日志，不创建任何日志文件、不修改 root logger，也不会创建 SDK 的
+`~/logs/nacos` 目录。设置 `NACOS_LOG_ENABLED=True` 后，控制台和轮转文件输出默认同时开启；
+创建 `NACOS_LOG_PATH` 后写入 `NACOS_LOG_FILENAME`，默认结果为 `./logs/flask-nacos.log`。
+控制台会为完整日志行按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
+`ERROR` 红色、`CRITICAL` 加粗红色。文件 handler 始终使用纯文本格式，不包含 ANSI 颜色码。
+
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | `flask_nacos` logger 的日志级别。敏感信息不会被记录。 |
+| `NACOS_LOG_ENABLED` | bool | `False` | 否 | Flask-Nacos 安全日志总开关；无论取值如何，SDK 原生日志始终静默。 |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | 否 | 日志启用时，向控制台输出正常日志和异常日志。 |
+| `NACOS_LOG_FILE_ENABLED` | bool | `True` | 否 | 日志启用时，写入轮转日志文件。 |
+| `NACOS_LOG_PATH` | str | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志和文件输出均启用时创建。 |
+| `NACOS_LOG_FILENAME` | str | `"flask-nacos.log"` | 否 | `NACOS_LOG_PATH` 内的文件名；不能包含路径或目录穿越。 |
+| `NACOS_LOG_FORMAT` | str | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | 否 | 应用于 flask-nacos handler 的格式字符串。 |
+| `NACOS_LOG_PROPAGATE` | bool | `True` | 否 | 是否向父级 logger 传播。即使为 `True` 也不会修改 root logger。 |
+| `NACOS_LOG_MAX_BYTES` | int \| None | `10485760` | 否 | 正整数设置 `RotatingFileHandler` 的轮转大小；`None` 使用普通 `FileHandler`。 |
+| `NACOS_LOG_BACKUP_COUNT` | int | `5` | 否 | `RotatingFileHandler` 的备份数量。 |
+
+重复调用 `init_app(app)` 不会重复添加 handler。
+
+示例：
+
+```python
+# 文件日志（轮转）写入指定目录。
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
+    NACOS_LOG_FILENAME="service.log",
+    NACOS_LOG_MAX_BYTES=10485760,
+    NACOS_LOG_BACKUP_COUNT=5,
+)
+
+# 容器友好：仅控制台，无文件。
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=False,
+)
+
+# 同时静默 Flask-Nacos 安全日志（SDK 原生日志始终静默）。
+app.config.update(NACOS_LOG_ENABLED=False)
+```
+
+生产建议：容器中优先使用平台统一日志。若启用日志但不希望创建文件，请设置
+`NACOS_LOG_FILE_ENABLED=False`；否则默认文件为 `./logs/flask-nacos.log`。不要依赖
+nacos-sdk-python 的默认日志路径。
+
+## 同步 SDK 2.x 的 HTTPS 限制
+
+同步 `nacos-sdk-python` 2.x 没有提供可靠的 HTTPS 证书校验控制。不能仅凭
+`NACOS_SERVER_ADDR` 使用 `https://` 就认为传输已经安全。生产环境请仅通过受信网络连接，
+或使用能够验证 Nacos 服务端证书的 TLS 代理 / sidecar。
 
 ## 9. 行为控制
 

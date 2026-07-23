@@ -72,7 +72,17 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_INSTANCE_NORMALIZE": True,
     # Behavior control.
     "NACOS_FAIL_FAST": False,
+    # Safe Flask-Nacos logging control (1.0.2). Raw SDK logs stay silent.
+    "NACOS_LOG_ENABLED": False,
     "NACOS_LOG_LEVEL": "INFO",
+    "NACOS_LOG_CONSOLE_ENABLED": True,
+    "NACOS_LOG_FILE_ENABLED": True,
+    "NACOS_LOG_PATH": "./logs",
+    "NACOS_LOG_FILENAME": "flask-nacos.log",
+    "NACOS_LOG_FORMAT": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    "NACOS_LOG_PROPAGATE": True,
+    "NACOS_LOG_MAX_BYTES": 10485760,
+    "NACOS_LOG_BACKUP_COUNT": 5,
 }
 
 
@@ -106,9 +116,24 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_DEREGISTER_ON_EXIT",
         "NACOS_INSTANCE_NORMALIZE",
         "NACOS_FAIL_FAST",
+        "NACOS_LOG_ENABLED",
+        "NACOS_LOG_CONSOLE_ENABLED",
+        "NACOS_LOG_FILE_ENABLED",
+        "NACOS_LOG_PROPAGATE",
     )
     for key in bool_keys:
         merged[key] = to_bool(merged[key], DEFAULTS[key])
+
+    # Logging file-rotation numbers may arrive as strings (e.g. env vars).
+    # Coerce when possible; leave the original value otherwise so logging
+    # setup can decide how to degrade (honoring NACOS_FAIL_FAST).
+    max_bytes_coerced = to_int(merged["NACOS_LOG_MAX_BYTES"], None)
+    if max_bytes_coerced is not None:
+        merged["NACOS_LOG_MAX_BYTES"] = max_bytes_coerced
+
+    backup_count_coerced = to_int(merged["NACOS_LOG_BACKUP_COUNT"], None)
+    if backup_count_coerced is not None:
+        merged["NACOS_LOG_BACKUP_COUNT"] = backup_count_coerced
 
     # Coerce valid string numbers (e.g. from env vars) but keep the original
     # value when coercion fails so that validation can report it clearly.
@@ -208,14 +233,15 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
     # Raises NacosValidationError on illegal port / weight / metadata values.
     validate_port(config["NACOS_SERVICE_PORT"])
     validate_weight(config.get("NACOS_SERVICE_WEIGHT", 1.0))
-    validate_heartbeat_interval(
-        config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
-    )
     validate_metadata(config.get("NACOS_SERVICE_METADATA"))
 
     if not is_bool(config.get("NACOS_SERVICE_EPHEMERAL")):
         logger.error("Service registration failed: NACOS_SERVICE_EPHEMERAL must be a bool")
         raise NacosValidationError("NACOS_SERVICE_EPHEMERAL must be a bool")
+    if config.get("NACOS_SERVICE_EPHEMERAL"):
+        validate_heartbeat_interval(
+            config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
+        )
 
 
 __all__ = [

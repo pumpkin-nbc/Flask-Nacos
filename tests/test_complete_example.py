@@ -4,6 +4,14 @@ import importlib
 
 import flask_nacos.extension as extension_module
 
+PUBLIC_STATUS_FIELDS = {
+    "nacos_enabled",
+    "client_initialized",
+    "registered",
+    "service_name",
+    "service_port",
+}
+
 
 def _load_example():
     return importlib.import_module("examples.complete_factory_app")
@@ -53,6 +61,7 @@ def test_complete_example_configuration_and_routes(
 
     status = client.get("/api/nacos/status")
     assert status.status_code == 200
+    assert set(status.get_json()) == PUBLIC_STATUS_FIELDS
     assert status.get_json()["registered"] is True
 
     config_response = client.get("/api/nacos/config")
@@ -76,7 +85,10 @@ def test_complete_example_configuration_and_routes(
     assert payload["cluster"] == "CANARY"
     assert payload["count"] == 1
     fake_client.list_naming_instance.assert_called_once_with(
-        "users-api", group_name="APP_GROUP", healthy_only=True
+        "users-api",
+        group_name="APP_GROUP",
+        healthy_only=True,
+        clusters="CANARY",
     )
 
 

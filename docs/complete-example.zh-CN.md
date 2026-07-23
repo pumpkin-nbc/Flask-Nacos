@@ -167,7 +167,16 @@ api = Blueprint("api", __name__)
 
 @api.route("/nacos/status", methods=["GET"])
 def nacos_status():
-    return jsonify(nacos.get_status())
+    status = nacos.get_status()
+    return jsonify(
+        {
+            "nacos_enabled": status.get("nacos_enabled", False),
+            "client_initialized": status.get("client_initialized", False),
+            "registered": status.get("registered", False),
+            "service_name": status.get("service_name"),
+            "service_port": status.get("service_port"),
+        }
+    )
 
 
 @api.route("/nacos/config", methods=["GET"])
@@ -185,6 +194,9 @@ def read_config_in_background(app):
     with app.app_context():
         return nacos.get_config()
 ```
+
+状态路由使用字段白名单。不要在公开 API 中返回完整的 `get_status()` 映射，因为其中包含
+Nacos 地址、namespace、服务 IP 和进程标识等部署信息。
 
 Celery task、工作线程和独立脚本必须进入对应的 `app.app_context()`，除非现有集成已经
 自动提供应用上下文。`app.extensions["nacos"]` 保存的是包含 `config` 和 `client` 的
@@ -264,13 +276,23 @@ docker compose -f examples/docker-compose-nacos.yml down
 在支持 Gunicorn 的平台上运行应用工厂：
 
 ```bash
+export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
 每个 worker 都会执行 `create_app()`。`NACOS_REGISTER_ONCE_PER_PROCESS=True` 保证单个
 worker 内不会重复执行 SDK 注册，fork 后也会重建进程锁。共享同一 IP 和端口的 worker
-在 Nacos 中对应同一个实例标识；如果单个 worker 独立重启时不能注销这个共享端点，
-需要在部署层统一协调注册与注销。
+在 Nacos 中对应同一个实例标识，而不是每个 worker 一个实例。请为该共享端点设置
+`NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册与注销。
+
+SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`NACOS_LOG_*` 只控制 Flask-Nacos
+安全日志；默认既不创建 `~/logs/nacos`，也不创建日志文件。设置
+`NACOS_LOG_ENABLED=True` 后默认同时启用控制台和轮转文件输出，文件写入
+`./logs/flask-nacos.log`，可分别通过 `NACOS_LOG_PATH` 与
+`NACOS_LOG_FILENAME` 覆盖目录和文件名。
+
+同步 SDK 2.x client 没有提供可靠的 HTTPS 证书校验控制。生产 HTTPS 部署应使用受信网络，
+或通过能够校验证书的 TLS 代理 / sidecar 连接。
 
 生产环境中还应：
 

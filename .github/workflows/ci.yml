@@ -41,7 +41,7 @@ jobs:
         run: python -m build
 
       - name: Check package (twine)
-        run: twine check dist/*
+        run: twine check --strict dist/*
 
       - name: Check package contents
         run: python scripts/check_package.py
@@ -98,3 +98,73 @@ jobs:
 
       - name: Test
         run: pytest
+
+  sdk-compatibility:
+    runs-on: ubuntu-latest
+    name: Nacos SDK / ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: "minimum 2.0.0"
+            sdk_spec: "nacos-sdk-python==2.0.0"
+            expected_version: "2.0.0"
+          - label: "latest 2.x"
+            sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"
+            expected_version: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and selected SDK
+        env:
+          NACOS_SDK_SPEC: ${{ matrix.sdk_spec }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install --force-reinstall --no-deps "$NACOS_SDK_SPEC"
+          pip check
+
+      - name: Check SDK surface
+        env:
+          EXPECTED_SDK_VERSION: ${{ matrix.expected_version }}
+        run: |
+          if [ -n "$EXPECTED_SDK_VERSION" ]; then
+            python scripts/check_sdk_compatibility.py --expected-version "$EXPECTED_SDK_VERSION"
+          else
+            python scripts/check_sdk_compatibility.py
+          fi
+
+      - name: Run SDK-facing tests
+        run: |
+          pytest --no-cov \
+            tests/test_client.py \
+            tests/test_config_center.py \
+            tests/test_discovery.py \
+            tests/test_register.py \
+            tests/test_deregister.py \
+            tests/test_logging.py
+
+  required-ci:
+    runs-on: ubuntu-latest
+    name: Required CI
+    if: ${{ always() }}
+    needs:
+      - quality
+      - test
+      - sdk-compatibility
+    steps:
+      - name: Require every CI job to pass
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          SDK_RESULT: ${{ needs.sdk-compatibility.result }}
+        run: |
+          test "$QUALITY_RESULT" = "success"
+          test "$TEST_RESULT" = "success"
+          test "$SDK_RESULT" = "success"

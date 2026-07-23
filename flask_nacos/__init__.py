@@ -6,12 +6,13 @@ from .exceptions import (
     NacosConfigError,
     NacosDeregistrationError,
     NacosDiscoveryError,
+    NacosLoggingError,
     NacosRegistrationError,
     NacosValidationError,
 )
 from .extension import FlaskNacos
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 __all__ = [
     "FlaskNacos",
@@ -22,5 +23,6 @@ __all__ = [
     "NacosRegistrationError",
     "NacosDeregistrationError",
     "NacosDiscoveryError",
+    "NacosLoggingError",
     "__version__",
 ]

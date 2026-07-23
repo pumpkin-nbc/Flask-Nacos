@@ -93,7 +93,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.1",
+        "v1.0.2",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
@@ -269,6 +269,61 @@ def test_bilingual_docs_describe_auto_registration_preflight():
         text = path.read_text(encoding="utf-8")
         for marker in shared_markers:
             assert marker in text
+
+
+def test_bilingual_docs_describe_safe_logging_and_multi_worker_identity():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "configuration.md",
+        DOCS_DIR / "production.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "configuration.zh-CN.md",
+        DOCS_DIR / "production.zh-CN.md",
+    )
+
+    for path in english_files:
+        text = path.read_text(encoding="utf-8")
+        assert "SDK-native" in text or "Native SDK" in text
+        assert "~/logs/nacos" in text
+        assert "NACOS_LOG_PATH" in text
+        assert "NACOS_LOG_FILE_ENABLED" in text
+        assert "NACOS_LOG_FILENAME" in text
+
+    for path in chinese_files:
+        text = path.read_text(encoding="utf-8")
+        assert "SDK 原生" in text
+        assert "~/logs/nacos" in text
+        assert "NACOS_LOG_PATH" in text
+        assert "NACOS_LOG_FILE_ENABLED" in text
+        assert "NACOS_LOG_FILENAME" in text
+
+    for path in english_files + chinese_files:
+        text = path.read_text(encoding="utf-8")
+        assert "flask-nacos.log" in text
+
+    for path in (english_files[0], english_files[2]):
+        text = path.read_text(encoding="utf-8")
+        assert "same IP and port" in text or "same service/group/cluster/IP/port" in text
+
+    for path in (chinese_files[0], chinese_files[2]):
+        text = path.read_text(encoding="utf-8")
+        assert "相同 IP 和端口" in text or "相同服务身份与 IP:port" in text
+
+
+def test_bilingual_docs_disclose_sdk_https_limit():
+    for path in (
+        ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "configuration.md",
+        DOCS_DIR / "configuration.zh-CN.md",
+        DOCS_DIR / "production.md",
+        DOCS_DIR / "production.zh-CN.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "HTTPS" in text
+        assert "certificate" in text or "证书" in text
 
 
 def test_readme_only_mentions_forbidden_identifiers_with_negation():

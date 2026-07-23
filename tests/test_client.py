@@ -1,12 +1,15 @@
 """Tests for isolated Nacos SDK client construction."""
 
 import logging
+import os
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+import flask_nacos.client as client_module
 from flask_nacos import FlaskNacos
 from flask_nacos.client import create_client
 from flask_nacos.exceptions import NacosClientError, NacosConfigError
@@ -40,6 +43,7 @@ def test_create_client_forwards_username_and_password(monkeypatch):
     constructor.assert_called_once_with(
         "nacos.example:8848",
         namespace="tenant-a",
+        logDir=tempfile.gettempdir(),
         username="user",
         password="password",
     )
@@ -60,6 +64,7 @@ def test_create_client_forwards_access_key_authentication(monkeypatch):
     constructor.assert_called_once_with(
         "nacos.example:8848",
         namespace="tenant-a",
+        logDir=tempfile.gettempdir(),
         ak="access",
         sk="secret",
     )
@@ -71,7 +76,42 @@ def test_create_client_omits_empty_authentication(monkeypatch):
 
     create_client(_config(NACOS_NAMESPACE_ID=""))
 
-    constructor.assert_called_once_with("nacos.example:8848", namespace="")
+    constructor.assert_called_once_with(
+        "nacos.example:8848", namespace="", logDir=tempfile.gettempdir()
+    )
+
+
+def test_create_client_uses_configured_log_directory(monkeypatch, tmp_path):
+    constructor = MagicMock(return_value=object())
+    monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
+    log_directory = tmp_path / "logs"
+
+    create_client(
+        _config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(log_directory))
+    )
+
+    constructor.assert_called_once_with(
+        "nacos.example:8848",
+        namespace="tenant-a",
+        logDir=os.path.abspath(str(log_directory)),
+    )
+
+
+def test_create_client_does_not_pass_an_existing_file_as_log_directory(
+    monkeypatch, tmp_path
+):
+    constructor = MagicMock(return_value=object())
+    monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
+    legacy_file = tmp_path / "logs"
+    legacy_file.write_text("legacy", encoding="utf-8")
+
+    create_client(_config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(legacy_file)))
+
+    constructor.assert_called_once_with(
+        "nacos.example:8848",
+        namespace="tenant-a",
+        logDir=tempfile.gettempdir(),
+    )
 
 
 def test_create_client_wraps_constructor_failure(monkeypatch):
@@ -91,6 +131,123 @@ def test_create_client_wraps_missing_sdk(monkeypatch):
         create_client(_config())
 
     assert isinstance(exc_info.value.__cause__, ImportError)
+
+
+def test_real_sdk_constructor_creates_no_home_or_temporary_log(
+    monkeypatch, tmp_path
+):
+    pytest.importorskip("nacos")
+    fake_home = tmp_path / "home"
+    sdk_temp = tmp_path / "temp"
+    fake_home.mkdir()
+    sdk_temp.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(sdk_temp))
+
+    client = create_client(_config(NACOS_SERVER_ADDR="127.0.0.1:8848"))
+
+    assert client is not None
+    assert not (fake_home / "logs" / "nacos").exists()
+    assert not (sdk_temp / "nacos-client-python.log").exists()
+
+
+def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(
+    monkeypatch, tmp_path
+):
+    pytest.importorskip("nacos")
+    configured_directory = tmp_path / "disabled-logs"
+    sdk_temp = tmp_path / "temp"
+    sdk_temp.mkdir()
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(sdk_temp))
+
+    client = create_client(
+        _config(
+            NACOS_SERVER_ADDR="127.0.0.1:8848",
+            NACOS_LOG_ENABLED=False,
+            NACOS_LOG_PATH=str(configured_directory),
+        )
+    )
+
+    assert client is not None
+    assert not configured_directory.exists()
+    assert not (sdk_temp / "nacos-client-python.log").exists()
+
+
+def test_heartbeat_wrapper_logs_success_and_preserves_result(monkeypatch):
+    sdk_client = SimpleNamespace()
+    sdk_client.send_heartbeat = MagicMock(
+        return_value={"clientBeatInterval": 5000}
+    )
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    client_module._install_heartbeat_logging(sdk_client)
+    result = sdk_client.send_heartbeat(
+        "orders",
+        "10.0.0.8",
+        8080,
+        "BLUE",
+        1.0,
+        {"zone": "a"},
+        True,
+        "PROD",
+    )
+
+    assert result == {"clientBeatInterval": 5000}
+    safe_logger.info.assert_called_once_with(
+        "Nacos heartbeat succeeded (service=%s, ip=%s, port=%s, group=%s)",
+        "orders",
+        "10.0.0.8",
+        8080,
+        "PROD",
+    )
+    safe_logger.error.assert_not_called()
+
+
+def test_heartbeat_wrapper_logs_sanitized_failure_and_reraises(monkeypatch):
+    credential = "must-not-appear-in-heartbeat-log"
+
+    def fail_heartbeat(*args, **kwargs):
+        raise RuntimeError(credential)
+
+    sdk_client = SimpleNamespace(send_heartbeat=fail_heartbeat)
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+    client_module._install_heartbeat_logging(sdk_client)
+
+    with pytest.raises(RuntimeError, match=credential):
+        sdk_client.send_heartbeat(
+            service_name="orders",
+            ip="10.0.0.8",
+            port=8080,
+            group_name="PROD",
+        )
+
+    safe_logger.error.assert_called_once_with(
+        "Nacos heartbeat failed "
+        "(service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
+        "orders",
+        "10.0.0.8",
+        8080,
+        "PROD",
+        "RuntimeError",
+    )
+    assert credential not in str(safe_logger.mock_calls)
+
+
+def test_heartbeat_wrapper_is_installed_only_once(monkeypatch):
+    sdk_client = SimpleNamespace(send_heartbeat=MagicMock(return_value={}))
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    client_module._install_heartbeat_logging(sdk_client)
+    wrapped = sdk_client.send_heartbeat
+    client_module._install_heartbeat_logging(sdk_client)
+
+    assert sdk_client.send_heartbeat is wrapped
+    sdk_client.send_heartbeat("orders", "127.0.0.1", 8080)
+    safe_logger.info.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -118,6 +275,7 @@ def test_invalid_authentication_fails_before_client_creation(
         FlaskNacos(app)
 
     assert patched_create_client["count"] == 0
+    assert "nacos" not in app.extensions
 
 
 def test_invalid_authentication_is_safe_when_not_fail_fast(
@@ -155,6 +313,8 @@ def test_invalid_authentication_does_not_log_credentials(
             "NACOS_ACCESS_KEY": credentials[2],
             "NACOS_SECRET_KEY": credentials[3],
             "NACOS_FAIL_FAST": False,
+            "NACOS_LOG_ENABLED": True,
+            "NACOS_LOG_FILE_ENABLED": False,
         }
     )
 

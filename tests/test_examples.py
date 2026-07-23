@@ -45,3 +45,12 @@ def test_docker_compose_example_exists_and_is_clean():
     assert compose.is_file()
     text = compose.read_text(encoding="utf-8")
     assert re.search(PRIVATE_IP_RE, text) is None
+
+
+def test_registration_example_has_no_remote_lifecycle_endpoints():
+    text = (EXAMPLES_DIR / "service_registration.py").read_text(encoding="utf-8")
+
+    assert '@app.route("/register"' not in text
+    assert '@app.route("/deregister"' not in text
+    assert "nacos.register_instance()" not in text
+    assert "nacos.deregister_instance()" not in text

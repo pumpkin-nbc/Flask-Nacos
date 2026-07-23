@@ -13,6 +13,9 @@ SCRIPTS_DIR = ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+PROJECT_VERSION = importlib.import_module("check_version").read_pyproject_version(ROOT)
+assert PROJECT_VERSION is not None
+
 
 @pytest.fixture(scope="module")
 def check_version():
@@ -64,11 +67,16 @@ def check_index_version():
     return importlib.import_module("check_index_version")
 
 
+@pytest.fixture(scope="module")
+def check_sdk_compatibility():
+    return importlib.import_module("check_sdk_compatibility")
+
+
 def _valid_metadata(body="# Flask-Nacos\n", extra_headers=""):
-    metadata = """\
+    metadata = f"""\
 Metadata-Version: 2.4
 Name: flask-nacos
-Version: 1.0.1
+Version: {PROJECT_VERSION}
 License-Expression: Apache-2.0
 License-File: LICENSE
 License-File: NOTICE
@@ -84,7 +92,7 @@ Project-URL: Security, https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SE
 
 
 def _valid_sdist_names():
-    root = "flask_nacos-1.0.1"
+    root = f"flask_nacos-{PROJECT_VERSION}"
     files = [
         "README.md",
         "README.zh-CN.md",
@@ -114,6 +122,7 @@ def test_scripts_are_import_safe(
     smoke_test_package,
     check_release_tag,
     check_index_version,
+    check_sdk_compatibility,
 ):
     assert check_version is not None
     assert check_package is not None
@@ -125,15 +134,16 @@ def test_scripts_are_import_safe(
     assert smoke_test_package is not None
     assert check_release_tag is not None
     assert check_index_version is not None
+    assert check_sdk_compatibility is not None
 
 
 def test_version_check_passes_with_current_version(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message
-    assert versions["pyproject.toml"] == "1.0.1"
-    assert versions["flask_nacos/__init__.py"] == "1.0.1"
-    assert versions["CHANGELOG.md"] == "1.0.1"
-    assert versions["CHANGELOG.zh-CN.md"] == "1.0.1"
+    assert versions["pyproject.toml"] == PROJECT_VERSION
+    assert versions["flask_nacos/__init__.py"] == PROJECT_VERSION
+    assert versions["CHANGELOG.md"] == PROJECT_VERSION
+    assert versions["CHANGELOG.zh-CN.md"] == PROJECT_VERSION
 
 
 def test_docs_check_is_clean(check_docs):
@@ -163,6 +173,22 @@ def test_smoke_test_package_has_entrypoint(smoke_test_package):
 def test_sensitive_scan_is_clean(check_sensitive_info):
     findings = check_sensitive_info.scan_repo(ROOT)
     assert findings == [], f"unexpected findings: {findings}"
+
+
+def test_sensitive_scan_ignores_uv_cache(check_sensitive_info, tmp_path):
+    cached = tmp_path / ".uv-cache" / "archive" / "cached_fixture.py"
+    cached.parent.mkdir(parents=True)
+    cached.write_text('NACOS_ACCESS_KEY = "cached-real-looking-value"\n', encoding="utf-8")
+
+    assert check_sensitive_info.scan_repo(tmp_path) == []
+
+
+def test_sensitive_scan_ignores_uv_managed_python(check_sensitive_info, tmp_path):
+    runtime = tmp_path / ".uv-python" / "cpython" / "Lib" / "fixture.py"
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text('password = "runtime-fixture"\n', encoding="utf-8")
+
+    assert check_sensitive_info.scan_repo(tmp_path) == []
 
 
 def test_validate_wheel_names_accepts_good_wheel(check_package):
@@ -213,7 +239,7 @@ def test_validate_wheel_names_requires_license_and_notice(check_package):
         "flask_nacos/__init__.py",
         "flask_nacos/extension.py",
         "flask_nacos/py.typed",
-        "flask_nacos-1.0.1.dist-info/METADATA",
+        f"flask_nacos-{PROJECT_VERSION}.dist-info/METADATA",
     ]
 
     problems = check_package.validate_wheel_names(names)
@@ -305,9 +331,10 @@ def test_validate_wheel_metadata_rejects_main_branch_url(check_package):
 
 
 def test_release_tag_must_match_version(check_release_tag):
-    assert check_release_tag.validate_tag("v1.0.1") == "v1.0.1"
+    expected_tag = f"v{PROJECT_VERSION}"
+    assert check_release_tag.validate_tag(expected_tag) == expected_tag
     with pytest.raises(ValueError, match="release tag must be"):
-        check_release_tag.validate_tag("v1.0.0")
+        check_release_tag.validate_tag("v0.0.0")
 
 
 def test_index_preflight_accepts_404(check_index_version, monkeypatch):
@@ -317,7 +344,7 @@ def test_index_preflight_accepts_404(check_index_version, monkeypatch):
     monkeypatch.setattr(check_index_version, "urlopen", missing)
     assert check_index_version.ensure_version_available("pypi") == (
         "flask-nacos",
-        "1.0.1",
+        PROJECT_VERSION,
     )
 
 
@@ -346,3 +373,37 @@ def test_release_workflow_uses_protected_oidc_publish_jobs():
     assert "scripts/check_index_version.py pypi" in workflow
     assert "PYPI_API_TOKEN" not in workflow
     assert "twine upload" not in workflow
+
+
+def test_ci_has_strict_package_and_sdk_compatibility_checks():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "twine check --strict dist/*" in workflow
+    assert 'sdk_spec: "nacos-sdk-python==2.0.0"' in workflow
+    assert 'sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"' in workflow
+    assert "python scripts/check_sdk_compatibility.py" in workflow
+    assert "name: Required CI" in workflow
+    assert "- sdk-compatibility" in workflow
+
+
+def test_sdk_version_validation_accepts_supported_versions(check_sdk_compatibility):
+    check_sdk_compatibility.validate_version("2.0.0", "2.0.0")
+    check_sdk_compatibility.validate_version("2.0.11")
+
+
+@pytest.mark.parametrize("version", ["1.9.9", "3.0.0", "invalid"])
+def test_sdk_version_validation_rejects_unsupported_versions(
+    check_sdk_compatibility, version
+):
+    with pytest.raises(ValueError):
+        check_sdk_compatibility.validate_version(version)
+
+
+def test_sdk_surface_validation_reports_missing_parameters(check_sdk_compatibility):
+    class IncompatibleClient:
+        def __init__(self, server_addresses):
+            pass
+
+    with pytest.raises(ValueError, match="missing"):
+        check_sdk_compatibility.validate_client_surface(IncompatibleClient)

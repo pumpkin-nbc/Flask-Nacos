@@ -174,7 +174,16 @@ api = Blueprint("api", __name__)
 
 @api.route("/nacos/status", methods=["GET"])
 def nacos_status():
-    return jsonify(nacos.get_status())
+    status = nacos.get_status()
+    return jsonify(
+        {
+            "nacos_enabled": status.get("nacos_enabled", False),
+            "client_initialized": status.get("client_initialized", False),
+            "registered": status.get("registered", False),
+            "service_name": status.get("service_name"),
+            "service_port": status.get("service_port"),
+        }
+    )
 
 
 @api.route("/nacos/config", methods=["GET"])
@@ -192,6 +201,10 @@ def read_config_in_background(app):
     with app.app_context():
         return nacos.get_config()
 ```
+
+The status route uses a field allowlist. Do not return the complete
+`get_status()` mapping from a public API because it contains deployment details
+such as the Nacos address, namespace, service IP, and process identifiers.
 
 Celery tasks, worker threads, and standalone scripts need the corresponding
 `app.app_context()` unless their integration already supplies one. The
@@ -279,15 +292,27 @@ docker compose -f examples/docker-compose-nacos.yml down
 Run the factory with Gunicorn on platforms where Gunicorn is supported:
 
 ```bash
+export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
 Each worker executes `create_app()`. `NACOS_REGISTER_ONCE_PER_PROCESS=True`
 prevents repeated SDK registration in one worker, and the process-aware lock is
 recreated after a fork. Workers sharing one IP and port advertise the same Nacos
-instance identity, so coordinate registration and deregistration at the
-deployment level if independently restarting one worker must not remove that
-shared endpoint.
+instance identity, not one instance per worker. Set
+`NACOS_DEREGISTER_ON_EXIT=False` for that shared endpoint, or use one external
+coordinator to own registration and deregistration.
+
+Native SDK logging is always silent because it may include sensitive request or
+configuration data. `NACOS_LOG_*` controls only Flask-Nacos safety logs; by
+default neither `~/logs/nacos` nor a log file is created. Enable logging with
+`NACOS_LOG_ENABLED=True`; console and rotating-file output are then enabled by
+default. The file defaults to `./logs/flask-nacos.log`, and
+`NACOS_LOG_PATH`/`NACOS_LOG_FILENAME` can override both parts.
+
+The synchronous SDK 2.x client does not provide reliable HTTPS certificate-
+verification controls. Production HTTPS deployments should use a trusted
+network or a certificate-validating TLS proxy/sidecar.
 
 For production:
 

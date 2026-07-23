@@ -173,6 +173,13 @@ Ephemeral instances use SDK heartbeats every `5.0` seconds by default. The
 initial healthy flag does not replace heartbeat renewal; persistent instances
 do not receive a heartbeat interval.
 
+When `NACOS_LOG_ENABLED=True`, every temporary-instance heartbeat emits a
+sanitized status record: success at `INFO` and failure at `ERROR`. Records
+include only service, IP, port, group, and (on failure) the exception type.
+SDK responses, exception messages, credentials, tokens, signatures, metadata,
+and configuration content are never logged. The SDK heartbeat thread keeps
+retrying after a failed request.
+
 Registration and deregistration succeed only when SDK 2.x explicitly returns
 `True`. A `False` result follows the normal retry and `NACOS_FAIL_FAST` flow and
 does not update the extension's registered state.
@@ -360,11 +367,12 @@ called manually.
 
 ### Gunicorn / Multi-worker Deployment
 
-Under Gunicorn/uWSGI each worker process runs `init_app` and would register its
-own instance. For more predictable behavior consider setting
-`NACOS_AUTO_REGISTER_ON_INIT = False` and registering explicitly from a defined
-startup hook (for example a post-fork hook or a management command) instead of
-implicitly at import/init time.
+Under Gunicorn/uWSGI each worker process runs `init_app` and keeps independent
+local registration state. However, Nacos identifies an instance by its service,
+group, cluster, IP, and port: workers that advertise the same IP and port refer
+to one shared Nacos instance, not one instance per worker. For a shared endpoint,
+disable worker exit deregistration with `NACOS_DEREGISTER_ON_EXIT=False`, or use
+one external coordinator to own registration and deregistration.
 
 In production, always set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 `NACOS_SERVICE_PORT` explicitly rather than relying on auto-detection.
@@ -385,8 +393,9 @@ normalization, discovery filtering, and pluggable selection strategies.
 ### Multi-worker Registration (Gunicorn / uWSGI)
 
 Under Gunicorn or uWSGI, the master process forks multiple workers and each
-worker runs `init_app`. flask-nacos tracks the process id that performed the
-registration:
+worker runs `init_app`. flask-nacos tracks registration state per process, but
+workers advertising the same service/group/cluster/IP/port update the same
+Nacos instance identity:
 
 - `NACOS_REGISTER_ONCE_PER_PROCESS` (default `True`): within the same process,
   once `register_instance()` succeeds, repeated calls are skipped. When a worker
@@ -397,23 +406,23 @@ registration:
   current process (for example the master vs a worker), deregistration is logged
   and skipped so another process's instance is not removed by mistake.
 
-Gunicorn example (register per worker, deregister on worker exit):
+Gunicorn example (each worker initializes the extension):
 
 ```python
 # wsgi.py
 from myapp import create_app
 
-app = create_app()  # init_app runs here; each forked worker registers itself
+app = create_app()  # init_app runs here in each forked worker
 ```
 
 ```bash
 gunicorn -w 4 wsgi:app
 ```
 
-uWSGI behaves the same way; each worker process registers and deregisters its
-own instance. If you prefer to control registration explicitly, set
-`NACOS_AUTO_REGISTER_ON_INIT = False` and call `nacos.register_instance()` from a
-post-fork hook.
+uWSGI behaves the same way. When workers share one advertised endpoint, do not
+let an individual worker remove it while other workers still serve traffic.
+Set `NACOS_DEREGISTER_ON_EXIT = False`, or disable per-worker automatic
+registration and let one external coordinator own the shared lifecycle.
 
 ### Deregistration on Exit
 
@@ -574,7 +583,53 @@ the same time.
 | `NACOS_DISCOVERY_METADATA` | `{}` | Default metadata filter for discovery. |
 | `NACOS_INSTANCE_NORMALIZE` | `True` | Return normalized instance dicts from `list_instances`. |
 | `NACOS_FAIL_FAST` | `False` | Raise on Nacos errors when `True`. |
-| `NACOS_LOG_LEVEL` | `"INFO"` | Logging level for `flask_nacos`. |
+| `NACOS_LOG_ENABLED` | `False` | Master switch for Flask-Nacos safety logs; SDK-native logs remain silent. |
+| `NACOS_LOG_LEVEL` | `"INFO"` | Flask-Nacos log level (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`). |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Print normal and error records to the console when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `True` | Write a rotating log file when logging is enabled. |
+| `NACOS_LOG_PATH` | `"./logs"` | Directory for the Flask-Nacos log file. |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | Log filename; paths and directory traversal are rejected. |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Log format string. |
+| `NACOS_LOG_PROPAGATE` | `True` | Propagate to parent loggers; the root logger is never modified. |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | Positive int sets the rotating file size; `None` uses a plain `FileHandler`. |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | Backup count for the rotating file handler. |
+
+### Logging
+
+`NACOS_LOG_*` controls only the sanitized records produced by Flask-Nacos. The
+underlying SDK-native loggers are always silent because they may include tokens,
+request parameters, or configuration content. By default no log file or
+`~/logs/nacos` directory is created and the root logger is not modified. When
+`NACOS_LOG_ENABLED=True`, console and rotating-file output are enabled by
+default. `NACOS_LOG_PATH` is created for `NACOS_LOG_FILENAME`; the defaults
+produce `./logs/flask-nacos.log`. When
+logging is disabled, the configured directory is never created.
+Console records are colored by level (`DEBUG` blue, `INFO` green, `WARNING`
+yellow, `ERROR` red, `CRITICAL` bold red); file records never contain ANSI
+color codes.
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=True,
+    NACOS_LOG_LEVEL="INFO",
+    NACOS_LOG_CONSOLE_ENABLED=True,
+    NACOS_LOG_FILE_ENABLED=True,
+    NACOS_LOG_PATH="/var/log/flask-nacos",
+    NACOS_LOG_FILENAME="service.log",
+    NACOS_LOG_PROPAGATE=True,
+)
+```
+
+To disable Flask-Nacos safety logs as well:
+
+```python
+app.config.update(
+    NACOS_LOG_ENABLED=False,
+)
+```
+
+See [Configuration](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/configuration.md)
+for the full logging reference.
 
 ## Exception Handling
 
@@ -604,6 +659,7 @@ from flask_nacos import (
     NacosRegistrationError,
     NacosDeregistrationError,
     NacosDiscoveryError,
+    NacosLoggingError,
 )
 ```
 
@@ -615,12 +671,16 @@ from flask_nacos import (
 - `NacosRegistrationError` — service registration failures.
 - `NacosDeregistrationError` — service deregistration failures.
 - `NacosDiscoveryError` — discovery failures.
+- `NacosLoggingError` — logging configuration failures (only when `NACOS_FAIL_FAST=True`).
 
 ## Production Notes
 
-- Under multi-worker servers (Gunicorn/uWSGI) each worker registers its own
-  instance. The `atexit`-based deregistration is best-effort; more complete
-  multi-worker handling is planned for a later release.
+- Under multi-worker servers, workers that advertise the same service identity
+  and IP:port share one Nacos instance. Disable worker exit deregistration or
+  use a single external lifecycle coordinator for that shared endpoint.
+- Synchronous `nacos-sdk-python` 2.x does not provide reliable HTTPS certificate
+  verification controls. Use it only on a trusted network or behind a TLS proxy
+  or sidecar that validates the Nacos server certificate.
 - Never commit real credentials, internal Nacos addresses, or internal IPs.
   Prefer environment variables for `NACOS_USERNAME` / `NACOS_PASSWORD`.
 - Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never
@@ -642,7 +702,8 @@ Runnable examples live in the [`examples/`](https://github.com/pumpkin-nbc/Flask
   environment-driven, end-to-end factory integration; follow the
   [complete guide](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/complete-example.md).
 - [`examples/service_registration.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/service_registration.py) —
-  manual and automatic registration and deregistration.
+  registration in a trusted startup/shutdown lifecycle, without unauthenticated
+  HTTP management endpoints.
 - [`examples/service_discovery.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/service_discovery.py) — listing
   instances, cluster/metadata filtering, and `get_one_healthy_instance()`.
 - [`examples/health_check_app.py`](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/examples/health_check_app.py) — enabling the

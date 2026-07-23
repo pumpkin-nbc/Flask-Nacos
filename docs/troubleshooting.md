@@ -113,14 +113,17 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: check the config and existing routes/logs.
 - Fix: enable the route and/or choose a free `NACOS_HEALTH_CHECK_PATH`.
 
-## 11. Understanding duplicate registration under multiple workers
+## 11. Multi-worker registration does not mean one Nacos instance per worker
 
-- Symptom: multiple instances appear for one service under Gunicorn/uWSGI.
-- Cause: this is expected - each worker is a separate process and registers its
-  own instance.
-- Investigate: correlate instance count with worker count.
-- Fix: nothing to fix; see [Production](production.md). Use explicit registration
-  if you want a different topology.
+- Symptom: several workers run registration, but Nacos shows one instance; or an
+  exiting worker removes the endpoint while other workers still run.
+- Cause: Nacos identifies an instance by service/group/cluster/IP/port. Workers
+  advertising the same IP and port share one instance even though Flask-Nacos
+  tracks their local state separately.
+- Investigate: compare the complete advertised identities, not the worker count.
+- Fix: for a shared endpoint set `NACOS_DEREGISTER_ON_EXIT=False`, or let one
+  external coordinator own registration and deregistration. See
+  [Production](production.md).
 
 ## 12. `NACOS_FAIL_FAST=True` prevents startup
 
@@ -156,3 +159,84 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   SDK call failed.
 - Fix: address the specific cause reported. Error messages never contain
   passwords, access keys, or secret keys.
+
+## 15. Why does `~/logs/nacos/nacos-client-python.log` appear?
+
+- Symptom: a log file shows up at `~/logs/nacos/nacos-client-python.log` even
+  though your app never configured it.
+- Cause: the underlying `nacos-sdk-python` installs its own file handler when
+  its logger has no handlers at client construction time.
+- Investigate: confirm the file is created only after the Nacos client is built.
+- Fix: upgrade to flask-nacos 1.0.2+. It silences native SDK loggers and sends
+  the SDK an existing alternate directory, so neither the default file nor the
+  `~/logs/nacos` directory is created. Do not enable raw SDK logging because it
+  may contain sensitive request or configuration data.
+
+## 16. How to turn off Flask-Nacos logging
+
+- Symptom: you want no logging from the extension.
+- Cause: Flask-Nacos safety logging is enabled by default (`INFO`, propagating
+  to your handlers); SDK-native logging is already always silent.
+- Investigate: check `NACOS_LOG_ENABLED`.
+- Fix: set `NACOS_LOG_ENABLED=False`. No Flask-Nacos console/file handler is
+  added or propagated. SDK-native logging remains silent.
+
+## 17. How to send logs to a specific directory
+
+- Symptom: you want Flask-Nacos safety logs in a specific directory.
+- Cause: no file is created unless you ask for one.
+- Investigate: confirm the target directory is writable.
+- Fix: set `NACOS_LOG_ENABLED=True`, `NACOS_LOG_PATH="/var/log/flask-nacos"`,
+  and optionally `NACOS_LOG_FILENAME="service.log"`. For rotation, also set
+  `NACOS_LOG_MAX_BYTES` and `NACOS_LOG_BACKUP_COUNT`. Native SDK records are
+  never written there.
+- If an older configuration already created a regular file at that directory
+  path (for example a file named `logs`), rename or remove that file first.
+
+## 18. `nacos-client-python.log` still appears with Flask-Nacos logging disabled
+
+- Symptom: the default SDK file appears even though you did not set
+  Flask-Nacos logging or its directory settings.
+- Cause: an older flask-nacos version, or another component created the SDK
+  client before flask-nacos configured logging.
+- Investigate: ensure `FlaskNacos(app)` / `init_app(app)` runs before any code
+  that constructs a `nacos.NacosClient` directly.
+- Fix: upgrade to 1.0.2+. Flask-Nacos silences SDK loggers before creating the
+  client and directs SDK setup away from the home directory. A directly created
+  SDK client is outside Flask-Nacos control.
+
+## 19. Duplicate flask-nacos log lines
+
+- Symptom: each log line appears twice (or more).
+- Cause: both a flask-nacos handler and a propagated parent handler emit the
+  record, or multiple logging setups added handlers.
+- Investigate: check whether your app configured the root logger and whether
+  `NACOS_LOG_CONSOLE_ENABLED`/`NACOS_LOG_FILE_ENABLED` overlap with your own handlers.
+- Fix: either use flask-nacos handlers (set `NACOS_LOG_CONSOLE_ENABLED`/
+  `NACOS_LOG_FILE_ENABLED`) and set `NACOS_LOG_PROPAGATE=False`, or rely on your own
+  logging with `NACOS_LOG_PROPAGATE=True` and no flask-nacos handlers.
+
+## 20. Integrating with application logging
+
+- Symptom: you want flask-nacos logs to follow the application's logging topology.
+- Cause: by default flask-nacos uses its own named logger.
+- Investigate: check the console/file switches and parent logger propagation.
+- Fix: configure `NACOS_LOG_CONSOLE_ENABLED`, `NACOS_LOG_FILE_ENABLED`, and
+  `NACOS_LOG_PROPAGATE` for the desired topology. Flask-Nacos does not reuse or
+  modify `app.logger` handlers. SDK-native records remain silent.
+
+## 21. Can HTTPS verify the Nacos server certificate?
+
+- Symptom: you need verified TLS between the Flask process and Nacos.
+- Cause: synchronous `nacos-sdk-python` 2.x does not expose reliable HTTPS
+  certificate-verification controls.
+- Fix: use a trusted network or a TLS proxy/sidecar that validates the Nacos
+  server certificate; do not rely on an `https://` address alone.
+
+## 22. Logs duplicated after repeated `init_app`
+
+- Symptom: calling `init_app(app)` more than once multiplies handlers/log lines.
+- Cause: naive handler setup re-adds handlers on every call.
+- Investigate: count handlers on `logging.getLogger("flask_nacos")`.
+- Fix: none needed on 1.0.2+. flask-nacos de-duplicates handlers, so repeated
+  `init_app(app)` never adds a second console or file handler.

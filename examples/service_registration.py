@@ -1,9 +1,11 @@
 """Service registration with flask-nacos.
 
-Shows automatic registration during init_app, manual register/deregister, and
-the once-per-process behavior. Run against a local Nacos (see
-examples/docker-compose-nacos.yml).
+Registration and deregistration are lifecycle operations, so this example runs
+them only in the trusted startup/shutdown flow. It deliberately does not expose
+unauthenticated HTTP management endpoints.
 """
+
+import os
 
 from flask import Flask, jsonify
 
@@ -11,13 +13,13 @@ from flask_nacos import FlaskNacos
 
 app = Flask(__name__)
 app.config.update(
-    NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
-    NACOS_SERVICE_NAME="registration-demo",
-    NACOS_SERVICE_IP="127.0.0.1",
-    NACOS_SERVICE_PORT=5000,
-    # Auto-register on init_app (default). Set to False to register manually.
+    NACOS_SERVER_ADDR=os.environ.get("NACOS_SERVER_ADDR", "127.0.0.1:8848"),
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
+    NACOS_SERVICE_NAME=os.environ.get("NACOS_SERVICE_NAME", "registration-demo"),
+    NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
+    NACOS_SERVICE_PORT=int(os.environ.get("NACOS_SERVICE_PORT", "5000")),
+    # Auto-register during trusted application initialization.
     NACOS_AUTO_REGISTER=True,
     NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_AUTO_DEREGISTER=True,
@@ -30,22 +32,18 @@ app.config.update(
 nacos = FlaskNacos(app)
 
 
-@app.route("/register", methods=["POST"])
-def register():
-    # Idempotent: calling this repeatedly in the same process is a no-op.
-    ok = nacos.register_instance()
-    return jsonify({"registered": ok})
-
-
-@app.route("/deregister", methods=["POST"])
-def deregister():
-    ok = nacos.deregister_instance()
-    return jsonify({"deregistered": ok})
-
-
 @app.route("/status")
 def status():
-    return jsonify(nacos.get_status())
+    current = nacos.get_status()
+    return jsonify(
+        {
+            "nacos_enabled": current.get("nacos_enabled", False),
+            "client_initialized": current.get("client_initialized", False),
+            "registered": current.get("registered", False),
+            "service_name": current.get("service_name"),
+            "service_port": current.get("service_port"),
+        }
+    )
 
 
 if __name__ == "__main__":

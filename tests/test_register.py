@@ -63,6 +63,45 @@ def test_persistent_instance_does_not_send_heartbeat_interval(
     assert "heartbeat_interval" not in kwargs
 
 
+def test_persistent_instance_ignores_invalid_heartbeat_interval(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app(
+        {
+            "NACOS_AUTO_REGISTER": False,
+            "NACOS_SERVICE_EPHEMERAL": False,
+            "NACOS_SERVICE_HEARTBEAT_INTERVAL": "not-used",
+            "NACOS_FAIL_FAST": True,
+        }
+    )
+    nacos = FlaskNacos(app)
+
+    assert nacos.register_instance() is True
+    _, kwargs = fake_client.add_naming_instance.call_args
+    assert "heartbeat_interval" not in kwargs
+
+
+def test_deregister_reuses_the_exact_registered_identity(
+    make_app, patched_create_client, fake_client, monkeypatch
+):
+    import flask_nacos.naming as naming_module
+
+    addresses = iter(("192.0.2.10", "192.0.2.11"))
+    monkeypatch.setattr(naming_module, "get_local_ip", lambda: next(addresses))
+    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_AUTO_REGISTER": False})
+    nacos = FlaskNacos(app)
+
+    assert nacos.register_instance() is True
+    assert nacos.deregister_instance() is True
+
+    register_args, register_kwargs = fake_client.add_naming_instance.call_args
+    deregister_args, deregister_kwargs = fake_client.remove_naming_instance.call_args
+    assert register_args[:3] == ("test-service", "192.0.2.10", 8000)
+    assert deregister_args[:3] == register_args[:3]
+    assert deregister_kwargs["group_name"] == register_kwargs["group_name"]
+    assert deregister_kwargs["cluster_name"] == register_kwargs["cluster_name"]
+
+
 def test_missing_port_fails_fast(make_app, patched_create_client):
     app = make_app(
         {"NACOS_SERVICE_PORT": None, "NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": True}
