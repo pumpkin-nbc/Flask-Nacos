@@ -191,6 +191,9 @@ the root logger, and does not create the SDK's `~/logs/nacos` directory. When
 `NACOS_LOG_ENABLED=True`, console and rotating-file output are both enabled by
 default. It creates `NACOS_LOG_PATH` for `NACOS_LOG_FILENAME`; the defaults
 produce `./logs/flask-nacos.log`.
+Console output colors the complete record by level: blue `DEBUG`, green `INFO`,
+yellow `WARNING`, red `ERROR`, and bold red `CRITICAL`. File handlers always
+use the configured plain formatter and contain no ANSI color sequences.
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |

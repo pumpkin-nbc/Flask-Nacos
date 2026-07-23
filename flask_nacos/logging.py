@@ -25,8 +25,31 @@ FLASK_NACOS_LOG_FILENAME = "flask-nacos.log"
 DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_LEVEL_COLORS = {
+    "DEBUG": "\033[34m",
+    "INFO": "\033[32m",
+    "WARNING": "\033[33m",
+    "ERROR": "\033[31m",
+    "CRITICAL": "\033[1;31m",
+}
+_ANSI_RESET = "\033[0m"
 _CONFIG_LOCK = RLock()
 _internal_logger = logging.getLogger(FLASK_NACOS_LOGGER_NAME)
+
+
+class _ConsoleColorFormatter(logging.Formatter):
+    """Apply level-specific ANSI colors to complete console log lines."""
+
+    def __init__(self, formatter: logging.Formatter) -> None:
+        super().__init__()
+        self._formatter = formatter
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = self._formatter.format(record)
+        color = _LEVEL_COLORS.get(record.levelname)
+        if color is None:
+            return message
+        return f"{color}{message}{_ANSI_RESET}"
 
 
 def _warn_or_raise(message: str, fail_fast: bool) -> None:
@@ -197,14 +220,15 @@ def add_console_handler_once(
     logger: logging.Logger, formatter: logging.Formatter, level: int
 ) -> None:
     """Attach or update one owned console handler."""
+    color_formatter = _ConsoleColorFormatter(formatter)
     for handler in logger.handlers:
         if _handler_type(handler) == "console":
             handler.setLevel(level)
-            handler.setFormatter(formatter)
+            handler.setFormatter(color_formatter)
             return
     handler = _mark_owned(logging.StreamHandler(), "console")
     handler.setLevel(level)
-    handler.setFormatter(formatter)
+    handler.setFormatter(color_formatter)
     logger.addHandler(handler)
 
 
@@ -309,7 +333,7 @@ def _desired_handlers(settings: Dict[str, Any]) -> List[logging.Handler]:
     if settings["console_enabled"]:
         handler = _mark_owned(logging.StreamHandler(), "console")
         handler.setLevel(settings["level"])
-        handler.setFormatter(settings["formatter"])
+        handler.setFormatter(_ConsoleColorFormatter(settings["formatter"]))
         owned.append(handler)
     if settings["file_enabled"] and settings["file"]:
         try:

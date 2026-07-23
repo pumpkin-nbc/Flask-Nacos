@@ -592,11 +592,14 @@ the same time.
 `NACOS_LOG_*` controls only the sanitized records produced by Flask-Nacos. The
 underlying SDK-native loggers are always silent because they may include tokens,
 request parameters, or configuration content. By default no log file or
-`~/logs/nacos` directory is created and the root logger is not modified. Only an
-when `NACOS_LOG_ENABLED=True`, console and rotating-file output are enabled by
+`~/logs/nacos` directory is created and the root logger is not modified. When
+`NACOS_LOG_ENABLED=True`, console and rotating-file output are enabled by
 default. `NACOS_LOG_PATH` is created for `NACOS_LOG_FILENAME`; the defaults
 produce `./logs/flask-nacos.log`. When
 logging is disabled, the configured directory is never created.
+Console records are colored by level (`DEBUG` blue, `INFO` green, `WARNING`
+yellow, `ERROR` red, `CRITICAL` bold red); file records never contain ANSI
+color codes.
 
 ```python
 app.config.update(

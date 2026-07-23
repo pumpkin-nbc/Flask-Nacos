@@ -535,6 +535,8 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 root logger。`NACOS_LOG_ENABLED=True` 时默认同时开启控制台和轮转文件输出，并创建
 `NACOS_LOG_PATH` 后写入 `NACOS_LOG_FILENAME`；默认结果为 `./logs/flask-nacos.log`。日志关闭时，即使配置了目录也
 不会创建。文件中只包含 Flask-Nacos 安全日志，不包含 SDK 原始通信内容。
+控制台日志按等级着色（`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、`ERROR` 红色、
+`CRITICAL` 加粗红色）；文件日志不包含 ANSI 颜色转义符。
 
 ```python
 app.config.update(

@@ -181,6 +181,8 @@ app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
 默认关闭 Flask-Nacos 日志，不创建任何日志文件、不修改 root logger，也不会创建 SDK 的
 `~/logs/nacos` 目录。设置 `NACOS_LOG_ENABLED=True` 后，控制台和轮转文件输出默认同时开启；
 创建 `NACOS_LOG_PATH` 后写入 `NACOS_LOG_FILENAME`，默认结果为 `./logs/flask-nacos.log`。
+控制台会为完整日志行按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
+`ERROR` 红色、`CRITICAL` 加粗红色。文件 handler 始终使用纯文本格式，不包含 ANSI 颜色码。
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |

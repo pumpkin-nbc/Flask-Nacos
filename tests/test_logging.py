@@ -247,16 +247,28 @@ def test_console_enabled_adds_stream_handler():
 
 
 def test_default_console_prints_normal_and_error_records(capsys):
-    app, cfg = _cfg(NACOS_LOG_FILE_ENABLED=False)
+    app, cfg = _cfg(
+        NACOS_LOG_FILE_ENABLED=False,
+        NACOS_LOG_LEVEL="DEBUG",
+    )
     nlog.configure_logger(app, cfg)
 
     logger = _flask_logger()
-    logger.info("normal-record")
-    logger.error("error-record")
+    expected = {
+        logging.DEBUG: ("\033[34m", "debug-record"),
+        logging.INFO: ("\033[32m", "info-record"),
+        logging.WARNING: ("\033[33m", "warning-record"),
+        logging.ERROR: ("\033[31m", "error-record"),
+        logging.CRITICAL: ("\033[1;31m", "critical-record"),
+    }
+    for level, (_, message) in expected.items():
+        logger.log(level, message)
 
     output = capsys.readouterr().err
-    assert "normal-record" in output
-    assert "error-record" in output
+    for color, message in expected.values():
+        assert f"{color}" in output
+        assert message in output
+    assert output.count("\033[0m") == len(expected)
 
 
 def test_repeated_configuration_does_not_duplicate_console_handler():
@@ -318,6 +330,23 @@ def test_file_configured_adds_file_handler(tmp_path):
     assert len(files) == 1
     assert (log_directory / "custom.log").exists()
     assert log_directory.is_dir()
+
+
+def test_file_logs_never_contain_console_color_codes(tmp_path):
+    log_directory = tmp_path / "plain-text"
+    app, cfg = _cfg(
+        NACOS_LOG_CONSOLE_ENABLED=False,
+        NACOS_LOG_PATH=str(log_directory),
+    )
+    nlog.configure_logger(app, cfg)
+
+    _flask_logger().error("plain-file-record")
+    for handler in _file_handlers(_flask_logger()):
+        handler.flush()
+
+    content = (log_directory / "flask-nacos.log").read_text(encoding="utf-8")
+    assert "plain-file-record" in content
+    assert "\033[" not in content
 
 
 def test_file_logging_can_be_disabled_without_creating_path(tmp_path):

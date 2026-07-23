@@ -40,6 +40,8 @@
 - `NACOS_LOG_ENABLED` 默认值为 `False`；启用后控制台与轮转文件输出均默认开启，
   `NACOS_LOG_PATH` 默认使用 `./logs`，`NACOS_LOG_FILENAME` 默认使用 `flask-nacos.log`。
 - 轮转日志默认每个文件 10 MiB，并保留五个备份。
+- 控制台日志按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
+  `ERROR` 红色、`CRITICAL` 加粗红色；文件日志保持纯文本，不包含 ANSI 转义符。
 - 在发布前移除未发布的 `NACOS_LOG_TO_CONSOLE`、`NACOS_LOG_DIR`、
   `NACOS_LOG_FILE` 与 `NACOS_LOG_USE_FLASK_LOGGER` 配置。
 - 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。
