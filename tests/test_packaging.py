@@ -1,5 +1,6 @@
 """Packaging and public-surface guard tests."""
 
+import inspect
 from pathlib import Path
 
 import flask_nacos
@@ -31,6 +32,12 @@ def test_get_config_still_present():
     assert hasattr(FlaskNacos, "get_config")
 
 
+def test_registration_api_is_consolidated():
+    signature = inspect.signature(FlaskNacos.register_instance)
+    assert list(signature.parameters) == ["self"]
+    assert signature.return_annotation is None
+
+
 def test_source_license_files_are_apache_2():
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     notice_text = (ROOT / "NOTICE").read_text(encoding="utf-8")
@@ -42,3 +49,15 @@ def test_source_license_files_are_apache_2():
     assert 'license = "Apache-2.0"' in pyproject_text
     assert 'license-files = ["LICENSE", "NOTICE"]' in pyproject_text
     assert "License ::" not in pyproject_text
+
+
+def test_supported_python_flask_and_build_metadata_ranges():
+    pyproject_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert 'requires-python = ">=3.8"' in pyproject_text
+    assert '"Flask>=1.0",' in pyproject_text
+    assert '"Flask>=1.0,<4.0"' not in pyproject_text
+    assert '"Programming Language :: Python :: 3.14"' in pyproject_text
+    assert '"mypy>=1.0,<1.15"' in pyproject_text
+    assert '"twine>=5.0.0"' in pyproject_text
+    assert pyproject_text.count('core-metadata-version = "2.4"') == 2

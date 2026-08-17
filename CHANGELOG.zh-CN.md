@@ -5,61 +5,81 @@
 本文件记录 Flask-Nacos 项目的所有重要变更。
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
-项目遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
+版本号遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## 1.0.2
-
-### 修复
-
-- 修复 Flask 加载 `flask-nacos` 时意外生成日志文件的问题。
-- 修复底层 `nacos-sdk-python` 意外生成 `~/logs/nacos/nacos-client-python.log` 的问题。
-- 修复库级别日志配置带来的日志副作用。
-- 修复 Flask 应用初始化过程中的 SDK 级别日志副作用。
-- 修复重复调用 `init_app(app)` 时重复添加日志 handler 的问题。
-- 修复 SDK 原生日志可能通过应用、root、控制台或文件 handler 泄露 token、请求参数或配置
-  正文的问题。
-- 修复 fail-fast 初始化失败后残留部分应用或扩展状态的问题。
-- 修复已初始化但 client 不可用时，非 fail-fast 操作仍抛出异常的问题。
-- 修复注销时重新解析服务身份、可能没有使用实际注册身份的问题。
+## 1.1.0
 
 ### 新增
 
-- 新增可配置的日志控制能力。
-- 新增 `NACOS_LOG_ENABLED`。
-- 新增 `NACOS_LOG_CONSOLE_ENABLED` 与 `NACOS_LOG_FILE_ENABLED`。
-- 新增 `NACOS_LOG_PATH` 与 `NACOS_LOG_FILENAME`。
-- 新增 `NACOS_LOG_FORMAT`。
-- 新增 `NACOS_LOG_PROPAGATE`。
-- 新增 `NACOS_LOG_MAX_BYTES`。
-- 新增 `NACOS_LOG_BACKUP_COUNT`。
-- 新增日志、事务式初始化、注册身份与服务发现校验回归测试。
+- 通过无参数的 `FlaskNacos.register_instance()` 命令新增非阻塞、按需、per-app、
+  per-process single-flight 注册生命周期。
+- `get_status()` 本地状态增加 `registration_in_progress`、
+  `deregistration_requested` 与 `last_registration_error_type`。
+- 增加注册/注销竞争的“最后一次明确操作优先”收敛、fork 生命周期重置、`atexit` 等待
+  进行中注册后的清理与并发回归测试。
+- CI 扩展到 Python 3.14，以及 Flask 1.0.x、1.1.x、2.x、3.0.x、3.1.x 的有效组合。
+- wheel 与 sdist 固定生成 Core Metadata 2.4，在保留 PEP 639 许可证元数据的同时兼容
+  当前打包工具的严格校验。
 
 ### 变更
 
-- `NACOS_LOG_*` 现在只控制脱敏后的 Flask-Nacos 日志；SDK 原生 logger 始终静默。
-- `NACOS_LOG_ENABLED` 默认值为 `False`；启用后控制台与轮转文件输出均默认开启，
-  `NACOS_LOG_PATH` 默认使用 `./logs`，`NACOS_LOG_FILENAME` 默认使用 `flask-nacos.log`。
-- 轮转日志默认每个文件 10 MiB，并保留五个备份。
-- 控制台日志按等级着色：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
-  `ERROR` 红色、`CRITICAL` 加粗红色；文件日志保持纯文本，不包含 ANSI 转义符。
-- 新增脱敏的临时实例心跳状态日志：SDK 心跳成功使用 `INFO`、失败使用 `ERROR`；
-  失败仍进入 SDK 后续重试，并且不会记录响应正文或异常消息。
-- 在发布前移除未发布的 `NACOS_LOG_TO_CONSOLE`、`NACOS_LOG_DIR`、
-  `NACOS_LOG_FILE` 与 `NACOS_LOG_USE_FLASK_LOGGER` 配置。
-- 日志关闭时绝不创建用户配置的日志目录；生成的文件只包含 Flask-Nacos 安全日志。
-- `flask-nacos` 不再配置 root logger。
-- `flask-nacos` 使用命名 logger：`flask_nacos`。
+- `register_instance()` 改为无参数、固定返回 `None`，SDK 注册、重试和
+  心跳启动均由具名 daemon 线程执行。
+- `NACOS_AUTO_REGISTER_ON_INIT` 默认值保持 `True`，但初始化现在只在后台调度注册，
+  不再等待 Nacos。
+- 删除 `NACOS_REGISTER_ONCE_PER_PROCESS`；注册始终按 app、按进程
+  single-flight，并在成功后保持幂等。
+- `deregister_instance()` 支持注册中的延迟清理，并保证最后一次明确注册/注销命令生效。
+- 同步双语 Quickstart 与可运行的 beginner 示例，补齐完整工厂案例实际读取的全部环境变量，
+  并移除简化示例中硬编码的演示凭据。
+
+### 兼容性
+
+- 生命周期层复用现有校验、重试、服务身份、心跳及注册状态机。
+- Python 运行要求继续为 `>=3.8`；Flask 依赖改为无额外上限的 `>=1.0`。
+- 开发类型检查固定使用 mypy `<1.15`，这是仍能在 Python 3.8 运行并明确以其为检查
+  目标的最后一个版本系列。
+
+## 1.0.2
+
+### 新增
+
+- 新增脱敏日志配置：`NACOS_LOG_ENABLED`、`NACOS_LOG_CONSOLE_ENABLED`、
+  `NACOS_LOG_FILE_ENABLED`、`NACOS_LOG_PATH`、`NACOS_LOG_FILENAME`、
+  `NACOS_LOG_FORMAT`、`NACOS_LOG_PROPAGATE`、`NACOS_LOG_MAX_BYTES` 与
+  `NACOS_LOG_BACKUP_COUNT`。
+- 新增按等级着色的控制台日志：`DEBUG` 蓝色、`INFO` 绿色、`WARNING` 黄色、
+  `ERROR` 红色、`CRITICAL` 加粗红色。
+- 新增脱敏的临时实例心跳成功和失败日志。
+- 新增日志、事务式初始化、注册身份和服务发现校验的回归测试。
+
+### 变更
+
+- `NACOS_LOG_*` 只控制脱敏后的 Flask-Nacos 日志；SDK 原生 logger 始终静默，且不再
+  创建 `~/logs/nacos`。
+- 日志默认关闭，关闭时不会创建已配置的目录；启用后控制台和轮转文件默认同时开启，
+  默认写入 `./logs/flask-nacos.log`，单文件 10 MiB，并保留五个备份。
+- 文件日志保持纯文本，不包含 ANSI 转义符；Flask-Nacos 使用命名 logger
+  `flask_nacos`，且不会配置 root logger。
 - 注册成功后缓存并在重试、注销时复用精确服务身份；持久实例忽略心跳配置。
-- 服务发现会在 SDK 调用前校验 service/group/cluster/filter，并把 cluster 过滤同时传给 SDK
-  2.x 和本地防御过滤。
-- 状态示例只公开安全字段白名单，注册示例不再暴露无鉴权的 HTTP 生命周期端点。
-- 生产文档补充多 worker 共享实例身份、SDK 2.x HTTPS 证书校验限制与安全日志默认行为。
+- 服务发现会在 SDK 调用前校验 service、group、cluster 和 filter，把 cluster 过滤传给
+  SDK 2.x，并在本地进行防御性过滤。
+- 状态示例只公开安全字段；生产文档说明多 worker 共享实例身份、SDK 2.x HTTPS 证书
+  校验限制和安全日志默认行为。
+
+### 修复
+
+- 修复库与 SDK 的日志副作用、重复 handler、意外日志文件，以及凭据、请求数据或配置
+  正文可能通过应用、root、控制台或文件 handler 泄露的问题。
+- 修复 fail-fast 初始化失败后残留部分应用或扩展状态的问题。
+- 修复 client 已初始化但不可用时，非 fail-fast 操作仍抛出异常的问题；这些操作现在返回
+  文档约定的安全默认值。
+- 修复注销时重新解析服务身份、没有使用实际注册身份的问题。
 
 ### 说明
 
-- `get_config()` 仍然只返回原始配置内容。
-- 不支持 YAML、JSON、dict 配置解析。
-- 不支持将 Nacos 配置加载进 Flask `app.config`。
+- `get_config()` 仍只返回原始内容；Flask-Nacos 不解析 YAML、JSON 或字典，也不会把
+  远端内容加载进 `app.config`。
 
 ## 1.0.1
 

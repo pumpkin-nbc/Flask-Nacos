@@ -83,6 +83,12 @@ Invoke-RestMethod -Method Post `
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | 默认配置 data ID。 |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | 配置 group。 |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置读取超时秒数。 |
+| `NACOS_DEREGISTER_ON_EXIT` | `true` | 进程正常退出时注销当前应用注册的实例。 |
+| `NACOS_LOG_ENABLED` | `false` | 启用 Flask-Nacos 脱敏日志。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | `true` | 日志启用时输出到控制台。 |
+| `NACOS_LOG_FILE_ENABLED` | `true` | 日志启用时写入轮转文件。 |
+| `NACOS_LOG_PATH` | `./logs` | 日志文件目录。 |
+| `NACOS_LOG_FILENAME` | `flask-nacos.log` | 配置目录下的日志文件名。 |
 | `FLASK_HOST` | `127.0.0.1` | 本地开发监听地址。 |
 
 `NACOS_SERVER_ADDR` 是当前 Flask 进程查找 Nacos 的地址，`NACOS_SERVICE_IP` 是注册给
@@ -218,9 +224,10 @@ NACOS_AUTO_REGISTER = False
 python examples/complete_factory_app.py
 ```
 
-`create_app()` 执行时，Flask-Nacos 会创建 SDK client、注册服务并安装
-`/health/nacos`。同一进程中的注册是幂等的。进程正常退出时，退出处理器只会注销由
-当前应用成功注册的实例。
+`create_app()` 执行时，Flask-Nacos 会创建 SDK client、调度后台注册任务并安装
+`/health/nacos`，应用工厂不会等待 Nacos 网络 I/O。同一进程中的注册是 single-flight，
+因此状态接口最初可能短暂返回 `registered=false`。进程正常退出时，退出处理器会等待
+进行中的注册，并且只注销由当前应用成功注册的实例。
 
 示例特意设置 `NACOS_FAIL_FAST=False`：Nacos 暂时不可用时不会阻止 Flask 启动；依赖
 Nacos 的示例接口会返回安全响应，不会暴露凭据或 SDK traceback。
@@ -280,8 +287,8 @@ export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
-每个 worker 都会执行 `create_app()`。`NACOS_REGISTER_ONCE_PER_PROCESS=True` 保证单个
-worker 内不会重复执行 SDK 注册，fork 后也会重建进程锁。共享同一 IP 和端口的 worker
+每个 worker 都会执行 `create_app()`。注册生命周期始终按 app、按进程 single-flight，
+fork 后会重建继承的锁与本地状态。共享同一 IP 和端口的 worker
 在 Nacos 中对应同一个实例标识，而不是每个 worker 一个实例。请为该共享端点设置
 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册与注销。
 

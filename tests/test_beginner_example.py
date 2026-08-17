@@ -5,6 +5,7 @@ import runpy
 from pathlib import Path
 
 import flask_nacos.extension as extension_module
+from tests.helpers import wait_registered
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "beginner_app.py"
 PUBLIC_STATUS_FIELDS = {
@@ -66,6 +67,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
     fake_client.get_config.return_value = "greeting=hello-from-nacos"
     module = _load_example()
     app = module["app"]
+    wait_registered(module["nacos"])
     client = app.test_client()
 
     cfg = app.extensions["nacos"]["config"]

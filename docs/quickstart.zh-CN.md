@@ -41,7 +41,7 @@ macOS / Linux：
 python3 --version
 ```
 
-看到 `Python 3.8` 到 `Python 3.13` 即可继续。如果命令不存在，请先从
+看到 `Python 3.8` 到 `Python 3.14` 即可继续。如果命令不存在，请先从
 [python.org](https://www.python.org/downloads/) 安装 Python；Windows 安装时勾选
 “Add Python to PATH”。
 
@@ -79,9 +79,12 @@ python3 -m venv .venv
 在 `flask-nacos-demo` 目录创建 `app.py`，复制下面的完整代码：
 
 ```python
+"""Beginner-friendly, single-file Flask-Nacos example."""
+
 import os
 
 from flask import Flask, jsonify
+
 from flask_nacos import FlaskNacos
 
 SERVICE_NAME = "flask-nacos-beginner"
@@ -90,7 +93,9 @@ DEFAULT_GROUP = "DEFAULT_GROUP"
 
 app = Flask(__name__)
 app.config.update(
+    # The first run needs only Python. Enable this after Nacos starts.
     NACOS_ENABLED=os.environ.get("NACOS_ENABLED", "false"),
+    # Address of the Nacos server that this Flask process connects to.
     NACOS_SERVER_ADDR=os.environ.get("NACOS_SERVER_ADDR", "127.0.0.1:8848"),
     NACOS_NAMESPACE_ID=os.environ.get("NACOS_NAMESPACE_ID", ""),
     NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
@@ -98,12 +103,14 @@ app.config.update(
     NACOS_ACCESS_KEY=os.environ.get("NACOS_ACCESS_KEY"),
     NACOS_SECRET_KEY=os.environ.get("NACOS_SECRET_KEY"),
     NACOS_SERVICE_NAME=SERVICE_NAME,
+    # Address advertised to consumers; this is not the Nacos server address.
     NACOS_SERVICE_IP=os.environ.get("NACOS_SERVICE_IP", "127.0.0.1"),
     NACOS_SERVICE_PORT=3000,
     NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0,
     NACOS_GROUP_NAME=DEFAULT_GROUP,
     NACOS_SERVICE_GROUP=DEFAULT_GROUP,
     NACOS_AUTO_REGISTER=True,
+    NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_AUTO_DEREGISTER=True,
     NACOS_CONFIG_ENABLED=True,
     NACOS_CONFIG_DATA_ID=CONFIG_DATA_ID,
@@ -111,22 +118,33 @@ app.config.update(
     NACOS_REQUEST_TIMEOUT=5.0,
     NACOS_HEALTH_CHECK_ENABLED=True,
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
+    NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
     NACOS_LOG_LEVEL=os.environ.get("NACOS_LOG_LEVEL", "INFO"),
+    NACOS_LOG_CONSOLE_ENABLED=os.environ.get(
+        "NACOS_LOG_CONSOLE_ENABLED", "true"
+    ),
+    NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
+    NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
+    NACOS_LOG_FILENAME=os.environ.get(
+        "NACOS_LOG_FILENAME", "flask-nacos.log"
+    ),
+    # Temporarily set NACOS_FAIL_FAST=true when an exact startup error is needed.
     NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
 
 nacos = FlaskNacos(app)
 
 
-def not_ready(feature):
+def _not_ready(feature: str):
     if nacos.get_status()["nacos_enabled"]:
-        hint = "Check that Nacos is running, then check the Flask logs."
+        hint = "Check the Nacos address, authentication, namespace, and Flask logs."
     else:
         hint = "Start Nacos, set NACOS_ENABLED=true, and restart this app."
     return jsonify({"available": False, "feature": feature, "hint": hint}), 503
 
 
-def public_status():
+def _public_status():
+    """Return only status fields that are safe to expose over HTTP."""
     status = nacos.get_status()
     return {
         "nacos_enabled": status.get("nacos_enabled", False),
@@ -137,40 +155,51 @@ def public_status():
     }
 
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
     return jsonify(
-        message="Your Flask-Nacos beginner app is running.",
-        nacos_enabled=nacos.get_status()["nacos_enabled"],
-        next=["/nacos/status", "/health/nacos", "/nacos/config", "/nacos/instances"],
+        {
+            "message": "Your Flask-Nacos beginner app is running.",
+            "nacos_enabled": nacos.get_status()["nacos_enabled"],
+            "next": [
+                "/nacos/status",
+                "/health/nacos",
+                "/nacos/config",
+                "/nacos/instances",
+            ],
+        }
     )
 
 
-@app.route("/nacos/status")
+@app.route("/nacos/status", methods=["GET"])
 def nacos_status():
-    return jsonify(public_status())
+    return jsonify(_public_status())
 
 
-@app.route("/nacos/config")
+@app.route("/nacos/config", methods=["GET"])
 def nacos_config():
     if nacos.get_client() is None:
-        return not_ready("config")
-    content = nacos.get_config()
+        return _not_ready("config")
+    content = nacos.get_config()  # Uses NACOS_CONFIG_DATA_ID by default.
     if content is None:
-        return not_ready("config")
-    return jsonify(available=True, data_id=CONFIG_DATA_ID, content=content)
+        return _not_ready("config")
+    return jsonify(
+        {"available": True, "data_id": CONFIG_DATA_ID, "content": content}
+    )
 
 
-@app.route("/nacos/instances")
+@app.route("/nacos/instances", methods=["GET"])
 def nacos_instances():
     if nacos.get_client() is None:
-        return not_ready("discovery")
+        return _not_ready("discovery")
     instances = nacos.list_instances(SERVICE_NAME)
     return jsonify(
-        available=True,
-        service=SERVICE_NAME,
-        count=len(instances),
-        instances=instances,
+        {
+            "available": True,
+            "service": SERVICE_NAME,
+            "count": len(instances),
+            "instances": instances,
+        }
     )
 
 
@@ -210,7 +239,9 @@ macOS / Linux：
 {
   "nacos_enabled": false,
   "client_initialized": false,
-  "registered": false
+  "registered": false,
+  "service_name": "flask-nacos-beginner",
+  "service_port": 3000
 }
 ```
 
@@ -265,7 +296,8 @@ export NACOS_ENABLED="true"
 .venv/bin/python app.py
 ```
 
-再次打开 <http://127.0.0.1:3000/nacos/status>，预期关键字段为：
+再次打开 <http://127.0.0.1:3000/nacos/status>。初始化只会在后台调度注册任务，因此
+第一次响应可能是 `"registered": false`；刷新几秒，注册完成后的关键字段应为：
 
 ```json
 {
@@ -277,8 +309,10 @@ export NACOS_ENABLED="true"
 }
 ```
 
-这表示 client 已创建，并且 `FlaskNacos(app)` 初始化时完成了自动注册。你也可以在 Nacos
-控制台的服务列表中查找 `flask-nacos-beginner`。
+这表示 client 已创建，并且后台任务完成了自动注册。如果该值持续为 `false`，请查看
+Flask-Nacos 日志，并在 Python 中读取完整状态里的 `registration_in_progress` 和
+`last_registration_error_type`。你也可以在 Nacos 控制台的服务列表中查找
+`flask-nacos-beginner`。
 
 打开 <http://127.0.0.1:3000/health/nacos>，此时预期为 `"status": "ok"`。这个接口只
 反映扩展内部状态，并不主动请求远端 Nacos。

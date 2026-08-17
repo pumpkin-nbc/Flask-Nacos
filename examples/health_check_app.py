@@ -8,6 +8,8 @@ Try it once running:
     curl http://127.0.0.1:5002/health/nacos
 """
 
+import os
+
 from flask import Flask
 
 from flask_nacos import FlaskNacos
@@ -15,8 +17,8 @@ from flask_nacos import FlaskNacos
 app = Flask(__name__)
 app.config.update(
     NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
     NACOS_SERVICE_NAME="health-demo-service",
     NACOS_SERVICE_IP="127.0.0.1",
     NACOS_SERVICE_PORT=5002,

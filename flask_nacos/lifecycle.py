@@ -17,15 +17,13 @@ def should_skip_register(
     registered: bool,
     registered_pid: Optional[int],
     current: int,
-    once_per_process: bool,
 ) -> bool:
     """Return ``True`` when registration should be skipped for this process.
 
-    Skipping happens only when the instance is already registered, the
-    once-per-process policy is enabled, and the recorded pid matches the current
-    process. A changed pid (e.g. a forked worker) allows re-registration.
+    Registration is always single-flight and idempotent per app and process.
+    A changed pid (e.g. a forked worker) allows a fresh registration.
     """
-    return bool(registered and once_per_process and registered_pid == current)
+    return bool(registered and registered_pid == current)
 
 
 def should_skip_deregister(

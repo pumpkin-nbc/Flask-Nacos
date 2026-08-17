@@ -1,11 +1,15 @@
 """Tests for service deregistration (auto via atexit and manual)."""
 
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 def test_manual_deregister(make_app, patched_create_client, fake_client):
-    app = make_app()
+    app = make_app(
+        {"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True}
+    )
     nacos = FlaskNacos(app)
+    wait_registered(nacos)
 
     assert nacos.deregister_instance() is True
     fake_client.remove_naming_instance.assert_called_once()
@@ -43,6 +47,7 @@ def test_atexit_callback_deregisters(make_app, patched_create_client, fake_clien
     app = make_app({"NACOS_AUTO_DEREGISTER": True})
     nacos = FlaskNacos(app)
     nacos.register_instance()
+    wait_registered(nacos)
 
     registered[0]()
     fake_client.remove_naming_instance.assert_called_once()

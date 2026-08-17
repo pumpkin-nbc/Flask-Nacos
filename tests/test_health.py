@@ -2,6 +2,7 @@
 
 from flask_nacos import FlaskNacos
 from flask_nacos.health import HEALTH_ENDPOINT
+from tests.helpers import wait_registered
 
 
 def test_health_route_registered_when_enabled(make_app, patched_create_client):
@@ -35,11 +36,13 @@ def test_health_endpoint_returns_ok(make_app, patched_create_client):
         {
             "NACOS_HEALTH_CHECK_ENABLED": True,
             "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_SERVICE_NAME": "fund-service",
             "NACOS_SERVICE_PORT": 5000,
         }
     )
-    FlaskNacos(app)
+    nacos = FlaskNacos(app)
+    wait_registered(nacos)
 
     resp = app.test_client().get("/health/nacos")
     assert resp.status_code == 200

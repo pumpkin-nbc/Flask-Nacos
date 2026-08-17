@@ -4,6 +4,8 @@ Shows listing instances, filtering by cluster/metadata, and selecting a single
 healthy instance with different strategies.
 """
 
+import os
+
 from flask import Flask, jsonify
 
 from flask_nacos import FlaskNacos
@@ -11,8 +13,8 @@ from flask_nacos import FlaskNacos
 app = Flask(__name__)
 app.config.update(
     NACOS_SERVER_ADDR="127.0.0.1:8848",
-    NACOS_USERNAME="nacos",
-    NACOS_PASSWORD="nacos",
+    NACOS_USERNAME=os.environ.get("NACOS_USERNAME"),
+    NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
     # This app only consumes discovery; it does not register itself.
     NACOS_REGISTER_ENABLED=False,
     NACOS_AUTO_REGISTER=False,

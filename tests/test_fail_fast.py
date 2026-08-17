@@ -10,8 +10,8 @@ from flask_nacos.exceptions import (
     FlaskNacosError,
     NacosClientError,
     NacosConfigError,
-    NacosRegistrationError,
 )
+from tests.helpers import wait_registered, wait_until
 
 
 def _make_failing_factory():
@@ -65,28 +65,28 @@ def test_failed_init_can_be_retried_after_configuration_is_fixed(
     assert calls["count"] == 2
 
 
-def test_auto_registration_failure_rolls_back_and_allows_retry(
+def test_auto_registration_network_failure_is_reported_after_init(
     make_app, patched_create_client, fake_client
 ):
     app = make_app(
         {
             "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_AUTO_DEREGISTER": False,
             "NACOS_FAIL_FAST": True,
             "NACOS_RETRY_ENABLED": False,
         }
     )
     fake_client.add_naming_instance.return_value = False
-    nacos = FlaskNacos()
+    nacos = FlaskNacos(app)
 
-    with pytest.raises(NacosRegistrationError):
-        nacos.init_app(app)
-
-    assert "nacos" not in app.extensions
-    assert nacos.app is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
+    assert "nacos" in app.extensions
+    assert nacos.get_status()["registered"] is False
+    assert nacos.get_status()["last_registration_error_type"] is not None
     fake_client.add_naming_instance.return_value = True
-    nacos.init_app(app)
-    assert nacos.get_status()["registered"] is True
+    nacos.register_instance()
+    wait_registered(nacos)
 
 
 def test_failed_second_app_init_preserves_previous_app_state(
@@ -118,8 +118,8 @@ def test_non_fail_fast_unavailable_client_uses_safe_operation_defaults(
     app = make_app({"NACOS_FAIL_FAST": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is False
-    assert nacos.deregister_instance() is False
+    assert nacos.register_instance() is None
+    assert nacos.deregister_instance() is True
     assert nacos.list_instances("users") == []
     assert nacos.get_one_healthy_instance("users") is None
     assert nacos.get_config("application.yaml") is None
@@ -175,12 +175,14 @@ def test_secrets_never_logged(make_app, patched_create_client, fake_client, capl
                 "NACOS_USERNAME": secret_user,
                 "NACOS_PASSWORD": secret_pw,
                 "NACOS_AUTO_REGISTER": True,
+                "NACOS_AUTO_REGISTER_ON_INIT": True,
                 "NACOS_HEALTH_CHECK_ENABLED": True,
                 "NACOS_LOG_ENABLED": True,
                 "NACOS_LOG_FILE_ENABLED": False,
             }
         )
         nacos = FlaskNacos(app)
+        wait_registered(nacos)
         nacos.get_config("application.yaml")
         nacos.list_instances("user-service")
         nacos.deregister_instance()
@@ -214,13 +216,15 @@ def test_retry_final_failure_logs_no_secrets(
             {
                 "NACOS_PASSWORD": secret_pw,
                 "NACOS_AUTO_REGISTER": True,
+                "NACOS_AUTO_REGISTER_ON_INIT": True,
                 "NACOS_RETRY_TIMES": 3,
                 "NACOS_FAIL_FAST": False,
                 "NACOS_LOG_ENABLED": True,
                 "NACOS_LOG_FILE_ENABLED": False,
             }
         )
-        FlaskNacos(app)
+        nacos = FlaskNacos(app)
+        wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
 
     combined = "\n".join(record.getMessage() for record in caplog.records)
     assert secret_pw not in combined

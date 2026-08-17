@@ -1,6 +1,7 @@
 """Tests for get_status() runtime inspection."""
 
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 def test_get_status_fields(make_app, patched_create_client):
@@ -16,11 +17,17 @@ def test_get_status_fields(make_app, patched_create_client):
     assert status["server_addr"] == "127.0.0.1:8848"
     assert status["namespace_id"] == ""
     assert "registered" in status
+    assert status["registration_in_progress"] is False
+    assert status["last_registration_error_type"] is None
+    assert status["deregistration_requested"] is False
 
 
 def test_get_status_registered_flag(make_app, patched_create_client):
-    app = make_app({"NACOS_AUTO_REGISTER": True})
+    app = make_app(
+        {"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True}
+    )
     nacos = FlaskNacos(app)
+    wait_registered(nacos)
     assert nacos.get_status()["registered"] is True
 
 
@@ -30,16 +37,17 @@ def test_get_status_process_and_discovery_fields(make_app, patched_create_client
     app = make_app(
         {
             "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_DISCOVERY_STRATEGY": "weight",
             "NACOS_HEALTH_CHECK_ENABLED": True,
         }
     )
     nacos = FlaskNacos(app)
+    wait_registered(nacos)
 
     status = nacos.get_status()
     assert status["current_pid"] == lifecycle_module.current_pid()
     assert status["registered_pid"] == lifecycle_module.current_pid()
-    assert status["register_once_per_process"] is True
     assert status["deregister_on_exit"] is True
     assert status["discovery_strategy"] == "weight"
     assert status["instance_normalize"] is True

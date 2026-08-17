@@ -60,11 +60,11 @@ def run_with_retry(
         except Exception as exc:
             last_exc = exc
             logger.warning(
-                "%s attempt %d/%d failed: %s",
+                "%s attempt %d/%d failed (error_type=%s)",
                 operation_name,
                 attempt,
                 max_attempts,
-                exc,
+                type(exc).__name__,
             )
             if attempt < max_attempts:
                 _sleep(interval)

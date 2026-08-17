@@ -7,6 +7,7 @@ import pytest
 from flask_nacos import FlaskNacos
 from flask_nacos.exceptions import NacosValidationError
 from flask_nacos.extension import EXTENSION_KEY
+from tests.helpers import wait_registered, wait_until
 
 
 @pytest.fixture
@@ -125,6 +126,63 @@ def test_invalid_auto_registration_logs_and_continues_when_not_fail_fast(
 
 
 @pytest.mark.parametrize(
+    "invalid_retry",
+    [
+        {"NACOS_RETRY_TIMES": 0},
+        {"NACOS_RETRY_INTERVAL": float("nan")},
+    ],
+)
+def test_auto_registration_retry_preflight_fails_before_client_and_state(
+    make_app,
+    patched_create_client,
+    fake_client,
+    invalid_retry,
+):
+    app = make_app(
+        {
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
+            "NACOS_FAIL_FAST": True,
+            **invalid_retry,
+        }
+    )
+
+    with pytest.raises(NacosValidationError):
+        FlaskNacos(app)
+
+    assert EXTENSION_KEY not in app.extensions
+    assert patched_create_client["count"] == 0
+    fake_client.add_naming_instance.assert_not_called()
+
+
+def test_invalid_auto_registration_retry_logs_and_continues_when_not_fail_fast(
+    make_app,
+    patched_create_client,
+    fake_client,
+    caplog,
+):
+    app = make_app(
+        {
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_AUTO_REGISTER_ON_INIT": True,
+            "NACOS_RETRY_TIMES": 0,
+            "NACOS_FAIL_FAST": False,
+            "NACOS_LOG_ENABLED": True,
+            "NACOS_LOG_FILE_ENABLED": False,
+        }
+    )
+
+    with caplog.at_level(logging.ERROR, logger="flask_nacos"):
+        nacos = FlaskNacos(app)
+
+    assert EXTENSION_KEY in app.extensions
+    assert patched_create_client["count"] == 1
+    assert nacos.get_status()["registered"] is False
+    fake_client.add_naming_instance.assert_not_called()
+    assert "Automatic registration skipped" in caplog.text
+
+
+@pytest.mark.parametrize(
     "disabled_switch",
     [
         "NACOS_REGISTER_ENABLED",
@@ -183,24 +241,28 @@ def test_missing_service_name_is_allowed_when_auto_registration_is_disabled(
         {"NACOS_SERVICE_HEARTBEAT_INTERVAL": "abc"},
     ],
 )
-def test_invalid_params_return_false_when_not_fail_fast(
+def test_invalid_params_are_reported_when_not_fail_fast(
     nacos_factory, overrides, fake_client
 ):
     overrides = {**overrides, "NACOS_FAIL_FAST": False}
     nacos = nacos_factory(overrides)
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    assert nacos.get_status()["last_registration_error_type"] == "NacosValidationError"
     fake_client.add_naming_instance.assert_not_called()
 
 
 # -- IP auto-detection ------------------------------------------------------
 
-def test_ip_auto_detect_failure_raises_when_fail_fast(nacos_factory, monkeypatch):
+def test_ip_auto_detect_failure_is_background_status_when_fail_fast(
+    nacos_factory, monkeypatch
+):
     import flask_nacos.naming as naming_module
 
     monkeypatch.setattr(naming_module, "get_local_ip", lambda: None)
     nacos = nacos_factory({"NACOS_SERVICE_IP": None, "NACOS_FAIL_FAST": True})
-    with pytest.raises(NacosValidationError):
-        nacos.register_instance()
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
+    assert nacos.get_status()["last_registration_error_type"] == "NacosValidationError"
 
 
 def test_ip_auto_detect_failure_returns_false_when_not_fail_fast(
@@ -210,11 +272,13 @@ def test_ip_auto_detect_failure_returns_false_when_not_fail_fast(
 
     monkeypatch.setattr(naming_module, "get_local_ip", lambda: None)
     nacos = nacos_factory({"NACOS_SERVICE_IP": None, "NACOS_FAIL_FAST": False})
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
     fake_client.add_naming_instance.assert_not_called()
 
 
 def test_valid_params_register_successfully(nacos_factory, fake_client):
     nacos = nacos_factory({"NACOS_SERVICE_PORT": 8080, "NACOS_SERVICE_WEIGHT": 2.0})
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
     fake_client.add_naming_instance.assert_called_once()

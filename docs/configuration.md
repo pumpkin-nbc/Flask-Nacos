@@ -176,15 +176,18 @@ configuration center is disabled.
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | no | Whether `init_app(app)` performs auto-registration. |
-| `NACOS_REGISTER_ONCE_PER_PROCESS` | bool | `True` | no | Register only once per process; a forked worker (new pid) may re-register. |
+| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | no | Whether `init_app(app)` schedules background registration. |
 | `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | no | Register an `atexit` handler to deregister on process exit. |
 
-Example (explicit registration under Gunicorn):
+Example (disable the default init-time scheduling for an explicit Gunicorn hook):
 
 ```python
 app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+nacos.register_instance()
 ```
+
+`register_instance()` is always non-blocking and returns `None`. Registration is
+single-flight per app and process; use `get_status()` to observe completion.
 
 ## 8. Logging
 

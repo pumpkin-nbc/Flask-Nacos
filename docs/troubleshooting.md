@@ -11,11 +11,24 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 ## 1. App starts but nothing registers in Nacos
 
 - Symptom: the Flask app runs, but the instance does not appear in Nacos.
-- Cause: registration disabled, or auto-registration turned off.
+- Cause: one of the registration switches was explicitly disabled, deterministic
+  registration preflight failed, or the background operation failed.
 - Investigate: check `NACOS_ENABLED`, `NACOS_REGISTER_ENABLED`,
   `NACOS_AUTO_REGISTER`, `NACOS_AUTO_REGISTER_ON_INIT`; inspect logs and
   `get_status()`.
-- Fix: enable the switches or call `nacos.register_instance()` explicitly.
+- Fix: restore the intended switches (init-time scheduling defaults to `True`),
+  or call `nacos.register_instance()` explicitly after fixing the reported cause.
+- If `registration_in_progress=True`, wait and check again. If it becomes
+  `False` while `registered=False`, inspect `last_registration_error_type` and
+  safe logs, then call `register_instance()` again after fixing the cause.
+
+## Registration network failure does not raise from `register_instance()`
+
+- Cause: 1.1 registration is always a background lifecycle command.
+- Fix: use `get_status()` and logs for Nacos timeouts/retry exhaustion.
+  `NACOS_FAIL_FAST=True` still raises deterministic config, client availability,
+  and thread-start errors synchronously, but it cannot raise a later daemon
+  thread network error into the caller.
 
 ## 2. Registration fails: `NACOS_SERVICE_NAME` empty
 
@@ -167,7 +180,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: the underlying `nacos-sdk-python` installs its own file handler when
   its logger has no handlers at client construction time.
 - Investigate: confirm the file is created only after the Nacos client is built.
-- Fix: upgrade to flask-nacos 1.0.2+. It silences native SDK loggers and sends
+- Fix: use flask-nacos 1.1.0. It silences native SDK loggers and sends
   the SDK an existing alternate directory, so neither the default file nor the
   `~/logs/nacos` directory is created. Do not enable raw SDK logging because it
   may contain sensitive request or configuration data.
@@ -201,7 +214,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   client before flask-nacos configured logging.
 - Investigate: ensure `FlaskNacos(app)` / `init_app(app)` runs before any code
   that constructs a `nacos.NacosClient` directly.
-- Fix: upgrade to 1.0.2+. Flask-Nacos silences SDK loggers before creating the
+- Fix: use 1.1.0. Flask-Nacos silences SDK loggers before creating the
   client and directs SDK setup away from the home directory. A directly created
   SDK client is outside Flask-Nacos control.
 
@@ -238,5 +251,5 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Symptom: calling `init_app(app)` more than once multiplies handlers/log lines.
 - Cause: naive handler setup re-adds handlers on every call.
 - Investigate: count handlers on `logging.getLogger("flask_nacos")`.
-- Fix: none needed on 1.0.2+. flask-nacos de-duplicates handlers, so repeated
+- Fix: none needed on 1.1.0. flask-nacos de-duplicates handlers, so repeated
   `init_app(app)` never adds a second console or file handler.

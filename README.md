@@ -43,21 +43,19 @@ quickstart exactly as written.
   manual TestPyPI/PyPI release workflow (0.6.0).
 - Full documentation set under [`docs/`](https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs), enhanced examples, a local
   Nacos Docker Compose file, and a documentation-consistency check (0.7.0).
-- Broad compatibility: Python 3.8-3.13 and Flask `>=1.0,<4.0` (1.x/2.x/3.x),
+- Broad compatibility: Python 3.8-3.14 and Flask `>=1.0`,
   tolerant handling of different Nacos SDK response shapes, a Python-3.8
   compatibility checker, and a Python x Flask CI matrix (0.8.0).
 - Release Candidate preparation: frozen public API with an API-snapshot check,
   backward-compatibility tests, an examples validator, a package smoke test, and
   a 1.0.0 acceptance checklist (0.9.0).
-- First stable release: the public API is declared stable for the 1.0 series and
-  is verified by an API-snapshot check and backward-compatibility tests (1.0.0).
+- First stable release: the 1.0.x public API is verified by an API-snapshot
+  check and compatibility tests (1.0.0).
 
 ## Stable release
 
-`1.0.0` is the first stable release of Flask-Nacos, intended for PyPI. The public
-API is stable for the 1.0 series: method names, existing parameters, and return
-contracts will not change without a deprecation cycle, and any new parameters
-will be added with defaults so existing code keeps working.
+`1.1.0` is the current supported release surface. API compatibility is guarded
+from this public surface onward.
 
 - `get_config()` returns the raw Nacos config content only; it does not perform
   YAML, JSON, or dict parsing.
@@ -69,8 +67,8 @@ will be added with defaults so existing code keeps working.
 
 ## Compatibility
 
-- Python: 3.8 - 3.13.
-- Flask: `>=1.0, <4.0` (Flask 1.x, 2.x, and 3.x).
+- Python: 3.8 - 3.14 currently tested; metadata allows later Python releases.
+- Flask: `>=1.0`; CI tests valid Flask 1.0.x through 3.1.x combinations.
 - Nacos: server 2.x with the synchronous `nacos-sdk-python` client.
 - Service discovery tolerates different SDK response shapes (plain list,
   `hosts`/`instances`, or a nested `data` wrapper) and both camelCase and
@@ -148,13 +146,15 @@ shared `app/extensions.py`, see the [existing extension registry pattern](https:
 
 When `NACOS_REGISTER_ENABLED`, `NACOS_AUTO_REGISTER`, and
 `NACOS_AUTO_REGISTER_ON_INIT` are all `True`, registration settings are
-validated and the service is registered synchronously during `init_app(app)`.
+validated synchronously during `init_app(app)`, then registration is scheduled
+in the background after application state is committed.
 You can also register manually. `NACOS_REGISTER_ENABLED` only controls
 init-time automatic registration; it does not disable an explicit
 `register_instance()` call:
 
 ```python
 nacos.register_instance()
+status = nacos.get_status()
 ```
 
 ### Registration Parameter Rules
@@ -184,6 +184,22 @@ Registration and deregistration succeed only when SDK 2.x explicitly returns
 `True`. A `False` result follows the normal retry and `NACOS_FAIL_FAST` flow and
 does not update the extension's registered state.
 
+Registration is an explicit lifecycle command and always returns `None` without
+waiting for SDK network I/O, retries, or heartbeat startup. By default,
+`init_app(app)` schedules this background command. To trigger it only from the
+Web lifecycle, opt out explicitly:
+
+```python
+app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+
+nacos.register_instance()
+status = nacos.get_status()
+```
+
+At most one daemon registration task runs per app and process. Inspect
+`registered`, `registration_in_progress`, and `last_registration_error_type`
+with `get_status()`. See [Service Registration](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/service-registration.md).
+
 Registration is idempotent: calling `register_instance()` multiple times on the
 same extension instance registers only once (subsequent calls are no-ops).
 
@@ -208,7 +224,9 @@ nacos.deregister_instance()
 ```
 
 Deregistration is idempotent: once an instance has been deregistered, further
-`deregister_instance()` calls are no-ops and never raise.
+`deregister_instance()` calls are no-ops and return `True`. If registration is
+still running, deregistration returns `True` when the delayed request is
+accepted; `deregistration_requested` remains visible until cleanup settles.
 
 ## Service Discovery
 
@@ -333,11 +351,21 @@ never calls Nacos and never includes `NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, or
     "nacos_enabled": True,
     "client_initialized": True,
     "registered": True,
+    "registration_in_progress": False,
+    "deregistration_requested": False,
+    "last_registration_error_type": None,
     "service_name": "fund-service",
     "service_ip": "127.0.0.1",
     "service_port": 5000,
     "server_addr": "127.0.0.1:8848",
     "namespace_id": "",
+    "current_pid": 12345,
+    "registered_pid": 12345,
+    "deregister_on_exit": True,
+    "discovery_strategy": "first",
+    "instance_normalize": True,
+    "health_check_enabled": False,
+    "health_check_path": "/health/nacos",
 }
 ```
 
@@ -347,10 +375,11 @@ Two switches control init-time registration:
 
 - `NACOS_AUTO_REGISTER` (default `True`): master switch for auto-registration.
 - `NACOS_AUTO_REGISTER_ON_INIT` (default `True`): whether `init_app(app)`
-  performs the auto-registration.
+  schedules background auto-registration.
 
-The service is auto-registered during `init_app(app)` only when both are `True`
-(and `NACOS_REGISTER_ENABLED` is `True`). You can always register manually:
+The service registration command is scheduled by `init_app(app)` only when both
+are `True` (and `NACOS_REGISTER_ENABLED` is `True`). You can always request it
+explicitly:
 
 ```python
 nacos.register_instance()
@@ -363,7 +392,8 @@ and no partial `app.extensions["nacos"]` state is retained. With fail-fast
 disabled, the error is logged, automatic registration is skipped, and config
 center and discovery operations remain available. If any auto-registration
 switch is off, a service name is not required until `register_instance()` is
-called manually.
+called manually. SDK network errors happen in the background and are reported
+through status and safe logs rather than raised from `init_app()`.
 
 ### Gunicorn / Multi-worker Deployment
 
@@ -393,15 +423,10 @@ normalization, discovery filtering, and pluggable selection strategies.
 ### Multi-worker Registration (Gunicorn / uWSGI)
 
 Under Gunicorn or uWSGI, the master process forks multiple workers and each
-worker runs `init_app`. flask-nacos tracks registration state per process, but
-workers advertising the same service/group/cluster/IP/port update the same
-Nacos instance identity:
-
-- `NACOS_REGISTER_ONCE_PER_PROCESS` (default `True`): within the same process,
-  once `register_instance()` succeeds, repeated calls are skipped. When a worker
-  is forked and the process id changes, the new worker is allowed to register
-  its own instance.
-- On shutdown, `deregister_instance()` only deregisters the instance registered
+worker runs `init_app`. Registration is always per-app, per-process, and
+single-flight; workers advertising the same service/group/cluster/IP/port still
+update the same Nacos instance identity. On shutdown,
+`deregister_instance()` only deregisters the instance registered
   by the current process. If the recorded registration pid differs from the
   current process (for example the master vs a worker), deregistration is logged
   and skipped so another process's instance is not removed by mistake.
@@ -521,7 +546,9 @@ secret-free and without calling Nacos):
     # ... existing fields ...
     "current_pid": 12345,
     "registered_pid": 12345,
-    "register_once_per_process": True,
+    "registration_in_progress": False,
+    "deregistration_requested": False,
+    "last_registration_error_type": None,
     "deregister_on_exit": True,
     "discovery_strategy": "first",
     "instance_normalize": True,
@@ -575,8 +602,7 @@ the same time.
 | `NACOS_HEALTH_CHECK_ENABLED` | `False` | Register the Flask health-check route. |
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Path of the health-check route. |
 | `NACOS_STATUS_ENABLED` | `True` | Deprecated no-op retained for 1.x compatibility; planned for removal in 2.0. |
-| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | Auto register during `init_app` (with `NACOS_AUTO_REGISTER`). |
-| `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | Register only once per process; a forked worker (new pid) may re-register. |
+| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | Schedule background registration during `init_app` (with `NACOS_AUTO_REGISTER`). |
 | `NACOS_DEREGISTER_ON_EXIT` | `True` | Register an `atexit` handler to deregister on process exit. |
 | `NACOS_DISCOVERY_STRATEGY` | `"first"` | Default strategy for `get_one_healthy_instance` (`first`/`random`/`weight`). |
 | `NACOS_DISCOVERY_CLUSTER` | `None` | Default cluster filter for discovery. |
@@ -639,14 +665,16 @@ parameter validation, and local IP auto-detection:
 
 - `NACOS_FAIL_FAST = False` (default): failures are logged and do not prevent
   the Flask app from starting. Methods return safe defaults:
-  - `register_instance()` -> `False`
+  - `register_instance()` -> `None`; inspect `get_status()` for the result
   - `deregister_instance()` -> `False`
   - `list_instances()` -> `[]`
   - `get_one_healthy_instance()` -> `None`
   - `get_config()` -> `None`
-- `NACOS_FAIL_FAST = True`: failures raise an exception. Active automatic
-  registration settings are preflighted synchronously in `init_app(app)` before
-  client creation or extension-state installation.
+- `NACOS_FAIL_FAST = True`: deterministic configuration errors, an unavailable
+  client, and thread-start errors raise synchronously. Active automatic
+  registration settings are preflighted in `init_app(app)` before client
+  creation or extension-state installation. Nacos network errors and exhausted
+  retries occur in the background and are exposed through status and safe logs.
 
 Exception hierarchy:
 
@@ -788,7 +816,7 @@ environment.
 
 ## Compatibility
 
-- Flask: `>=1.0, <4.0`
+- Flask: `>=1.0`
 - Python: `>=3.8`
 - Nacos: 2.x
 - Nacos SDK: `nacos-sdk-python>=2.0.0,<3.0.0` (synchronous client)

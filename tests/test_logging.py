@@ -1,4 +1,4 @@
-"""Tests for unified NACOS_LOG_* logging control (1.0.2).
+"""Tests for unified NACOS_LOG_* logging control.
 
 These tests verify that flask-nacos configures both its own logger and the
 underlying nacos-sdk-python loggers without side effects: no default file, no

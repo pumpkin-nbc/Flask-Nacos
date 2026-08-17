@@ -77,10 +77,14 @@ def _valid_metadata(body="# Flask-Nacos\n", extra_headers=""):
 Metadata-Version: 2.4
 Name: flask-nacos
 Version: {PROJECT_VERSION}
+Requires-Python: >=3.8
+Requires-Dist: Flask>=1.0
+Requires-Dist: nacos-sdk-python<3.0.0,>=2.0.0
 License-Expression: Apache-2.0
 License-File: LICENSE
 License-File: NOTICE
 Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Typing :: Typed
 Project-URL: Changelog, https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md
 Project-URL: Documentation, https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs
@@ -253,6 +257,29 @@ def test_validate_wheel_metadata_accepts_apache_2(check_package):
     assert check_package.validate_wheel_metadata(metadata) == []
 
 
+def test_distribution_metadata_requires_version_2_4(check_package):
+    metadata = _valid_metadata().replace(
+        "Metadata-Version: 2.4", "Metadata-Version: 2.5"
+    )
+
+    wheel_problems = check_package.validate_wheel_metadata(metadata)
+    sdist_problems = check_package.validate_sdist_metadata(metadata)
+
+    assert any("wheel Metadata-Version" in problem for problem in wheel_problems)
+    assert any("sdist Metadata-Version" in problem for problem in sdist_problems)
+
+
+def test_wheel_metadata_requires_supported_python_and_unbounded_flask(check_package):
+    metadata = _valid_metadata().replace(
+        "Requires-Python: >=3.8", "Requires-Python: >=3.9"
+    ).replace("Requires-Dist: Flask>=1.0", "Requires-Dist: Flask>=1.0,<4.0")
+
+    problems = check_package.validate_wheel_metadata(metadata)
+
+    assert any("wrong Requires-Python" in problem for problem in problems)
+    assert any("wrong Flask requirement" in problem for problem in problems)
+
+
 def test_validate_wheel_metadata_rejects_wrong_license(check_package):
     metadata = _valid_metadata().replace(
         "License-Expression: Apache-2.0", "License-Expression: GPL-3.0-or-later"
@@ -385,6 +412,11 @@ def test_ci_has_strict_package_and_sdk_compatibility_checks():
     assert "python scripts/check_sdk_compatibility.py" in workflow
     assert "name: Required CI" in workflow
     assert "- sdk-compatibility" in workflow
+    assert 'python-version: "3.14"' in workflow
+    assert 'flask: "Flask==1.0.4 ' in workflow
+    assert 'flask: "Flask==1.1.4 ' in workflow
+    assert 'flask: "Flask>=2.0,<3.0 Werkzeug<3.0"' in workflow
+    assert 'flask: "Flask>=3.0,<3.1"' in workflow
 
 
 def test_sdk_version_validation_accepts_supported_versions(check_sdk_compatibility):

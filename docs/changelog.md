@@ -7,8 +7,7 @@ the repository root. This page links to it for convenience.
 
 - [View the full changelog](../CHANGELOG.md)
 
-The latest release is `1.0.2`. It prevents the SDK default log file and
-`~/logs/nacos` directory, keeps native SDK logging silent, and makes
-`NACOS_LOG_*` govern sanitized Flask-Nacos records only. It also hardens
-transactional initialization, lifecycle identity, discovery validation, and
-safe examples. See the root changelog for complete details.
+The latest release is `1.1.0`. It makes the no-argument
+`register_instance()` command non-blocking, keeps init-time registration enabled
+by default as background work, and adds per-app/per-process single-flight lifecycle status.
+It also validates Python 3.8-3.14 and current Flask `>=1.0` combinations.

@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-"""Check that the public API matches the frozen 1.0.0 candidate snapshot.
+"""Check that the public API matches the Flask-Nacos 1.1 snapshot.
 
-From 0.9.0 the public API is treated as the release-candidate stable surface.
-This guard fails if a frozen method is missing or if an explicitly unsupported
-identifier appears, so the API cannot be accidentally changed or removed before
-1.0.0.
+Version 1.1 intentionally changes registration into a no-argument lifecycle
+command. This guard enforces the supported public signature.
 
 Uses only the standard library (``importlib`` / ``inspect``). It imports the
 package but never creates a real Nacos connection. Exits non-zero on any
@@ -12,10 +10,11 @@ problem.
 """
 
 import importlib
+import inspect
 import sys
 from typing import List
 
-# Methods that must exist on FlaskNacos (the frozen public surface).
+# Methods that must exist on FlaskNacos (the supported public surface).
 REQUIRED_METHODS = (
     "init_app",
     "get_client",
@@ -53,6 +52,14 @@ def scan() -> List[str]:
         if not callable(getattr(extension, name, None)):
             problems.append(f"missing frozen API method: FlaskNacos.{name}()")
 
+    register = getattr(extension, "register_instance", None)
+    if callable(register):
+        signature = inspect.signature(register)
+        if list(signature.parameters) != ["self"]:
+            problems.append("register_instance() must accept only self")
+        if signature.return_annotation is not None:
+            problems.append("register_instance() must be annotated as returning None")
+
     all_names = getattr(flask_nacos, "__all__", [])
     for name in FORBIDDEN_METHODS:
         if hasattr(extension, name):
@@ -66,7 +73,7 @@ def scan() -> List[str]:
 def main() -> int:
     problems = scan()
     if not problems:
-        print("[check_api_snapshot] OK - public API matches the frozen 1.0.0 candidate")
+        print("[check_api_snapshot] OK - public API matches the 1.1 surface")
         return 0
 
     print("[check_api_snapshot] FAILED - public API problems:", file=sys.stderr)

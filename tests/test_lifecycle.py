@@ -3,6 +3,7 @@
 import flask_nacos.extension as extension_module
 import flask_nacos.lifecycle as lifecycle_module
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 def test_repeated_register_same_process_registers_once(
@@ -11,9 +12,10 @@ def test_repeated_register_same_process_registers_once(
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True
-    assert nacos.register_instance() is True
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
+    assert nacos.register_instance() is None
+    assert nacos.register_instance() is None
     fake_client.add_naming_instance.assert_called_once()
 
 
@@ -23,32 +25,37 @@ def test_register_records_pid(make_app, patched_create_client, monkeypatch):
     nacos = FlaskNacos(app)
 
     nacos.register_instance()
+    wait_registered(nacos)
     assert nacos._registered_pid == 4321
 
 
 def test_pid_change_allows_reregister(make_app, patched_create_client, fake_client, monkeypatch):
-    pids = iter([100, 200])
-    monkeypatch.setattr(lifecycle_module, "current_pid", lambda: next(pids))
+    pid = [100]
+    monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
 
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True  # pid 100, first register
-    assert nacos.register_instance() is True  # pid 200, new process -> re-register
+    assert nacos.register_instance() is None  # pid 100, first register
+    wait_registered(nacos)
+    pid[0] = 200
+    assert nacos.register_instance() is None  # pid 200, fresh child state
+    wait_registered(nacos)
     assert fake_client.add_naming_instance.call_count == 2
 
 
-def test_once_per_process_false_registers_each_time(
+def test_registration_is_always_idempotent_per_process(
     make_app, patched_create_client, fake_client
 ):
     app = make_app(
-        {"NACOS_AUTO_REGISTER": False, "NACOS_REGISTER_ONCE_PER_PROCESS": False}
+        {"NACOS_AUTO_REGISTER": False}
     )
     nacos = FlaskNacos(app)
 
     nacos.register_instance()
+    wait_registered(nacos)
     nacos.register_instance()
-    assert fake_client.add_naming_instance.call_count == 2
+    assert fake_client.add_naming_instance.call_count == 1
 
 
 def test_deregister_fresh_instance_no_error(
@@ -58,21 +65,23 @@ def test_deregister_fresh_instance_no_error(
     nacos = FlaskNacos(app)
 
     assert nacos.deregister_instance() is True
-    fake_client.remove_naming_instance.assert_called_once()
+    fake_client.remove_naming_instance.assert_not_called()
 
 
-def test_deregister_skipped_on_pid_mismatch(
+def test_forked_child_does_not_deregister_parent_instance(
     make_app, patched_create_client, fake_client, monkeypatch
 ):
-    pids = iter([100, 200])
-    monkeypatch.setattr(lifecycle_module, "current_pid", lambda: next(pids))
+    pid = [100]
+    monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
 
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True  # registered in pid 100
-    # Now current pid is 200 -> mismatch -> skip, no client call.
-    assert nacos.deregister_instance() is False
+    assert nacos.register_instance() is None  # registered in pid 100
+    wait_registered(nacos)
+    pid[0] = 200
+    # The child resets inherited ownership and treats deregistration as a no-op.
+    assert nacos.deregister_instance() is True
     fake_client.remove_naming_instance.assert_not_called()
 
 
@@ -134,6 +143,7 @@ def test_atexit_deregisters_instance_registered_by_extension(
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
     nacos.register_instance()
+    wait_registered(nacos)
 
     nacos._atexit_handler()
 

@@ -3,6 +3,7 @@
 import importlib
 
 import flask_nacos.extension as extension_module
+from tests.helpers import wait_registered
 
 PUBLIC_STATUS_FIELDS = {
     "nacos_enabled",
@@ -35,6 +36,7 @@ def test_complete_example_configuration_and_routes(
 
     example = _load_example()
     app = example.create_app()
+    wait_registered(example.nacos)
     state = app.extensions["nacos"]
     cfg = state["config"]
 

@@ -36,19 +36,16 @@
   扩展的 CI 检查，以及手动触发的 TestPyPI/PyPI 发布工作流（0.6.0）。
 - 完整的 [`docs/`](docs/) 文档集、增强的示例、本地 Nacos Docker Compose 文件，
   以及文档一致性检查（0.7.0）。
-- 广泛的兼容性：Python 3.8-3.13 与 Flask `>=1.0,<4.0`（1.x/2.x/3.x），兼容不同
+- 广泛的兼容性：Python 3.8-3.14 与 Flask `>=1.0`，兼容不同
   Nacos SDK 返回结构，提供 Python 3.8 兼容性检查脚本以及 Python x Flask CI 矩阵
   （0.8.0）。
 - Release Candidate 准备：冻结公开 API 并提供 API 快照检查、向后兼容性测试、示例
   校验脚本、安装包 smoke test，以及 1.0.0 验收清单（0.9.0）。
-- 首个稳定版：公开 API 在 1.0 系列中被声明为稳定，并由 API 快照检查与向后兼容性测试
-  保障（1.0.0）。
+- 首个稳定版：1.0.x 公开 API 由 API 快照检查与兼容性测试保障（1.0.0）。
 
 ## 稳定版
 
-`1.0.0` 是 Flask-Nacos 的首个稳定版，面向 PyPI 发布。公开 API 在 1.0 系列中保持稳定：
-不会在没有废弃流程的情况下修改方法名称、已有参数含义与返回值约定；新增参数一律带默认值，
-不破坏已有代码。
+`1.1.0` 是当前受支持的发布接口，并从该公开接口开始执行 API 快照保护。
 
 - `get_config()` 只返回 Nacos 配置的原始内容，不做 YAML、JSON、dict 解析。
 - 当前版本不提供 `get_config_as_dict()`。
@@ -58,8 +55,8 @@
 
 ## 兼容性
 
-- Python：3.8 - 3.13。
-- Flask：`>=1.0, <4.0`（Flask 1.x、2.x、3.x）。
+- Python：当前验证 3.8 - 3.14；元数据允许后续 Python 版本安装。
+- Flask：`>=1.0`；CI 验证 Flask 1.0.x 到 3.1.x 的有效组合。
 - Nacos：服务端 2.x，使用同步的 `nacos-sdk-python` 客户端。
 - 服务发现兼容不同的 SDK 返回结构（普通列表、`hosts`/`instances`，或带 `data`
   包装的嵌套结构），并同时兼容 camelCase 与 snake_case 实例字段。
@@ -134,12 +131,13 @@ def create_app():
 ## 服务注册
 
 当 `NACOS_REGISTER_ENABLED`、`NACOS_AUTO_REGISTER` 与
-`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 中同步校验注册配置
-并自动注册服务。`NACOS_REGISTER_ENABLED` 只控制初始化阶段的自动注册，不会禁用显式
+`NACOS_AUTO_REGISTER_ON_INIT` 都为 `True` 时，会在 `init_app(app)` 中同步校验注册配置，
+提交应用状态后再在后台注册服务。`NACOS_REGISTER_ENABLED` 只控制初始化阶段的自动注册，不会禁用显式
 调用 `register_instance()`：
 
 ```python
 nacos.register_instance()
+status = nacos.get_status()
 ```
 
 ### 注册参数校验规则
@@ -165,6 +163,21 @@ SDK 心跳线程仍会按原间隔继续重试。
 只有 SDK 2.x 明确返回 `True` 时，注册或注销才算成功。返回 `False` 时会进入现有重试与
 `NACOS_FAIL_FAST` 流程，并且不会错误更新扩展的注册状态。
 
+注册现在始终是非阻塞生命周期命令：返回值固定为 `None`，不会等待 SDK 网络请求、重试或
+心跳启动。默认由 `init_app(app)` 调度该后台命令；若只希望由 Web 生命周期触发，请显式
+关闭初始化注册：
+
+```python
+app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+
+nacos.register_instance()
+status = nacos.get_status()
+```
+
+每个 app、每个进程最多只有一个 daemon 注册任务。通过 `get_status()` 查看
+`registered`、`registration_in_progress` 和 `last_registration_error_type`。完整说明见
+[服务注册](docs/service-registration.zh-CN.md)。
+
 注册具备幂等性：对同一个扩展实例多次调用 `register_instance()` 只会注册一次，
 后续调用为无操作（no-op）。
 
@@ -185,7 +198,8 @@ SDK 心跳线程仍会按原间隔继续重试。
 nacos.deregister_instance()
 ```
 
-注销具备幂等性：实例被注销后，再次调用 `deregister_instance()` 为无操作，且不会报错。
+注销具备幂等性：实例不存在时返回 `True` 且不会调用 SDK。注册仍在进行时，返回 `True`
+表示延迟注销请求已接受；清理完成前 `deregistration_requested` 会保持为 `True`。
 
 ## 服务发现
 
@@ -300,11 +314,21 @@ status = nacos.get_status()
     "nacos_enabled": True,
     "client_initialized": True,
     "registered": True,
+    "registration_in_progress": False,
+    "deregistration_requested": False,
+    "last_registration_error_type": None,
     "service_name": "fund-service",
     "service_ip": "127.0.0.1",
     "service_port": 5000,
     "server_addr": "127.0.0.1:8848",
     "namespace_id": "",
+    "current_pid": 12345,
+    "registered_pid": 12345,
+    "deregister_on_exit": True,
+    "discovery_strategy": "first",
+    "instance_normalize": True,
+    "health_check_enabled": False,
+    "health_check_path": "/health/nacos",
 }
 ```
 
@@ -313,10 +337,10 @@ status = nacos.get_status()
 两个开关共同控制初始化阶段的注册：
 
 - `NACOS_AUTO_REGISTER`（默认 `True`）：自动注册总开关。
-- `NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）：`init_app(app)` 是否执行自动注册。
+- `NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）：`init_app(app)` 是否调度后台注册。
 
-只有两者都为 `True`（且 `NACOS_REGISTER_ENABLED` 为 `True`）时，才会在
-`init_app(app)` 期间自动注册。你始终可以手动注册：
+只有两者都为 `True`（且 `NACOS_REGISTER_ENABLED` 为 `True`）时，才会由
+`init_app(app)` 调度注册。你始终可以显式请求注册：
 
 ```python
 nacos.register_instance()
@@ -327,6 +351,7 @@ nacos.register_instance()
 `NacosValidationError`，且不会留下部分初始化的 `app.extensions["nacos"]` 状态。
 关闭 fail-fast 时会记录具体错误、跳过自动注册，但配置中心和服务发现仍可使用。任一自动
 注册开关关闭时，服务名可保持为空，直到显式调用 `register_instance()` 才进行校验。
+SDK 网络错误发生在后台，通过状态和安全日志报告，不会从 `init_app()` 抛回调用方。
 
 ### Gunicorn / 多 worker 部署
 
@@ -350,13 +375,9 @@ load（例如适用时使用 Gunicorn `--preload`），并在进程启动阶段�
 ### 多 worker 注册（Gunicorn / uWSGI）
 
 在 Gunicorn / uWSGI 下，主进程会 fork 出多个 worker，每个 worker 都会执行 `init_app`。
-flask-nacos 会按进程记录注册状态，但公布相同 service/group/cluster/IP/port 的 worker 会更新
-同一个 Nacos 实例标识：
-
-- `NACOS_REGISTER_ONCE_PER_PROCESS`（默认 `True`）：同一进程内，`register_instance()`
-  成功后重复调用会被跳过。当 fork 出新 worker（进程 ID 变化）时，新 worker 允许注册
-  自己的实例。
-- 退出时，`deregister_instance()` 只注销当前进程注册的实例。如果记录的注册进程 ID 与
+注册生命周期始终按 app、按进程且 single-flight；但公布相同
+service/group/cluster/IP/port 的 worker 会更新同一个 Nacos 实例标识。退出时，
+`deregister_instance()` 只注销当前进程注册的实例。如果记录的注册进程 ID 与
   当前进程不一致（例如主进程与 worker），会记录日志并跳过注销，避免误删其他进程的实例。
 
 Gunicorn 示例（每个 worker 都会初始化扩展）：
@@ -462,7 +483,9 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
     # ... 已有字段 ...
     "current_pid": 12345,
     "registered_pid": 12345,
-    "register_once_per_process": True,
+    "registration_in_progress": False,
+    "deregistration_requested": False,
+    "last_registration_error_type": None,
     "deregister_on_exit": True,
     "discovery_strategy": "first",
     "instance_normalize": True,
@@ -514,8 +537,7 @@ nacos.get_one_healthy_instance("user-service", strategy="weight")
 | `NACOS_HEALTH_CHECK_ENABLED` | `False` | 是否注册 Flask 健康检查路由。 |
 | `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
 | `NACOS_STATUS_ENABLED` | `True` | 已弃用的无操作兼容项；计划在 2.0 删除。 |
-| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | 是否在 `init_app` 阶段自动注册（配合 `NACOS_AUTO_REGISTER`）。 |
-| `NACOS_REGISTER_ONCE_PER_PROCESS` | `True` | 同一进程内只注册一次；fork 出的新 worker（新 pid）可重新注册。 |
+| `NACOS_AUTO_REGISTER_ON_INIT` | `True` | 是否在 `init_app` 阶段调度后台注册（配合 `NACOS_AUTO_REGISTER`）。 |
 | `NACOS_DEREGISTER_ON_EXIT` | `True` | 是否注册 `atexit` 处理器在进程退出时注销。 |
 | `NACOS_DISCOVERY_STRATEGY` | `"first"` | `get_one_healthy_instance` 的默认策略（`first`/`random`/`weight`）。 |
 | `NACOS_DISCOVERY_CLUSTER` | `None` | 服务发现默认 cluster 过滤。 |
@@ -570,13 +592,14 @@ app.config.update(
 
 - `NACOS_FAIL_FAST = False`（默认）：失败时仅记录日志，不会阻止 Flask 应用启动。
   各方法返回安全默认值：
-  - `register_instance()` -> `False`
+  - `register_instance()` -> `None`；通过 `get_status()` 查看结果
   - `deregister_instance()` -> `False`
   - `list_instances()` -> `[]`
   - `get_one_healthy_instance()` -> `None`
   - `get_config()` -> `None`
-- `NACOS_FAIL_FAST = True`：失败时抛出异常；启用自动注册时会在创建 client 和写入扩展
-  状态之前，由 `init_app(app)` 同步完成注册配置预检。
+- `NACOS_FAIL_FAST = True`：确定性配置错误、client 不可用和线程启动错误会同步抛出；
+  启用自动注册时会在创建 client 和写入扩展状态之前，由 `init_app(app)` 完成注册配置预检。
+  Nacos 网络错误和重试耗尽发生在后台，只通过状态和安全日志呈现。
 
 异常类型体系：
 
@@ -704,7 +727,7 @@ bash scripts/release_check.sh
 
 ## 版本兼容说明
 
-- Flask：`>=1.0, <4.0`
+- Flask：`>=1.0`
 - Python：`>=3.8`
 - Nacos：2.x
 - Nacos SDK：`nacos-sdk-python>=2.0.0,<3.0.0`（同步客户端）

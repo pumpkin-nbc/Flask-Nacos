@@ -29,10 +29,18 @@ assert Path(flask_nacos.__file__).with_name("py.typed").is_file(), "py.typed mis
 
 app = Flask(__name__)
 app.config.update(NACOS_ENABLED=False)
-FlaskNacos(app)
+nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
+assert nacos.config["NACOS_AUTO_REGISTER_ON_INIT"] is True, (
+    "NACOS_AUTO_REGISTER_ON_INIT must default to True"
+)
+assert nacos.register_instance() is None, "registration command must return None"
+status = nacos.get_status()
+assert status["registration_in_progress"] is False
+assert status["last_registration_error_type"] == "ClientUnavailable"
+assert status["deregistration_requested"] is False
 
-print("[smoke] import + typing marker + init OK (version=%s)" % expected)
+print("[smoke] import + typing marker + init + registration API OK (version=%s)" % expected)
 """
 
 

@@ -166,15 +166,18 @@ app.config.update(
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | 否 | `init_app(app)` 是否执行自动注册。 |
-| `NACOS_REGISTER_ONCE_PER_PROCESS` | bool | `True` | 否 | 同一进程只注册一次；fork 出的新 worker（新 pid）可重新注册。 |
+| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | 否 | `init_app(app)` 是否调度后台注册。 |
 | `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | 否 | 是否注册 `atexit` 处理器在进程退出时注销。 |
 
-示例（Gunicorn 下显式注册）：
+示例（关闭默认初始化调度，改由 Gunicorn 钩子显式注册）：
 
 ```python
 app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+nacos.register_instance()
 ```
+
+`register_instance()` 始终非阻塞并返回 `None`。注册按 app、按进程 single-flight；通过
+`get_status()` 观察完成状态。
 
 ## 8. 日志
 

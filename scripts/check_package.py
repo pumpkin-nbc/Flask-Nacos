@@ -43,6 +43,8 @@ REQUIRED_SDIST_DIRECTORIES = (
     "docs/",
 )
 EXPECTED_LICENSE_EXPRESSION = "Apache-2.0"
+EXPECTED_CORE_METADATA_VERSION = "2.4"
+EXPECTED_REQUIRES_PYTHON = ">=3.8"
 EXPECTED_NAME = "flask-nacos"
 EXPECTED_VERSION = read_pyproject_version(ROOT)
 if EXPECTED_VERSION is None:
@@ -56,6 +58,7 @@ EXPECTED_PROJECT_URLS = {
 }
 REQUIRED_CLASSIFIERS = {
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 }
 
@@ -117,6 +120,13 @@ def validate_wheel_metadata(
     metadata = Parser().parsestr(metadata_text)
     problems: List[str] = []
 
+    if metadata.get("Metadata-Version") != EXPECTED_CORE_METADATA_VERSION:
+        problems.append(
+            "wrong wheel Metadata-Version: "
+            f"expected {EXPECTED_CORE_METADATA_VERSION!r}, "
+            f"got {metadata.get('Metadata-Version')!r}"
+        )
+
     if metadata.get("Name") != EXPECTED_NAME:
         problems.append(
             f"wrong package name: expected {EXPECTED_NAME!r}, got {metadata.get('Name')!r}"
@@ -125,6 +135,23 @@ def validate_wheel_metadata(
         problems.append(
             "wrong package version: "
             f"expected {EXPECTED_VERSION!r}, got {metadata.get('Version')!r}"
+        )
+    if metadata.get("Requires-Python") != EXPECTED_REQUIRES_PYTHON:
+        problems.append(
+            "wrong Requires-Python: "
+            f"expected {EXPECTED_REQUIRES_PYTHON!r}, "
+            f"got {metadata.get('Requires-Python')!r}"
+        )
+
+    requirements = metadata.get_all("Requires-Dist", [])
+    flask_requirements = [
+        value for value in requirements if value.lower().startswith("flask")
+    ]
+    normalized_flask = [value.replace(" ", "").lower() for value in flask_requirements]
+    if normalized_flask != ["flask>=1.0"]:
+        problems.append(
+            "wrong Flask requirement: expected 'Flask>=1.0', "
+            f"got {flask_requirements!r}"
         )
 
     expression = metadata.get("License-Expression")
@@ -173,6 +200,18 @@ def validate_wheel_metadata(
         problems.append("wheel long description is missing or malformed")
 
     return problems
+
+
+def validate_sdist_metadata(metadata_text: str) -> List[str]:
+    """Validate the source distribution's core metadata version."""
+    metadata = Parser().parsestr(metadata_text)
+    actual = metadata.get("Metadata-Version")
+    if actual == EXPECTED_CORE_METADATA_VERSION:
+        return []
+    return [
+        "wrong sdist Metadata-Version: "
+        f"expected {EXPECTED_CORE_METADATA_VERSION!r}, got {actual!r}"
+    ]
 
 
 def _sdist_relative_names(names: Iterable[str]) -> List[str]:
@@ -287,7 +326,23 @@ def main() -> int:
 
     if len(sdists) == 1:
         with tarfile.open(sdists[0], "r:gz") as archive:
-            problems.extend(validate_sdist_names(archive.getnames()))
+            names = archive.getnames()
+            problems.extend(validate_sdist_names(names))
+            metadata_members = [
+                member
+                for member in archive.getmembers()
+                if member.name.endswith("/PKG-INFO")
+                and member.name.count("/") == 1
+            ]
+            if len(metadata_members) != 1:
+                problems.append("sdist must contain exactly one root PKG-INFO file")
+            else:
+                extracted = archive.extractfile(metadata_members[0])
+                if extracted is None:
+                    problems.append("sdist root PKG-INFO is unreadable")
+                else:
+                    metadata_text = extracted.read().decode("utf-8")
+                    problems.extend(validate_sdist_metadata(metadata_text))
             problems.extend(validate_sdist_freshness(archive))
 
     if problems:

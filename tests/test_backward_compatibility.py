@@ -1,10 +1,11 @@
-"""Backward-compatibility guarantees for the frozen 1.0.0-candidate API."""
+"""Compatibility guarantees for the Flask-Nacos 1.1 API."""
 
 from pathlib import Path
 
 import flask_nacos
 from flask_nacos import FlaskNacos
 from flask_nacos.discovery import normalize_instance
+from tests.helpers import wait_registered
 
 SECRET_KEYS = ("NACOS_PASSWORD", "NACOS_ACCESS_KEY", "NACOS_SECRET_KEY")
 
@@ -30,16 +31,18 @@ def test_factory_mode_still_works(make_app, patched_create_client):
     assert nacos.config is not None
 
 
-def test_register_instance_returns_bool(make_app, patched_create_client):
+def test_register_instance_is_lifecycle_command(make_app, patched_create_client):
     app = make_app()
     nacos = FlaskNacos(app)
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
 
 
 def test_deregister_instance_returns_bool(make_app, patched_create_client):
     app = make_app()
     nacos = FlaskNacos(app)
     nacos.register_instance()
+    wait_registered(nacos)
     assert nacos.deregister_instance() is True
 
 
@@ -101,5 +104,5 @@ def test_py_typed_present():
     assert (package_dir / "py.typed").is_file()
 
 
-def test_version_is_100():
-    assert flask_nacos.__version__ == "1.0.2"
+def test_version_is_current():
+    assert flask_nacos.__version__ == "1.1.0"

@@ -5,7 +5,7 @@ import logging
 import os
 import weakref
 from dataclasses import dataclass, field
-from threading import RLock
+from threading import RLock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import current_app, has_app_context
@@ -21,6 +21,7 @@ from .logging import (
     validate_logging_config,
 )
 from .retry import run_with_retry
+from .utils import validate_retry_interval, validate_retry_times
 
 logger = logging.getLogger("flask_nacos")
 
@@ -41,6 +42,12 @@ class _AppRuntimeState:
     lock_pid: Optional[int] = field(default_factory=os.getpid)
     atexit_registered: bool = False
     registered_identity: Optional[Dict[str, Any]] = None
+    registration_in_progress: bool = False
+    last_registration_error_type: Optional[str] = None
+    deregistration_requested: bool = False
+    registration_desired: bool = False
+    lifecycle_lock: Any = field(default_factory=RLock)
+    lifecycle_lock_pid: Optional[int] = field(default_factory=os.getpid)
 
 
 class FlaskNacos:
@@ -144,22 +151,24 @@ class FlaskNacos:
                 state["client"] = self._init_client(cfg)
                 cleanup_sdk_default_handlers(cfg)
 
-                if state["client"] is not None:
-                    if should_auto_register and registration_config_valid:
-                        self._register_instance_for(app, state, runtime)
-                    elif cfg["NACOS_REGISTER_ENABLED"] and cfg["NACOS_AUTO_REGISTER"]:
-                        if not cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True):
-                            logger.info(
-                                "Auto registration on init disabled by configuration "
-                                "(NACOS_AUTO_REGISTER_ON_INIT=False)"
-                            )
+                if (
+                    state["client"] is not None
+                    and cfg["NACOS_REGISTER_ENABLED"]
+                    and cfg["NACOS_AUTO_REGISTER"]
+                    and not cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True)
+                ):
+                    logger.info(
+                        "Auto registration on init disabled by configuration "
+                        "(NACOS_AUTO_REGISTER_ON_INIT=False)"
+                    )
             else:
                 logger.info(
                     "Nacos is disabled (NACOS_ENABLED=False); skipping initialization"
                 )
 
-            # Commit application state only after all fail-fast client and
-            # automatic-registration work has completed successfully.
+            # Commit application state only after fail-fast configuration and
+            # client initialization have completed successfully. Registration
+            # itself is a background lifecycle command in 1.1.0.
             app.extensions[EXTENSION_KEY] = state
             self._app = app
             self._sync_legacy_state(state)
@@ -207,6 +216,17 @@ class FlaskNacos:
                     configure_logger(None, config_module.DEFAULTS)
             raise
 
+        # Thread startup happens after the state commit by design. A thread
+        # construction/start failure may be raised in fail-fast mode, but the
+        # otherwise valid extension state remains installed so callers can
+        # inspect it and retry the lifecycle command.
+        if (
+            state["client"] is not None
+            and should_auto_register
+            and registration_config_valid
+        ):
+            self._schedule_registration_for(app, state, runtime)
+
     def _configure_logging(self, app, cfg: Dict[str, Any]) -> None:
         """Configure safe extension logs and isolate raw SDK logs."""
         configure_logger(app, cfg)
@@ -215,6 +235,9 @@ class FlaskNacos:
         """Validate active init-time registration before creating a client."""
         try:
             config_module.validate_registration_config(cfg)
+            if cfg.get("NACOS_RETRY_ENABLED", True):
+                validate_retry_times(cfg.get("NACOS_RETRY_TIMES", 3))
+                validate_retry_interval(cfg.get("NACOS_RETRY_INTERVAL", 1.0))
         except NacosConfigError as exc:
             if cfg["NACOS_FAIL_FAST"]:
                 raise
@@ -257,14 +280,47 @@ class FlaskNacos:
     def _atexit_handler_for(
         self, app, state: Dict[str, Any], runtime: _AppRuntimeState
     ) -> None:
-        if not runtime.registered:
-            logger.info(
-                "No service instance registered by this extension; "
-                "skipping exit deregistration"
+        current = lifecycle.current_pid()
+        state_lock = self._lifecycle_process_lock(runtime, current)
+        with state_lock:
+            runtime.registration_desired = False
+            runtime.deregistration_requested = True
+            has_local_work = bool(
+                runtime.registration_in_progress
+                or (runtime.registered and runtime.registered_pid == current)
             )
-            return
+            if not has_local_work:
+                runtime.deregistration_requested = False
+                runtime.deregistered = True
+                self._sync_legacy_if_latest(app, state)
+                logger.info(
+                    "No service instance registered by this extension; "
+                    "skipping exit deregistration"
+                )
+                return
+
         try:
-            self._deregister_instance_for(app, state, runtime)
+            # Waiting for the operation lock also waits for an in-flight daemon
+            # registration. The re-entrant lock lets the helper reuse the same
+            # unique deregistration implementation once the operation settles.
+            operation_lock = self._process_lock(runtime, current)
+            with operation_lock:
+                result = self._deregister_instance_for(app, state, runtime)
+            error_type = None
+            if not result:
+                state_lock = self._lifecycle_process_lock(runtime, current)
+                with state_lock:
+                    error_type = (
+                        runtime.last_registration_error_type
+                        or "DeregistrationReturnedFalse"
+                    )
+            self._finish_deregistration_request(
+                app,
+                state,
+                runtime,
+                result=result,
+                error_type=error_type,
+            )
         except Exception:  # pragma: no cover - best effort on shutdown
             logger.warning("Failed to deregister service instance on exit")
 
@@ -300,19 +356,154 @@ class FlaskNacos:
         """Return the underlying Nacos client (may be ``None`` if disabled)."""
         return self.client
 
-    def register_instance(self) -> bool:
-        """Register the current service instance with Nacos.
+    def register_instance(self) -> None:
+        """Request non-blocking registration of the current service instance.
 
-        Registration is idempotent per process: when
-        ``NACOS_REGISTER_ONCE_PER_PROCESS`` is enabled, concurrent and repeated
-        calls from the same process perform at most one SDK operation. A changed
-        process id (for example a forked worker) receives a fresh lock and may
-        register its own instance.
+        Client availability and deterministic registration settings are checked
+        synchronously. Nacos network I/O, retries, and heartbeat startup run in
+        at most one daemon thread per app and process. Observe completion with
+        :meth:`get_status`; this lifecycle command intentionally returns
+        ``None``.
         """
         app, state, runtime = self._require_state()
+        self._schedule_registration_for(app, state, runtime)
+        return None
+
+    def _schedule_registration_for(
+        self, app, state: Dict[str, Any], runtime: _AppRuntimeState
+    ) -> None:
+        """Validate and schedule a single-flight registration command."""
+        cfg = state["config"]
+        current = lifecycle.current_pid()
+        lock = self._lifecycle_process_lock(runtime, current)
+
         if not self._client_available(state):
-            return False
-        return self._register_instance_for(app, state, runtime)
+            with lock:
+                runtime.registration_desired = True
+                runtime.deregistration_requested = False
+                runtime.last_registration_error_type = "ClientUnavailable"
+                self._sync_legacy_if_latest(app, state)
+            return None
+
+        try:
+            config_module.validate_registration_config(cfg)
+            if cfg.get("NACOS_RETRY_ENABLED", True):
+                validate_retry_times(cfg.get("NACOS_RETRY_TIMES", 3))
+                validate_retry_interval(cfg.get("NACOS_RETRY_INTERVAL", 1.0))
+        except NacosConfigError as exc:
+            with lock:
+                runtime.registration_desired = True
+                runtime.deregistration_requested = False
+                runtime.last_registration_error_type = type(exc).__name__
+                self._sync_legacy_if_latest(app, state)
+            logger.error(
+                "Nacos registration command rejected (error_type=%s)",
+                type(exc).__name__,
+            )
+            if cfg.get("NACOS_FAIL_FAST", False):
+                raise
+            return None
+
+        with lock:
+            deregistration_was_requested = runtime.deregistration_requested
+            runtime.registration_desired = True
+            runtime.deregistration_requested = False
+            runtime.last_registration_error_type = None
+            if runtime.registration_in_progress:
+                self._sync_legacy_if_latest(app, state)
+                return None
+            if (
+                runtime.registered
+                and runtime.registered_pid == current
+                and not deregistration_was_requested
+            ):
+                self._sync_legacy_if_latest(app, state)
+                return None
+            runtime.registration_in_progress = True
+            self._sync_legacy_if_latest(app, state)
+
+        try:
+            thread = Thread(
+                target=self._background_register,
+                args=(app, state, runtime),
+                name="flask-nacos-registration",
+                daemon=True,
+            )
+            thread.start()
+        except Exception as exc:
+            current = lifecycle.current_pid()
+            lock = self._lifecycle_process_lock(runtime, current)
+            with lock:
+                runtime.registration_in_progress = False
+                if (
+                    runtime.registered
+                    and runtime.registered_pid == current
+                    and runtime.registration_desired
+                ):
+                    runtime.last_registration_error_type = None
+                else:
+                    runtime.last_registration_error_type = type(exc).__name__
+                if not runtime.registration_desired and not runtime.registered:
+                    runtime.deregistration_requested = False
+                    runtime.deregistered = True
+                self._sync_legacy_if_latest(app, state)
+            logger.error(
+                "Failed to start asynchronous Nacos registration "
+                "(error_type=%s)",
+                type(exc).__name__,
+            )
+            if state["config"].get("NACOS_FAIL_FAST", False):
+                raise
+        return None
+
+    def _background_register(
+        self, app, state: Dict[str, Any], runtime: _AppRuntimeState
+    ) -> None:
+        """Run the existing registration state machine in a daemon thread."""
+        error_type = None
+        try:
+            if not self._register_instance_for(app, state, runtime):
+                current = lifecycle.current_pid()
+                lock = self._lifecycle_process_lock(runtime, current)
+                with lock:
+                    error_type = (
+                        runtime.last_registration_error_type
+                        or "RegistrationReturnedFalse"
+                    )
+        except Exception as exc:
+            error_type = type(exc).__name__
+            logger.error(
+                "Asynchronous Nacos registration failed (error_type=%s)",
+                error_type,
+            )
+        finally:
+            current = lifecycle.current_pid()
+            lock = self._lifecycle_process_lock(runtime, current)
+            should_deregister = False
+            with lock:
+                if runtime.registered and runtime.registered_pid == current:
+                    error_type = None
+                runtime.registration_in_progress = False
+                runtime.last_registration_error_type = error_type
+                if not runtime.registration_desired:
+                    if runtime.registered and runtime.registered_pid == current:
+                        runtime.deregistration_requested = True
+                        should_deregister = True
+                    else:
+                        runtime.deregistration_requested = False
+                        runtime.deregistered = True
+                self._sync_legacy_if_latest(app, state)
+
+            if should_deregister:
+                try:
+                    self._run_requested_deregistration(app, state, runtime)
+                except Exception as exc:
+                    # Background failures cannot be delivered to the original
+                    # caller. Keep the daemon quiet and expose only a safe type.
+                    logger.error(
+                        "Deferred Nacos deregistration failed (error_type=%s)",
+                        type(exc).__name__,
+                    )
 
     def _register_instance_for(
         self, app, state: Dict[str, Any], runtime: _AppRuntimeState
@@ -323,12 +514,16 @@ class FlaskNacos:
         lock = self._process_lock(runtime, current)
 
         with lock:
-            if lifecycle.should_skip_register(
-                runtime.registered,
-                runtime.registered_pid,
-                current,
-                cfg.get("NACOS_REGISTER_ONCE_PER_PROCESS", True),
-            ):
+            state_lock = self._lifecycle_process_lock(runtime, current)
+            with state_lock:
+                skip_registration = lifecycle.should_skip_register(
+                    runtime.registered,
+                    runtime.registered_pid,
+                    current,
+                )
+                previous_pid = runtime.registered_pid
+
+            if skip_registration:
                 logger.info(
                     "Service instance already registered in process %s; "
                     "skipping re-registration",
@@ -336,52 +531,139 @@ class FlaskNacos:
                 )
                 return True
 
-            if runtime.registered and runtime.registered_pid != current:
+            if runtime.registered and previous_pid != current:
                 logger.info(
                     "Process id changed (registered_pid=%s, current_pid=%s); "
                     "re-registering service instance",
-                    runtime.registered_pid,
+                    previous_pid,
                     current,
                 )
 
-            identity = self._safe(
-                lambda: naming.resolve_instance_identity(cfg),
-                cfg,
-                "Failed to resolve service instance identity",
-                default=None,
-                retry=False,
-            )
-            if identity is None:
+            try:
+                identity = naming.resolve_instance_identity(cfg)
+            except Exception as exc:
+                self._publish_lifecycle_error(app, state, runtime, exc)
+                logger.error("Failed to resolve service instance identity")
+                if cfg.get("NACOS_FAIL_FAST", False):
+                    raise
                 return False
 
             logger.info("Process %s registering service instance", current)
-            result = self._safe(
-                lambda: naming.register_instance(client, cfg, identity=identity),
-                cfg,
-                "Failed to register service instance",
-                default=False,
-            )
+            try:
+                result = run_with_retry(
+                    lambda: naming.register_instance(client, cfg, identity=identity),
+                    "Failed to register service instance",
+                    cfg,
+                )
+            except Exception as exc:
+                self._publish_lifecycle_error(app, state, runtime, exc)
+                logger.error("Failed to register service instance")
+                if cfg.get("NACOS_FAIL_FAST", False):
+                    raise
+                return False
             if result:
-                runtime.registered = True
-                runtime.registered_pid = current
-                runtime.deregistered = False
-                runtime.registered_identity = dict(identity)
-                self._sync_legacy_if_latest(app, state)
+                state_lock = self._lifecycle_process_lock(runtime, current)
+                with state_lock:
+                    runtime.registered = True
+                    runtime.registered_pid = current
+                    runtime.deregistered = False
+                    runtime.registered_identity = dict(identity)
+                    runtime.last_registration_error_type = None
+                    self._sync_legacy_if_latest(app, state)
                 logger.info("Process %s registered service instance", current)
                 return True
             return False
 
     def deregister_instance(self) -> bool:
-        """Deregister the current service instance from Nacos.
+        """Request deregistration, synchronously when an instance is registered.
 
-        Only the instance registered by the current process is deregistered: if
-        the recorded registration pid differs from the current process, the call
-        is logged and skipped so another process's instance is not affected.
+        During registration, the request is accepted immediately and executed
+        after that operation completes. An already absent local instance is an
+        idempotent success and does not call the SDK.
         """
         app, state, runtime = self._require_state()
+        current = lifecycle.current_pid()
+        state_lock = self._lifecycle_process_lock(runtime, current)
+        with state_lock:
+            runtime.registration_desired = False
+            runtime.deregistration_requested = True
+            if runtime.registration_in_progress:
+                self._sync_legacy_if_latest(app, state)
+                return True
+            if not runtime.registered or runtime.registered_pid != current:
+                runtime.deregistration_requested = False
+                runtime.deregistered = True
+                runtime.registered = False
+                runtime.registered_pid = None
+                runtime.registered_identity = None
+                self._sync_legacy_if_latest(app, state)
+                return True
+
         if not self._client_available(state):
             return False
-        return self._deregister_instance_for(app, state, runtime)
+        return self._run_requested_deregistration(app, state, runtime)
+
+    def _run_requested_deregistration(
+        self, app, state: Dict[str, Any], runtime: _AppRuntimeState
+    ) -> bool:
+        """Execute and reconcile a previously accepted deregistration request."""
+        error_type = None
+        try:
+            result = self._deregister_instance_for(app, state, runtime)
+            if not result:
+                current = lifecycle.current_pid()
+                lock = self._lifecycle_process_lock(runtime, current)
+                with lock:
+                    error_type = (
+                        runtime.last_registration_error_type
+                        or "DeregistrationReturnedFalse"
+                    )
+        except Exception as exc:
+            result = False
+            error_type = type(exc).__name__
+            self._finish_deregistration_request(
+                app, state, runtime, result=False, error_type=error_type
+            )
+            raise
+
+        self._finish_deregistration_request(
+            app, state, runtime, result=result, error_type=error_type
+        )
+        return result
+
+    def _finish_deregistration_request(
+        self,
+        app,
+        state: Dict[str, Any],
+        runtime: _AppRuntimeState,
+        *,
+        result: bool,
+        error_type: Optional[str],
+    ) -> None:
+        """Publish a deregistration result without overriding a newer command."""
+        current = lifecycle.current_pid()
+        state_lock = self._lifecycle_process_lock(runtime, current)
+        should_schedule = False
+        with state_lock:
+            if runtime.registration_desired:
+                runtime.deregistration_requested = False
+                should_schedule = bool(
+                    not runtime.registered and not runtime.registration_in_progress
+                )
+            elif result:
+                runtime.deregistration_requested = False
+            else:
+                # A failed delayed deregistration remains pending so a later
+                # explicit deregister_instance() call can retry it.
+                runtime.deregistration_requested = True
+            if not result:
+                runtime.last_registration_error_type = error_type
+            self._sync_legacy_if_latest(app, state)
+
+        if should_schedule:
+            # A newer register command won while deregistration held the
+            # operation lock. Reconcile to its desired state automatically.
+            self._schedule_registration_for(app, state, runtime)
 
     def _deregister_instance_for(
         self, app, state: Dict[str, Any], runtime: _AppRuntimeState
@@ -392,8 +674,15 @@ class FlaskNacos:
         lock = self._process_lock(runtime, current)
 
         with lock:
-            if runtime.deregistered:
-                logger.info("Service instance already deregistered; skipping")
+            state_lock = self._lifecycle_process_lock(runtime, current)
+            with state_lock:
+                locally_registered = bool(
+                    runtime.registered and runtime.registered_pid == current
+                )
+                identity = runtime.registered_identity
+
+            if not locally_registered:
+                logger.info("Service instance is not registered; skipping deregistration")
                 return True
 
             skip, reason = lifecycle.should_skip_deregister(
@@ -403,20 +692,29 @@ class FlaskNacos:
                 logger.info("Skipping deregistration: %s", reason)
                 return False
 
-            result = self._safe(
-                lambda: naming.deregister_instance(
-                    client, cfg, identity=runtime.registered_identity
-                ),
-                cfg,
-                "Failed to deregister service instance",
-                default=False,
-            )
+            try:
+                result = run_with_retry(
+                    lambda: naming.deregister_instance(
+                        client, cfg, identity=identity
+                    ),
+                    "Failed to deregister service instance",
+                    cfg,
+                )
+            except Exception as exc:
+                self._publish_lifecycle_error(app, state, runtime, exc)
+                logger.error("Failed to deregister service instance")
+                if cfg.get("NACOS_FAIL_FAST", False):
+                    raise
+                return False
             if result:
-                runtime.registered = False
-                runtime.registered_pid = None
-                runtime.deregistered = True
-                runtime.registered_identity = None
-                self._sync_legacy_if_latest(app, state)
+                state_lock = self._lifecycle_process_lock(runtime, current)
+                with state_lock:
+                    runtime.registered = False
+                    runtime.registered_pid = None
+                    runtime.deregistered = True
+                    runtime.registered_identity = None
+                    runtime.last_registration_error_type = None
+                    self._sync_legacy_if_latest(app, state)
                 return True
             return False
 
@@ -533,20 +831,28 @@ class FlaskNacos:
             cfg = {}
             client = None
             runtime = _AppRuntimeState()
+        current = lifecycle.current_pid()
+        state_lock = self._lifecycle_process_lock(runtime, current)
+        with state_lock:
+            registered = runtime.registered
+            registration_in_progress = runtime.registration_in_progress
+            last_registration_error_type = runtime.last_registration_error_type
+            deregistration_requested = runtime.deregistration_requested
+            registered_pid = runtime.registered_pid
         return {
             "nacos_enabled": bool(cfg.get("NACOS_ENABLED", False)),
             "client_initialized": client is not None,
-            "registered": runtime.registered,
+            "registered": registered,
+            "registration_in_progress": registration_in_progress,
+            "last_registration_error_type": last_registration_error_type,
+            "deregistration_requested": deregistration_requested,
             "service_name": cfg.get("NACOS_SERVICE_NAME"),
             "service_ip": cfg.get("NACOS_SERVICE_IP"),
             "service_port": cfg.get("NACOS_SERVICE_PORT"),
             "server_addr": cfg.get("NACOS_SERVER_ADDR"),
             "namespace_id": cfg.get("NACOS_NAMESPACE_ID", ""),
-            "current_pid": lifecycle.current_pid(),
-            "registered_pid": runtime.registered_pid,
-            "register_once_per_process": bool(
-                cfg.get("NACOS_REGISTER_ONCE_PER_PROCESS", True)
-            ),
+            "current_pid": current,
+            "registered_pid": registered_pid,
             "deregister_on_exit": bool(cfg.get("NACOS_DEREGISTER_ON_EXIT", True)),
             "discovery_strategy": cfg.get("NACOS_DISCOVERY_STRATEGY", "first"),
             "instance_normalize": bool(cfg.get("NACOS_INSTANCE_NORMALIZE", True)),
@@ -616,6 +922,23 @@ class FlaskNacos:
             runtime.lock_pid = current_pid
         return runtime.lock
 
+    @staticmethod
+    def _lifecycle_process_lock(runtime: _AppRuntimeState, current_pid: int):
+        if runtime.lifecycle_lock_pid != current_pid:
+            # Locks, daemon threads, and local registration ownership are not
+            # inherited as usable lifecycle state after fork.
+            runtime.lifecycle_lock = RLock()
+            runtime.lifecycle_lock_pid = current_pid
+            runtime.registered = False
+            runtime.deregistered = False
+            runtime.registered_pid = None
+            runtime.registered_identity = None
+            runtime.registration_in_progress = False
+            runtime.last_registration_error_type = None
+            runtime.deregistration_requested = False
+            runtime.registration_desired = False
+        return runtime.lifecycle_lock
+
     def _sync_legacy_state(self, state: Dict[str, Any]) -> None:
         runtime = state[_RUNTIME_KEY]
         self._client = state.get("client")
@@ -624,6 +947,20 @@ class FlaskNacos:
         self._deregistered = runtime.deregistered
         self._registered_pid = runtime.registered_pid
         self._atexit_registered = runtime.atexit_registered
+
+    def _publish_lifecycle_error(
+        self,
+        app,
+        state: Dict[str, Any],
+        runtime: _AppRuntimeState,
+        exc: BaseException,
+    ) -> None:
+        """Store only a safe exception class name in local lifecycle state."""
+        current = lifecycle.current_pid()
+        state_lock = self._lifecycle_process_lock(runtime, current)
+        with state_lock:
+            runtime.last_registration_error_type = type(exc).__name__
+            self._sync_legacy_if_latest(app, state)
 
     def _sync_legacy_if_latest(self, app, state: Dict[str, Any]) -> None:
         if app is self._app:
@@ -673,7 +1010,9 @@ class FlaskNacos:
             logger.error(message)
             if cfg["NACOS_FAIL_FAST"]:
                 raise
-            logger.debug("Suppressed Nacos error: %s", exc)
+            logger.debug(
+                "Suppressed Nacos error (error_type=%s)", type(exc).__name__
+            )
             return default
 
 

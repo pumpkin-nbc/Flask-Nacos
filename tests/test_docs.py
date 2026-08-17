@@ -1,5 +1,6 @@
 """Documentation consistency tests."""
 
+import ast
 import importlib
 import re
 import sys
@@ -31,6 +32,13 @@ EXPECTED_DOCS = [
 ]
 
 FORBIDDEN = ("get_config_as_dict", "load_config_to_flask")
+
+
+def _parse_as_python_38(code, filename):
+    try:
+        return ast.parse(code, filename=filename, feature_version=(3, 8))
+    except TypeError:  # Python 3.8 accepts the minor version as an integer.
+        return ast.parse(code, filename=filename, feature_version=8)
 
 
 def test_expected_docs_exist():
@@ -68,6 +76,91 @@ def test_readme_references_docs():
     assert "docs/configuration.md" in readme
     assert "docs/api-reference.md" in readme
     assert "docs/complete-example.md" in readme
+    assert "docs/service-registration.md" in readme
+
+
+def test_service_registration_guides_include_lifecycle_flowcharts():
+    english = (DOCS_DIR / "service-registration.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "service-registration.zh-CN.md").read_text(
+        encoding="utf-8"
+    )
+    shared_markers = (
+        "register_instance()",
+        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_FAIL_FAST",
+        "registration_in_progress",
+        "deregistration_requested",
+        "last_registration_error_type",
+        "NACOS_DEREGISTER_ON_EXIT=False",
+        "daemon",
+        "single-flight",
+        "flowchart TD",
+    )
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
+    assert english.count("```mermaid") == 2
+    assert chinese.count("```mermaid") == 2
+
+    english_code = re.findall(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_code = re.findall(r"```python\n(.*?)```", chinese, re.DOTALL)
+    assert english_code == chinese_code
+    for index, code in enumerate(english_code):
+        _parse_as_python_38(code, f"service-registration-{index}.py")
+
+
+def test_auto_register_on_init_default_is_documented_as_true():
+    english = {
+        ROOT / "README.md": "`NACOS_AUTO_REGISTER_ON_INIT` (default `True`)",
+        DOCS_DIR / "configuration.md": (
+            "| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"
+        ),
+        DOCS_DIR / "production.md": "The default is `True`",
+        DOCS_DIR / "service-registration.md": (
+            "All three registration switches default to `True`"
+        ),
+    }
+    chinese = {
+        ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）",
+        DOCS_DIR / "configuration.zh-CN.md": (
+            "| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"
+        ),
+        DOCS_DIR / "production.zh-CN.md": "默认值为 `True`",
+        DOCS_DIR / "service-registration.zh-CN.md": (
+            "三个注册开关的默认值均为 `True`"
+        ),
+    }
+
+    for path, marker in {**english, **chinese}.items():
+        assert marker in path.read_text(encoding="utf-8")
+
+
+def test_api_reference_snippets_are_bilingual_and_python_38_compatible():
+    english = (DOCS_DIR / "api-reference.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "api-reference.zh-CN.md").read_text(encoding="utf-8")
+    english_code = re.findall(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_code = re.findall(r"```python\n(.*?)```", chinese, re.DOTALL)
+
+    assert len(english_code) == len(chinese_code)
+    for language, blocks in (("en", english_code), ("zh-CN", chinese_code)):
+        for index, code in enumerate(blocks):
+            _parse_as_python_38(code, f"api-reference-{language}-{index}.py")
+
+
+def test_bilingual_compatibility_docs_match_ci_support_matrix():
+    english = (DOCS_DIR / "compatibility.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "compatibility.zh-CN.md").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for marker in ("3.14", "Flask `>=1.0`", "Flask 1.0.4", "Flask 3.0.x"):
+        assert marker in english
+        assert marker in chinese
+    assert 'python-version: "3.14"' in workflow
+    assert 'flask: "Flask==1.0.4 ' in workflow
+    assert 'flask: "Flask==1.1.4 ' in workflow
+    assert 'flask: "Flask>=3.0,<3.1"' in workflow
 
 
 def test_pypi_readme_uses_absolute_repository_links():
@@ -93,7 +186,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.2",
+        "v1.1.0",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
@@ -107,6 +200,9 @@ def test_bilingual_release_guides_document_oidc_gates():
 def test_complete_example_guides_share_commands_and_defaults():
     english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
+    example_source = (ROOT / "examples" / "complete_factory_app.py").read_text(
+        encoding="utf-8"
+    )
     shared_markers = (
         "examples/complete_factory_app.py",
         "examples/docker-compose-nacos.yml up -d",
@@ -117,12 +213,25 @@ def test_complete_example_guides_share_commands_and_defaults():
         "/api/nacos/config",
         "/api/nacos/instances",
         "/health/nacos",
+        "NACOS_DEREGISTER_ON_EXIT",
+        "NACOS_LOG_CONSOLE_ENABLED",
+        "NACOS_LOG_FILE_ENABLED",
+        "NACOS_LOG_PATH",
+        "NACOS_LOG_FILENAME",
         'gunicorn "examples.complete_factory_app:create_app()"',
     )
 
     for marker in shared_markers:
         assert marker in english
         assert marker in chinese
+
+    environment_keys = set(
+        re.findall(r'os\.environ\.get\(\s*"([A-Z0-9_]+)"', example_source)
+    )
+    assert environment_keys
+    for key in environment_keys:
+        assert key in english
+        assert key in chinese
 
 
 def test_complete_guides_document_centralized_extension_initialization():
@@ -199,6 +308,10 @@ def test_beginner_quickstarts_are_copyable_and_consistent():
     assert english_code is not None
     assert chinese_code is not None
     assert english_code.group(1) == chinese_code.group(1)
+    beginner_source = (ROOT / "examples" / "beginner_app.py").read_text(
+        encoding="utf-8"
+    )
+    assert english_code.group(1).rstrip() == beginner_source.rstrip()
     compile(english_code.group(1), "quickstart-app.py", "exec")
 
 

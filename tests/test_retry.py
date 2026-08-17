@@ -10,6 +10,7 @@ from flask_nacos.exceptions import (
     NacosRegistrationError,
     NacosValidationError,
 )
+from tests.helpers import wait_registered, wait_until
 
 
 def test_register_retries_until_success(make_app, patched_create_client, fake_client):
@@ -17,7 +18,8 @@ def test_register_retries_until_success(make_app, patched_create_client, fake_cl
     app = make_app({"NACOS_RETRY_ENABLED": True, "NACOS_RETRY_TIMES": 3})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
     assert fake_client.add_naming_instance.call_count == 2
 
 
@@ -27,7 +29,8 @@ def test_register_retries_sdk_false_until_success(
     fake_client.add_naming_instance.side_effect = [False, True]
     nacos = FlaskNacos(make_app({"NACOS_RETRY_TIMES": 3}))
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
     assert nacos.get_status()["registered"] is True
     assert fake_client.add_naming_instance.call_count == 2
 
@@ -40,7 +43,8 @@ def test_register_sdk_false_does_not_update_state(
         make_app({"NACOS_RETRY_TIMES": 2, "NACOS_FAIL_FAST": False})
     )
 
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
     assert nacos.get_status()["registered"] is False
     assert fake_client.add_naming_instance.call_count == 2
 
@@ -53,9 +57,13 @@ def test_register_sdk_false_raises_when_fail_fast(
         make_app({"NACOS_RETRY_TIMES": 2, "NACOS_FAIL_FAST": True})
     )
 
-    with pytest.raises(NacosRegistrationError):
-        nacos.register_instance()
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
     assert nacos.get_status()["registered"] is False
+    assert (
+        nacos.get_status()["last_registration_error_type"]
+        == NacosRegistrationError.__name__
+    )
 
 
 def test_register_no_retry_when_disabled(make_app, patched_create_client, fake_client):
@@ -65,7 +73,8 @@ def test_register_no_retry_when_disabled(make_app, patched_create_client, fake_c
     )
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
     assert fake_client.add_naming_instance.call_count == 1
 
 
@@ -76,7 +85,8 @@ def test_retry_times_controls_attempts(make_app, patched_create_client, fake_cli
     )
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    wait_until(lambda: nacos.get_status()["registration_in_progress"] is False)
     assert fake_client.add_naming_instance.call_count == 4
 
 
@@ -96,6 +106,7 @@ def test_retry_interval_passed_to_sleep(monkeypatch, make_app, patched_create_cl
     )
     nacos = FlaskNacos(app)
     nacos.register_instance()
+    wait_registered(nacos)
 
     assert calls == [1.5]
 
@@ -127,6 +138,8 @@ def test_deregister_uses_retry(make_app, patched_create_client, fake_client):
     fake_client.remove_naming_instance.side_effect = [RuntimeError("boom"), True]
     app = make_app({"NACOS_RETRY_TIMES": 3})
     nacos = FlaskNacos(app)
+    nacos.register_instance()
+    wait_registered(nacos)
 
     assert nacos.deregister_instance() is True
     assert fake_client.remove_naming_instance.call_count == 2
@@ -137,6 +150,7 @@ def test_deregister_retries_sdk_false_until_success(
 ):
     nacos = FlaskNacos(make_app({"NACOS_RETRY_TIMES": 3}))
     nacos.register_instance()
+    wait_registered(nacos)
     fake_client.remove_naming_instance.side_effect = [False, True]
 
     assert nacos.deregister_instance() is True
@@ -151,6 +165,7 @@ def test_deregister_sdk_false_keeps_registered_state(
         make_app({"NACOS_RETRY_TIMES": 2, "NACOS_FAIL_FAST": False})
     )
     nacos.register_instance()
+    wait_registered(nacos)
     fake_client.remove_naming_instance.return_value = False
 
     assert nacos.deregister_instance() is False
@@ -165,6 +180,7 @@ def test_deregister_sdk_false_raises_when_fail_fast(
         make_app({"NACOS_RETRY_TIMES": 2, "NACOS_FAIL_FAST": True})
     )
     nacos.register_instance()
+    wait_registered(nacos)
     fake_client.remove_naming_instance.return_value = False
 
     with pytest.raises(NacosDeregistrationError):
@@ -194,7 +210,8 @@ def test_invalid_retry_config_does_not_call_sdk(
 ):
     nacos = FlaskNacos(make_app({**overrides, "NACOS_FAIL_FAST": False}))
 
-    assert nacos.register_instance() is False
+    assert nacos.register_instance() is None
+    assert nacos.get_status()["last_registration_error_type"] == "NacosValidationError"
     fake_client.add_naming_instance.assert_not_called()
 
 
@@ -223,7 +240,8 @@ def test_retry_numbers_are_ignored_when_retry_disabled(
         )
     )
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
     fake_client.add_naming_instance.assert_called_once()
 
 

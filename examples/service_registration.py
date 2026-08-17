@@ -23,9 +23,6 @@ app.config.update(
     NACOS_AUTO_REGISTER=True,
     NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_AUTO_DEREGISTER=True,
-    # With once-per-process True, repeat register_instance() calls are no-ops
-    # within the same process.
-    NACOS_REGISTER_ONCE_PER_PROCESS=True,
     NACOS_FAIL_FAST=False,
 )
 

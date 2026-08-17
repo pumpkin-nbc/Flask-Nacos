@@ -10,6 +10,8 @@ Static checks (no imports, no network):
 - The library source does not reference ``get_config_as_dict`` /
   ``load_config_to_flask`` and does not implement YAML parsing.
 - No PyYAML dependency in pyproject.toml.
+- Project metadata keeps Python ``>=3.8`` and Flask ``>=1.0`` without an
+  artificial Flask upper bound, and declares the current Python classifier.
 
 Syntax checks use ``ast`` so the checker's own pattern strings never self-trigger.
 Documentation that merely states "YAML is not supported" is fine (docs are not
@@ -161,10 +163,31 @@ def scan(root: Path = ROOT) -> List[Problem]:
     pyproject = root / "pyproject.toml"
     if pyproject.is_file():
         content = pyproject.read_text(encoding="utf-8")
+        lines = content.splitlines()
         for lineno, line in enumerate(content.splitlines(), start=1):
             if "pyyaml" in line.lower():
                 problems.append(
                     Problem("pyproject.toml", lineno, "PyYAML dependency is not allowed")
+                )
+        required_metadata = (
+            ('requires-python = ">=3.8"', "requires-python must be >=3.8"),
+            ('"Flask>=1.0",', "Flask dependency must be >=1.0 without an upper bound"),
+            (
+                '"Programming Language :: Python :: 3.14"',
+                "Python 3.14 classifier is required",
+            ),
+        )
+        for marker, message in required_metadata:
+            if marker not in content:
+                problems.append(Problem("pyproject.toml", 0, message))
+        for lineno, line in enumerate(lines, start=1):
+            if '"Flask' in line and "<" in line:
+                problems.append(
+                    Problem(
+                        "pyproject.toml",
+                        lineno,
+                        "Flask dependency must not declare an upper bound",
+                    )
                 )
 
     return problems

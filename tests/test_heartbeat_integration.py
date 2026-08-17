@@ -8,6 +8,7 @@ import pytest
 from flask import Flask
 
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 @pytest.mark.integration
@@ -49,7 +50,8 @@ def test_temporary_instance_stays_healthy_after_deletion_window():
     registered = False
 
     try:
-        assert extension.register_instance() is True
+        assert extension.register_instance() is None
+        wait_registered(extension, timeout=10.0)
         registered = True
         time.sleep(wait_seconds)
         instances = extension.list_instances(

@@ -5,71 +5,96 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.0.2
-
-### Fixed
-
-- Fixed unexpected log file creation when Flask loads `flask-nacos`.
-- Fixed unexpected `~/logs/nacos/nacos-client-python.log` creation caused by the underlying `nacos-sdk-python`.
-- Fixed logging side effects caused by library-level logging configuration.
-- Fixed SDK-level logging side effects during Flask app initialization.
-- Fixed duplicate logging handlers on repeated `init_app(app)` calls.
-- Fixed SDK-native logs potentially exposing tokens, request parameters, or
-  configuration content through application, root, console, or file handlers.
-- Fixed fail-fast initialization leaving partial application or extension state.
-- Fixed non-fail-fast operations raising when an initialized client is unavailable.
-- Fixed deregistration using a newly resolved identity instead of the exact
-  identity that was registered.
+## 1.1.0
 
 ### Added
 
-- Added configurable logging controls.
-- Added `NACOS_LOG_ENABLED`.
-- Added `NACOS_LOG_CONSOLE_ENABLED` and `NACOS_LOG_FILE_ENABLED`.
-- Added `NACOS_LOG_PATH` and `NACOS_LOG_FILENAME`.
-- Added `NACOS_LOG_FORMAT`.
-- Added `NACOS_LOG_PROPAGATE`.
-- Added `NACOS_LOG_MAX_BYTES`.
-- Added `NACOS_LOG_BACKUP_COUNT`.
-- Added logging, transactional initialization, registration-identity, and
-  discovery-validation regression tests.
+- Added a non-blocking, on-demand registration lifecycle through the no-argument
+  `FlaskNacos.register_instance()` command, with per-app and per-process
+  single-flight scheduling.
+- Added `registration_in_progress`, `deregistration_requested`, and
+  `last_registration_error_type` to the local `get_status()` result.
+- Added last-explicit-operation-wins reconciliation for register/deregister
+  races, fork-aware lifecycle reset, graceful `atexit` cleanup of in-flight
+  registration, and concurrency regression tests.
+- Expanded CI coverage through Python 3.14 and the valid Flask 1.0.x, 1.1.x,
+  2.x, 3.0.x, and 3.1.x runtime combinations.
+- Pinned wheel and sdist output to Core Metadata 2.4 for strict validation by
+  current packaging tools while retaining PEP 639 license metadata.
 
 ### Changed
 
-- `NACOS_LOG_*` settings now control only sanitized Flask-Nacos logs; native SDK
-  loggers are always silent.
-- `NACOS_LOG_ENABLED` defaults to `False`. When enabled, console and rotating
-  file output both default to `True`, `NACOS_LOG_PATH` defaults to `./logs`,
-  and `NACOS_LOG_FILENAME` defaults to `flask-nacos.log`.
-- Rotating file output defaults to 10 MiB per file and five backups.
-- Console records use level-specific ANSI colors: blue for `DEBUG`, green for
-  `INFO`, yellow for `WARNING`, red for `ERROR`, and bold red for `CRITICAL`.
-  File logs remain plain text without ANSI escape sequences.
-- Added sanitized temporary-instance heartbeat status logs: successful SDK
-  heartbeats use `INFO`, failures use `ERROR`, and failures continue through
-  the SDK retry loop without logging response bodies or exception messages.
-- Removed the unreleased `NACOS_LOG_TO_CONSOLE`, `NACOS_LOG_DIR`,
-  `NACOS_LOG_FILE`, and `NACOS_LOG_USE_FLASK_LOGGER` settings before release.
-- Flask-Nacos never creates the configured log directory while logging is
-  disabled. Generated files contain only Flask-Nacos safety logs.
-- `flask-nacos` no longer configures the root logger.
-- `flask-nacos` uses a named logger: `flask_nacos`.
+- `register_instance()` now accepts no arguments, always returns
+  `None`, and schedules SDK registration, retries, and heartbeat startup in a
+  named daemon thread.
+- `NACOS_AUTO_REGISTER_ON_INIT` remains `True` by default, but initialization now
+  schedules registration in the background without waiting for Nacos.
+- Removed `NACOS_REGISTER_ONCE_PER_PROCESS`; registration is always
+  per-app, per-process, single-flight, and idempotent after success.
+- `deregister_instance()` accepts delayed cleanup while registration is in
+  progress and preserves the last explicit register/deregister command.
+- Synchronized the bilingual Quickstart code with the runnable beginner app,
+  documented every environment variable consumed by the complete factory
+  example, and removed hardcoded demo credentials from simplified examples.
+
+### Compatibility
+
+- The lifecycle layer reuses the existing validation, retry, service
+  identity, heartbeat, and registration state machine.
+- The runtime requirement remains Python `>=3.8`; Flask is now declared as
+  `>=1.0` without an artificial upper bound.
+- Development type checking stays on mypy `<1.15`, the last line that can run
+  on and explicitly target Python 3.8.
+
+## 1.0.2
+
+### Added
+
+- Added configurable, sanitized logging through `NACOS_LOG_ENABLED`,
+  `NACOS_LOG_CONSOLE_ENABLED`, `NACOS_LOG_FILE_ENABLED`, `NACOS_LOG_PATH`,
+  `NACOS_LOG_FILENAME`, `NACOS_LOG_FORMAT`, `NACOS_LOG_PROPAGATE`,
+  `NACOS_LOG_MAX_BYTES`, and `NACOS_LOG_BACKUP_COUNT`.
+- Added level-specific console colors: blue for `DEBUG`, green for `INFO`,
+  yellow for `WARNING`, red for `ERROR`, and bold red for `CRITICAL`.
+- Added sanitized temporary-instance heartbeat success and failure logs.
+- Added regression coverage for logging, transactional initialization,
+  registration identity, and discovery validation.
+
+### Changed
+
+- `NACOS_LOG_*` settings control only sanitized Flask-Nacos logs; native SDK
+  loggers are always silent and no longer create `~/logs/nacos`.
+- Logging is disabled by default and never creates configured directories while
+  disabled. When enabled, console and rotating file output both default to
+  active, using `./logs/flask-nacos.log`, 10 MiB per file, and five backups.
+- File logs remain plain text without ANSI escape sequences. Flask-Nacos uses
+  the named `flask_nacos` logger and does not configure the root logger.
 - Registration caches and reuses the exact successful service identity for
   retries and deregistration; persistent instances ignore heartbeat settings.
-- Discovery validates service/group/cluster/filter inputs before SDK calls and
-  forwards cluster filters to SDK 2.x as well as applying defensive local filtering.
-- Status examples expose only a safe field allowlist, and the registration
-  example no longer exposes unauthenticated HTTP lifecycle endpoints.
-- Production documentation now explains shared multi-worker instance identity,
-  SDK 2.x HTTPS certificate-verification limitations, and safe logging defaults.
+- Discovery validates service, group, cluster, and filter inputs before SDK
+  calls, forwards cluster filters to SDK 2.x, and also filters defensively.
+- Status examples expose only safe fields. Production guidance covers shared
+  multi-worker identities, SDK 2.x HTTPS verification limitations, and safe
+  logging defaults.
+
+### Fixed
+
+- Fixed library and SDK logging side effects, duplicate handlers, unexpected
+  log files, and potential leakage of credentials, request data, or config
+  content through application, root, console, or file handlers.
+- Fixed fail-fast initialization leaving partial app or extension state.
+- Fixed non-fail-fast operations raising when the initialized client is
+  unavailable; these operations now return their documented safe defaults.
+- Fixed deregistration resolving a new identity instead of using the exact
+  identity registered with Nacos.
 
 ### Notes
 
-- `get_config()` continues to return raw config content only.
-- YAML, JSON, and dict config parsing are not supported.
-- Loading Nacos config into Flask `app.config` is not supported.
+- `get_config()` continues to return raw content; Flask-Nacos does not parse
+  YAML, JSON, or dictionaries and does not load remote content into
+  `app.config`.
 
 ## 1.0.1
 

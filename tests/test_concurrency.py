@@ -6,6 +6,7 @@ from threading import Barrier
 
 import flask_nacos.lifecycle as lifecycle_module
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 def _run_together(operation):
@@ -30,7 +31,8 @@ def test_concurrent_registration_calls_sdk_once(
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
-    assert _run_together(nacos.register_instance) == [True, True]
+    assert _run_together(nacos.register_instance) == [None, None]
+    wait_registered(nacos)
     fake_client.add_naming_instance.assert_called_once()
 
 
@@ -40,6 +42,8 @@ def test_concurrent_deregistration_calls_sdk_once(
     app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
     nacos.register_instance()
+    wait_registered(nacos)
+
     def delayed_success(*args, **kwargs):
         time.sleep(0.02)
         return True
@@ -59,7 +63,8 @@ def test_pid_change_replaces_inherited_lock(
     inherited_lock = runtime.lock
     monkeypatch.setattr(lifecycle_module, "current_pid", lambda: 424242)
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance() is None
+    wait_registered(nacos)
 
     assert runtime.lock_pid == 424242
     assert runtime.lock is not inherited_lock

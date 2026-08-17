@@ -85,6 +85,12 @@ same code target another Nacos deployment without hardcoding credentials.
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | Default config data ID. |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | Config group. |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | Config-read timeout in seconds. |
+| `NACOS_DEREGISTER_ON_EXIT` | `true` | Deregister this app's instance during normal process exit. |
+| `NACOS_LOG_ENABLED` | `false` | Enable sanitized Flask-Nacos logging. |
+| `NACOS_LOG_CONSOLE_ENABLED` | `true` | Write logs to the console when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `true` | Write a rotating file when logging is enabled. |
+| `NACOS_LOG_PATH` | `./logs` | Log file directory. |
+| `NACOS_LOG_FILENAME` | `flask-nacos.log` | Log filename inside the configured directory. |
 | `FLASK_HOST` | `127.0.0.1` | Local development bind address. |
 
 `NACOS_SERVER_ADDR` is where this Flask process finds Nacos.
@@ -229,10 +235,12 @@ NACOS_AUTO_REGISTER = False
 python examples/complete_factory_app.py
 ```
 
-During `create_app()` Flask-Nacos creates the SDK client, registers the service,
-and installs `/health/nacos`. Registration is idempotent in the current process.
-The exit handler deregisters only an instance successfully registered by this
-application when the process exits normally.
+During `create_app()` Flask-Nacos creates the SDK client, schedules background
+registration, and installs `/health/nacos`; the factory does not wait for Nacos
+network I/O. Registration is single-flight in the current process. The status
+endpoint may therefore report `registered=false` briefly. The exit handler waits
+for an in-flight registration and deregisters only an instance successfully
+registered by this application when the process exits normally.
 
 The example deliberately uses `NACOS_FAIL_FAST=False`: a temporary Nacos outage
 does not prevent Flask from starting. Nacos-dependent example endpoints return
@@ -296,9 +304,9 @@ export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
-Each worker executes `create_app()`. `NACOS_REGISTER_ONCE_PER_PROCESS=True`
-prevents repeated SDK registration in one worker, and the process-aware lock is
-recreated after a fork. Workers sharing one IP and port advertise the same Nacos
+Each worker executes `create_app()`. Registration is always per-app,
+per-process, single-flight, and inherited locks/state are recreated after a
+fork. Workers sharing one IP and port advertise the same Nacos
 instance identity, not one instance per worker. Set
 `NACOS_DEREGISTER_ON_EXIT=False` for that shared endpoint, or use one external
 coordinator to own registration and deregistration.

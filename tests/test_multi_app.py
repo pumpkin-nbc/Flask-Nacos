@@ -7,6 +7,7 @@ import pytest
 import flask_nacos.extension as extension_module
 from flask_nacos import FlaskNacos
 from flask_nacos.exceptions import FlaskNacosError
+from tests.helpers import wait_registered
 
 
 def _client():
@@ -92,7 +93,8 @@ def test_registration_state_is_isolated_between_apps(make_app, monkeypatch):
     nacos.init_app(app_b)
 
     with app_a.app_context():
-        assert nacos.register_instance() is True
+        assert nacos.register_instance() is None
+        wait_registered(nacos)
         assert nacos.get_status()["registered"] is True
     with app_b.app_context():
         assert nacos.get_status()["registered"] is False
@@ -101,8 +103,11 @@ def test_registration_state_is_isolated_between_apps(make_app, monkeypatch):
 def test_repeated_init_reuses_client_and_registration(
     make_app, patched_create_client, fake_client
 ):
-    app = make_app({"NACOS_AUTO_REGISTER": True})
+    app = make_app(
+        {"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True}
+    )
     nacos = FlaskNacos(app)
+    wait_registered(nacos)
 
     nacos.init_app(app)
 
@@ -142,6 +147,7 @@ def test_each_atexit_callback_only_deregisters_its_app(make_app, monkeypatch):
     nacos = FlaskNacos(app_a)
     with app_a.app_context():
         nacos.register_instance()
+        wait_registered(nacos)
     nacos.init_app(app_b)
 
     assert len(callbacks) == 2

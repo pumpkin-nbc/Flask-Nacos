@@ -10,10 +10,21 @@
 ## 1. 应用启动后没有注册到 Nacos
 
 - 现象：Flask 应用已运行，但实例没有出现在 Nacos 中。
-- 可能原因：注册被禁用，或自动注册被关闭。
+- 可能原因：某个注册开关被显式关闭、确定性注册预检失败，或后台注册操作失败。
 - 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED`、
   `NACOS_AUTO_REGISTER`、`NACOS_AUTO_REGISTER_ON_INIT`；查看日志和 `get_status()`。
-- 解决建议：开启相关开关，或显式调用 `nacos.register_instance()`。
+- 解决建议：恢复预期的开关（初始化调度默认值为 `True`），或修复状态中报告的原因后
+  显式调用 `nacos.register_instance()`。
+- 若 `registration_in_progress=True`，请等待后再查询；若其变为 `False` 且
+  `registered=False`，检查 `last_registration_error_type` 与安全日志，修复后再次调用
+  `register_instance()`。
+
+## 注册网络错误不会从 `register_instance()` 抛出
+
+- 可能原因：1.1 的注册始终是后台生命周期命令。
+- 解决建议：通过 `get_status()` 与日志查看 Nacos 超时或重试耗尽。
+  `NACOS_FAIL_FAST=True` 仍会同步抛出确定性配置、client 可用性和线程启动错误，但无法把
+  daemon 线程稍后发生的网络错误抛回原调用方。
 
 ## 2. 注册失败：`NACOS_SERVICE_NAME` 为空
 
@@ -151,7 +162,7 @@
 - 可能原因：底层 `nacos-sdk-python` 在创建 client 时，若其 logger 没有 handler 就会自行
   添加文件 handler。
 - 排查方法：确认该文件是在创建 Nacos client 之后才出现。
-- 解决建议：升级到 flask-nacos 1.0.2+。它会静默 SDK 原生 logger，并将 SDK 初始化指向
+- 解决建议：使用 flask-nacos 1.1.0。它会静默 SDK 原生 logger，并将 SDK 初始化指向
   已存在的其他目录，因此不会创建默认文件或 `~/logs/nacos` 目录。不要开启 SDK 原生日志，
   因为其中可能包含敏感请求或配置数据。
 
@@ -182,7 +193,7 @@
 - 可能原因：使用了旧版 flask-nacos，或其他组件在 flask-nacos 配置日志之前就创建了 client。
 - 排查方法：确保 `FlaskNacos(app)` / `init_app(app)` 在任何直接构造 `nacos.NacosClient`
   的代码之前执行。
-- 解决建议：升级到 1.0.2+。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
+- 解决建议：使用 1.1.0。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
   初始化不使用用户主目录。直接创建的 SDK client 不受 Flask-Nacos 控制。
 
 ## 19. flask-nacos 日志重复输出
@@ -217,5 +228,5 @@
 - 现象：多次调用 `init_app(app)` 导致 handler / 日志行成倍增加。
 - 可能原因：简单的 handler 设置会在每次调用时重复添加。
 - 排查方法：统计 `logging.getLogger("flask_nacos")` 上的 handler 数量。
-- 解决建议：1.0.2+ 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
+- 解决建议：1.1.0 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
   添加第二个 console 或 file handler。

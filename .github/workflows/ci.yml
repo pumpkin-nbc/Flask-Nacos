@@ -58,14 +58,17 @@ jobs:
         # Flask 1.x is exercised on Python 3.8 with its transitive stack pinned.
         include:
           - python-version: "3.8"
-            label: "Flask 1.x"
-            flask: "Flask>=1.0,<2.0 Werkzeug<2.0 Jinja2<3.0 markupsafe<2.1 itsdangerous<2.0 click<8.0"
+            label: "Flask 1.0.4"
+            flask: "Flask==1.0.4 Werkzeug<2.0 Jinja2<3.0 MarkupSafe<2.1 ItsDangerous<2.0 Click<8.0"
+          - python-version: "3.8"
+            label: "Flask 1.1.4"
+            flask: "Flask==1.1.4 Werkzeug<2.0 Jinja2<3.0 MarkupSafe<2.1 ItsDangerous<2.0 Click<8.0"
           - python-version: "3.8"
             label: "Flask 2.x"
-            flask: "Flask>=2.0,<3.0"
+            flask: "Flask>=2.0,<3.0 Werkzeug<3.0"
           - python-version: "3.8"
-            label: "Flask 3.x"
-            flask: "Flask>=3.0,<4.0"
+            label: "Flask 3.0.x"
+            flask: "Flask>=3.0,<3.1"
           - python-version: "3.9"
             flask: ""
           - python-version: "3.10"
@@ -75,6 +78,8 @@ jobs:
           - python-version: "3.12"
             flask: ""
           - python-version: "3.13"
+            flask: ""
+          - python-version: "3.14"
             flask: ""
 
     steps:

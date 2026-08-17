@@ -27,13 +27,11 @@ coordinator.
 
 ## Multi-worker registration
 
-Under multi-worker servers, the master forks workers and Flask-Nacos records
-registration state per process:
-
-- `NACOS_REGISTER_ONCE_PER_PROCESS=True`: within a process, repeated
-  `register_instance()` calls after the first success are skipped; a forked
-  worker with a new pid may register its own instance.
-- On shutdown, a process only attempts to deregister the identity it registered.
+Under multi-worker servers, the master forks workers and Flask-Nacos keeps a
+per-app, per-process, single-flight registration lifecycle. Repeated commands
+after success are no-ops; a forked worker resets inherited local state and may
+register its own instance. On shutdown, a process only attempts to deregister
+the identity it registered.
 
 Process-local state does not create distinct Nacos identities. If workers share
 one advertised endpoint, an exiting worker can remove that shared instance while
@@ -65,9 +63,9 @@ but for graceful shutdowns ensure your process exits cleanly.
 
 ## `NACOS_AUTO_REGISTER_ON_INIT`
 
-Set to `False` when you want to control exactly when registration happens (for
-example, from a post-fork hook or a management command) instead of implicitly at
-`init_app` time.
+The default is `True`, so each application initialization schedules background
+registration. Explicitly set it to `False` when a post-fork hook, readiness
+route, or management command owns the `register_instance()` lifecycle.
 
 ## `NACOS_DEREGISTER_ON_EXIT`
 

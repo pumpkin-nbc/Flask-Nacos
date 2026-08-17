@@ -2,20 +2,18 @@
 
 English | [简体中文](api-reference.zh-CN.md)
 
-Public API of the `FlaskNacos` extension. All error behavior is governed by
-`NACOS_FAIL_FAST` (see [Configuration](configuration.md)): when `False` (default)
-failures are logged and a safe default is returned; when `True` an exception is
-raised.
+Public API of the `FlaskNacos` extension. Unless a method-specific contract says
+otherwise, error behavior is governed by `NACOS_FAIL_FAST` (see
+[Configuration](configuration.md)): when `False` (default), failures are logged
+and a safe default is returned; when `True`, an exception is raised. Background
+registration failures occur after the caller returns and therefore remain in
+local status instead of being raised into the old call stack.
 
-See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
-[1.0.0 Checklist](1.0-checklist.md).
+See also: [Quickstart](quickstart.md) - [Configuration](configuration.md).
 
-## Stable API (1.0 series)
+## API snapshot (1.1 series)
 
-As of `1.0.0`, the public API below is stable. Method names, existing
-parameters, and return contracts will not change without a deprecation cycle;
-any new parameters will be added with defaults so existing calls keep working.
-The stable surface is:
+The API snapshot below is enforced for the supported 1.1 surface:
 
 ```python
 FlaskNacos(app=None)
@@ -53,17 +51,18 @@ nacos = FlaskNacos()             # factory mode; call init_app later
 ## `init_app(app)`
 
 Initialize the extension against a Flask `app`: load configuration, create the
-Nacos client lazily, register the health route (if enabled), and auto-register
-the service (if enabled). Stores a state mapping containing `config` and
+Nacos client, register the health route (if enabled), and schedule background
+service registration (enabled by default). Stores a state mapping containing `config` and
 `client` at `app.extensions["nacos"]`.
 
 - Parameters: `app` - the Flask application.
 - Returns: `None`.
-- Exceptions: follows `NACOS_FAIL_FAST` for client/registration errors.
+- Exceptions: deterministic config/client and registration-thread start errors
+  follow `NACOS_FAIL_FAST`; background network failures are reported in status.
 
 ## `get_client()`
 
-Return the underlying Nacos SDK client, creating it on first use.
+Return the underlying Nacos SDK client created by `init_app()`.
 
 - Returns: the SDK client object, or `None` when Nacos is disabled or client
   creation failed and `NACOS_FAIL_FAST` is `False`.
@@ -71,26 +70,32 @@ Return the underlying Nacos SDK client, creating it on first use.
 
 ## `register_instance()`
 
-Register the current service instance.
+Request registration of the current service instance.
 
-- Returns: `bool` - `True` on success, `False` on failure when
-  `NACOS_FAIL_FAST` is `False`.
-- Exceptions: raises `NacosValidationError` / `NacosRegistrationError` when
-  `NACOS_FAIL_FAST` is `True`.
-- Notes: idempotent; with `NACOS_REGISTER_ONCE_PER_PROCESS=True` repeated calls
-  in the same process are no-ops.
+- Returns: `None` immediately; no SDK network I/O or retry runs in the caller.
+- At most one background registration task runs per app and process. It reuses
+  the validation, retry, identity, and heartbeat path.
+- Deterministic config errors, client unavailability, and thread-start errors
+  follow `NACOS_FAIL_FAST`. Network failures cannot return to the old call stack
+  and are stored as a safe type in local status.
+- Repeated calls are idempotent after registration and single-flight while a
+  task is running. A failed task may be retried with a later explicit call.
 
 ```python
 nacos.register_instance()
+status = nacos.get_status()
 ```
+
+See [Service Registration](service-registration.md) for lifecycle and deployment
+details.
 
 ## `deregister_instance()`
 
 Deregister the current service instance.
 
-- Returns: `bool` - `True` on success, `False` otherwise (when
-  `NACOS_FAIL_FAST` is `False`). Idempotent and never raises once already
-  deregistered.
+- Returns: `bool`. An absent instance returns `True` without SDK I/O. During
+  registration, `True` means delayed cleanup was accepted. A registered
+  instance is deregistered synchronously and returns the actual result.
 - Exceptions: raises `NacosDeregistrationError` when `NACOS_FAIL_FAST` is `True`.
 
 ```python
@@ -158,6 +163,9 @@ Return the extension's internal state and non-sensitive configuration.
 
 - Returns: `dict`. Never calls Nacos and never includes `NACOS_PASSWORD`,
   `NACOS_ACCESS_KEY`, or `NACOS_SECRET_KEY`.
+- Lifecycle fields: `registration_in_progress`, `deregistration_requested`, and
+  `last_registration_error_type`. The error field contains only a class name,
+  never an exception message.
 
 ```python
 status = nacos.get_status()

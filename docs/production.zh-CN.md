@@ -23,11 +23,9 @@ uWSGI 的行为与 Gunicorn 类似：每个 worker 都会初始化扩展，但�
 
 ## 多 worker 注册
 
-在多 worker 服务器下，主进程 fork 出多个 worker，flask-nacos 会按进程记录注册状态：
-
-- `NACOS_REGISTER_ONCE_PER_PROCESS=True`：同一进程内，`register_instance()` 首次
-  成功后重复调用会被跳过；fork 出的新 worker（新 pid）可注册自己的实例。
-- 退出时，某个进程只会尝试注销它注册时使用的实例标识。
+在多 worker 服务器下，主进程 fork 出多个 worker，flask-nacos 始终按 app、按进程维护
+single-flight 注册生命周期。成功后重复命令为 no-op；fork 出的新 worker 会重置继承的
+本地状态，并可注册自己的实例。退出时，某个进程只会尝试注销它注册时使用的实例标识。
 
 进程状态相互独立不代表 Nacos 实例相互独立。多个 worker 共享同一个注册地址时，某个 worker
 退出可能在其他 worker 仍提供服务时删除共享实例。请设置 `NACOS_DEREGISTER_ON_EXIT=False`，
@@ -56,8 +54,8 @@ uWSGI 的行为与 Gunicorn 类似：每个 worker 都会初始化扩展，但�
 
 ## `NACOS_AUTO_REGISTER_ON_INIT`
 
-当你希望精确控制注册时机（例如在 post-fork 钩子或管理命令中）而不是在 `init_app`
-阶段隐式注册时，将其设为 `False`。
+默认值为 `True`，每次应用初始化都会调度后台注册。若由 post-fork 钩子、readiness 路由
+或管理命令负责调用 `register_instance()`，必须显式设为 `False`。
 
 ## `NACOS_DEREGISTER_ON_EXIT`
 

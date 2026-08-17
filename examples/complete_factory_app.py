@@ -51,8 +51,8 @@ def create_app() -> Flask:
             os.environ.get("NACOS_REQUEST_TIMEOUT", "5.0")
         ),
         NACOS_AUTO_REGISTER=True,
+        NACOS_AUTO_REGISTER_ON_INIT=True,
         NACOS_AUTO_DEREGISTER=True,
-        NACOS_REGISTER_ONCE_PER_PROCESS=True,
         NACOS_DEREGISTER_ON_EXIT=os.environ.get(
             "NACOS_DEREGISTER_ON_EXIT", "true"
         ),

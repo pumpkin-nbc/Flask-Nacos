@@ -4,32 +4,37 @@
 
 本页说明 flask-nacos 支持的运行时版本及其兼容性保证。
 
-`1.0.0` 是首个稳定版：公开 API 在 1.0 系列中保持稳定（见
-[1.0.0 验收清单](1.0-checklist.zh-CN.md)）。
+`1.1.0` 是当前受支持的发布接口，其 API 快照由发布检查强制执行。
 
 另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md) -
 [生产部署](production.zh-CN.md)。
 
 ## 支持的 Python 版本
 
-flask-nacos 支持 **Python 3.8 - 3.13**。库代码的类型提示保持 Python 3.8 兼容：使用
-`typing.Optional` / `typing.List` / `typing.Dict`，而不是 PEP 604 联合类型
-（`str | None`）或 PEP 585 内置泛型（`list[str]`），并且不使用 `match`/`case`。
-`scripts/check_compatibility.py` 静态检查会强制这一点，并在 CI 中运行。
+flask-nacos 要求 **Python `>=3.8`**。CI 当前逐一验证 Python 3.8 到 3.14。包元数据
+不会人为阻止后续 Python 版本安装，但新版本加入 CI 后才进入正式验证范围。
+
+库代码的类型提示保持 Python 3.8 兼容：使用 `typing.Optional` / `typing.List` /
+`typing.Dict`，而不是 PEP 604 联合类型（`str | None`）或 PEP 585 内置泛型
+（`list[str]`），并且不使用 `match`/`case`。`scripts/check_compatibility.py` 静态检查会
+强制这一点，并在 CI 中运行。
 
 ## 支持的 Flask 版本
 
-flask-nacos 支持 **Flask `>=1.0, <4.0`**（Flask 1.x、2.x、3.x）。
+flask-nacos 要求 **Flask `>=1.0`**，不人为设置 Flask 上限。CI 当前验证 Flask 1.0.x、
+1.1.x、2.x、3.0.x、3.1.x 中受 Flask 及其依赖支持的有效组合。
 
-- Flask 1.x / 2.x / 3.x：扩展在普通模式 `FlaskNacos(app)` 与工厂模式
+- Flask 1.0.x 到 3.1.x：扩展在普通模式 `FlaskNacos(app)` 与工厂模式
   `init_app(app)` 下均可正常初始化。
-- 扩展只使用在 1.x-3.x 间稳定的 Flask API（`app.extensions`、
+- 扩展只使用长期稳定的 Flask API（`app.extensions`、
   `app.add_url_rule`、`app.url_map.iter_rules`、`app.view_functions`、
-  `flask.jsonify`），并避免使用在 Flask 3.x 中被移除的 API。
+  `flask.jsonify`），示例使用 `app.route()`，不依赖较新的路由快捷方法。
 - 可选的健康检查路由是幂等注册的，因此重复调用 `init_app(app)` 或路由已存在时不会
   报错。
-- Flask 1.x 依赖较旧的 Werkzeug，与较新的 Python 版本不兼容，因此 CI 只在
-  Python 3.8 上验证 Flask 1.x。
+- CI 在 Python 3.8 上分别验证 Flask 1.0.4、1.1.4 及其兼容的 Pallets 依赖栈。
+  Flask 3.1 已停止支持 Python 3.8，因此 Python 3.8 使用 Flask 3.0.x；Python 3.9-3.14
+  验证可安装的最新 Flask。
+- 兼容性指上游支持的运行时组合，不代表每个旧 Flask 都必须与每个较新的 Python 组合。
 
 ## 建议的 Nacos 版本
 

@@ -34,7 +34,6 @@ def create_app() -> Flask:
         # individual worker remove that shared endpoint during graceful exit.
         NACOS_AUTO_REGISTER=True,
         NACOS_AUTO_REGISTER_ON_INIT=True,
-        NACOS_REGISTER_ONCE_PER_PROCESS=True,
         NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
         NACOS_LOG_CONSOLE_ENABLED=os.environ.get(

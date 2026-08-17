@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flask-nacos"
-version = "1.0.2"
+version = "1.1.0"
 description = "A Flask extension for integrating with Nacos service discovery and configuration center."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -32,12 +32,13 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
   "Topic :: Internet :: WWW/HTTP :: WSGI",
   "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 dependencies = [
-  "Flask>=1.0,<4.0",
+  "Flask>=1.0",
   "nacos-sdk-python>=2.0.0,<3.0.0"
 ]
 
@@ -46,7 +47,7 @@ dev = [
   "pytest>=7.0",
   "pytest-cov>=4.0",
   "ruff>=0.5.0",
-  "mypy>=1.0",
+  "mypy>=1.0,<1.15",
   "build>=1.2.0",
   "twine>=5.0.0"
 ]
@@ -61,8 +62,10 @@ Security = "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SECURITY.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["flask_nacos"]
+core-metadata-version = "2.4"
 
 [tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
 include = [
   "/flask_nacos",
   "/tests",
@@ -105,6 +108,7 @@ fail_under = 85
 [tool.mypy]
 python_version = "3.8"
 ignore_missing_imports = true
+follow_imports = "skip"
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_return_any = false
