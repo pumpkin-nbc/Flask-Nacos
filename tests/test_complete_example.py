@@ -3,7 +3,7 @@
 import importlib
 
 import flask_nacos.extension as extension_module
-from tests.helpers import wait_registered
+from tests.helpers import wait_registered, wait_until
 
 PUBLIC_STATUS_FIELDS = {
     "enabled",
@@ -110,16 +110,24 @@ def test_complete_example_returns_safe_unavailable_responses(monkeypatch):
     example = _load_example()
     app = example.create_app()
     client = app.test_client()
+    try:
+        health = client.get("/health/nacos")
+        assert health.status_code == 200
+        assert health.get_json()["status"] == "error"
 
-    health = client.get("/health/nacos")
-    assert health.status_code == 200
-    assert health.get_json()["status"] == "error"
+        config_response = client.get("/api/nacos/config")
+        assert config_response.status_code == 503
+        instances_response = client.get("/api/nacos/instances")
+        assert instances_response.status_code == 503
 
-    config_response = client.get("/api/nacos/config")
-    assert config_response.status_code == 503
-    instances_response = client.get("/api/nacos/instances")
-    assert instances_response.status_code == 503
-
-    combined = config_response.get_data(as_text=True) + instances_response.get_data(as_text=True)
-    assert "private-example-user" not in combined
-    assert "private-example-password" not in combined
+        combined = config_response.get_data(as_text=True) + instances_response.get_data(
+            as_text=True
+        )
+        assert "private-example-user" not in combined
+        assert "private-example-password" not in combined
+    finally:
+        assert example.nacos.deregister_instance(app) is True
+        wait_until(lambda: not example.nacos.get_status(app)["operation_running"])
+        status = example.nacos.get_status(app)
+        assert status["target_registered"] is False
+        assert status["registered"] is False
