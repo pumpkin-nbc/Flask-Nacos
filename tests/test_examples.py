@@ -40,11 +40,20 @@ def test_example_has_no_private_ip(filename):
     assert re.search(PRIVATE_IP_RE, text) is None
 
 
+@pytest.mark.parametrize("filename", EXAMPLE_FILES)
+def test_example_has_no_hardcoded_default_credentials(filename):
+    text = (EXAMPLES_DIR / filename).read_text(encoding="utf-8")
+    assert 'NACOS_USERNAME="nacos"' not in text
+    assert 'NACOS_PASSWORD="nacos"' not in text
+
+
 def test_docker_compose_example_exists_and_is_clean():
     compose = EXAMPLES_DIR / "docker-compose-nacos.yml"
     assert compose.is_file()
     text = compose.read_text(encoding="utf-8")
     assert re.search(PRIVATE_IP_RE, text) is None
+    assert 'NACOS_AUTH_ENABLE: "false"' in text
+    assert "login:" not in text.lower()
 
 
 def test_registration_example_has_no_remote_lifecycle_endpoints():
