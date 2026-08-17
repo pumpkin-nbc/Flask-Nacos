@@ -8,7 +8,7 @@ from tests.helpers import wait_registered
 
 
 def test_auto_register(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
     wait_registered(nacos, app)
 
@@ -131,7 +131,7 @@ def test_auto_detect_ip_when_unset(make_app, patched_create_client, fake_client,
 
 
 def test_no_auto_register_when_auto_register_false(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_REGISTER": False, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
     fake_client.add_naming_instance.assert_not_called()
@@ -141,22 +141,22 @@ def test_no_auto_register_when_auto_register_false(make_app, patched_create_clie
     fake_client.add_naming_instance.assert_called_once()
 
 
-def test_no_auto_register_when_on_init_false(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": False})
-    nacos = FlaskNacos(app)
-
-    fake_client.add_naming_instance.assert_not_called()
-    # Manual registration still works.
-    assert nacos.register_instance(app) is None
-    wait_registered(nacos, app)
-    fake_client.add_naming_instance.assert_called_once()
-
-
-def test_auto_register_on_init_is_enabled_by_default(make_app, patched_create_client, fake_client):
+def test_auto_register_is_enabled_by_default(make_app, patched_create_client, fake_client):
     app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
 
     with app.app_context():
-        assert nacos.config["NACOS_AUTO_REGISTER_ON_INIT"] is True
+        assert nacos.config["NACOS_AUTO_REGISTER"] is True
+    wait_registered(nacos, app)
+    fake_client.add_naming_instance.assert_called_once()
+
+
+def test_removed_secondary_switch_is_ignored(make_app, patched_create_client, fake_client):
+    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+    app = make_app({"NACOS_AUTO_REGISTER": True, removed_key: False})
+    nacos = FlaskNacos(app)
+
+    with app.app_context():
+        assert removed_key not in nacos.config
     wait_registered(nacos, app)
     fake_client.add_naming_instance.assert_called_once()

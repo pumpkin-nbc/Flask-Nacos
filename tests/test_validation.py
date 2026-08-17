@@ -86,7 +86,6 @@ def test_auto_registration_fail_fast_is_transactional(
             "NACOS_SERVICE_NAME": service_name,
             "NACOS_REGISTER_ENABLED": True,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": True,
         }
     )
@@ -111,7 +110,6 @@ def test_invalid_auto_registration_non_fail_fast_keeps_usable_extension(
         {
             "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": False,
             "NACOS_LOG_ENABLED": True,
             "NACOS_LOG_FILE_ENABLED": False,
@@ -150,7 +148,6 @@ def test_auto_registration_retry_config_is_deterministic(
     app = make_app(
         {
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": True,
             **invalid_retry,
         }
@@ -197,17 +194,14 @@ def test_register_enabled_false_makes_registration_a_noop(
     fake_client.add_naming_instance.assert_not_called()
 
 
-@pytest.mark.parametrize("disabled_switch", ["NACOS_AUTO_REGISTER", "NACOS_AUTO_REGISTER_ON_INIT"])
 def test_missing_service_name_allowed_at_init_but_explicit_register_fails(
-    make_app, patched_create_client, disabled_switch
+    make_app, patched_create_client
 ):
     app = make_app(
         {
             "NACOS_SERVICE_NAME": None,
-            "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
+            "NACOS_AUTO_REGISTER": False,
             "NACOS_FAIL_FAST": True,
-            disabled_switch: False,
         }
     )
     nacos = FlaskNacos(app)

@@ -85,8 +85,8 @@ init_app(app)
   -> daemon Worker创建 Client并执行 Naming I/O，初始化线程直接返回
 ```
 
-`NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）控制初始化注册命令；
-`NACOS_AUTO_REGISTER` 与 `NACOS_REGISTER_ENABLED` 也默认开启，自动注册需要三者都开启。
+`NACOS_AUTO_REGISTER`（默认 `True`）是唯一的自动注册开关。自动注册要求
+`NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时开启。
 
 ## 应用工厂
 
@@ -238,7 +238,7 @@ ANSI 颜色。日志总开关关闭时，即使配置路径也不会创建目录
 Runtime资源绑定 Flask app 与 PID。fork 后父 Runtime整体作废；普通业务请求或显式 SDK
 操作可以恢复自动注册，但状态、健康和 `.client` 读取不会。
 
-Gunicorn `--preload` 推荐设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 post-fork/
+Gunicorn `--preload` 推荐设置 `NACOS_AUTO_REGISTER=False`，并在 post-fork/
 worker-init hook中调用 `nacos.register_instance(app)`，避免 preload master启动 SDK Runtime。
 
 多个 worker使用相同服务身份与 IP:port（相同 service/group/cluster/IP/port）时，是同一个

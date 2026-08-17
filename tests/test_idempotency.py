@@ -18,7 +18,7 @@ def test_repeated_register_calls_client_once(make_app, patched_create_client, fa
 def test_auto_register_then_manual_register_no_duplicate(
     make_app, patched_create_client, fake_client
 ):
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
     wait_registered(nacos, app)
 

@@ -30,9 +30,9 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - `register_instance()` accepts an optional Flask app, returns `None`, and
   schedules Client creation, SDK registration, lifecycle retry, and heartbeat
   startup in a named daemon thread.
-- `NACOS_AUTO_REGISTER_ON_INIT` remains `True` by default, but initialization now
-  calls the public registration command without creating a Client or waiting
-  for Nacos in the initialization thread.
+- Removed the redundant initialization-specific auto-registration switch.
+  `NACOS_AUTO_REGISTER` is now the single automatic-registration switch, and
+  initialization calls the public registration command without waiting for Nacos.
 - Client creation is lazy and bound to one Flask app/PID. Status, health, and
   `.client` cache reads have no SDK side effects.
 - `deregister_instance(app=None)` preserves the last lifecycle command and can
@@ -364,7 +364,6 @@ The following APIs are considered stable in the 1.0 series:
 - Added request timeout configuration.
 - Added optional Flask health check route.
 - Added `get_status()` for inspecting extension runtime status.
-- Added `NACOS_AUTO_REGISTER_ON_INIT` for finer auto-registration control.
 
 ### Changed
 

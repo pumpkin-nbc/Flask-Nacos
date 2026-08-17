@@ -8,19 +8,18 @@ fact. A short-lived daemon Worker moves the fact toward the latest target.
 
 ## Automatic registration
 
-All three registration switches default to `True`:
+Both registration switches default to `True`:
 
 ```python
 app.config.update(
     NACOS_AUTO_REGISTER=True,
-    NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_REGISTER_ENABLED=True,
     NACOS_SERVICE_NAME="orders-api",
     NACOS_SERVICE_PORT=5000,
 )
 ```
 
-When all switches and `NACOS_ENABLED` are true, `init_app(app)` validates the
+When both switches and `NACOS_ENABLED` are true, `init_app(app)` validates the
 registration snapshot and calls public `register_instance(app)`. That command
 returns immediately; the Worker creates the Client and performs the Naming RPC.
 
@@ -35,7 +34,7 @@ Disable initialization registration when a process should choose the lifecycle
 boundary itself:
 
 ```python
-app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+app.config["NACOS_AUTO_REGISTER"] = False
 nacos.init_app(app)
 
 # Explicit app is useful outside a Flask context.
@@ -155,7 +154,7 @@ published. Ordinary business requests and SDK operations may resume pending
 automatic registration. `get_status()`, `/health/nacos`, and `.client` do not.
 
 Gunicorn `--preload` initializes the app in the master before workers fork. The
-recommended configuration is `NACOS_AUTO_REGISTER_ON_INIT=False`, followed by
+recommended configuration is `NACOS_AUTO_REGISTER=False`, followed by
 an explicit `nacos.register_instance(app)` in Gunicorn's post-fork/worker-init
 hook. Runtime rebuilding cannot undo a registration that the master already
 started before the fork.

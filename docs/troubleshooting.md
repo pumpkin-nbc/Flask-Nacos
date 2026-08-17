@@ -13,10 +13,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Symptom: the Flask app runs, but the instance does not appear in Nacos.
 - Cause: one of the registration switches was explicitly disabled, deterministic
   registration preflight failed, or the background operation failed.
-- Investigate: check `NACOS_ENABLED`, `NACOS_REGISTER_ENABLED`,
-  `NACOS_AUTO_REGISTER`, `NACOS_AUTO_REGISTER_ON_INIT`; inspect logs and
-  `get_status()`.
-- Fix: restore the intended switches (init-time scheduling defaults to `True`),
+- Investigate: check `NACOS_ENABLED`, `NACOS_REGISTER_ENABLED`, and
+  `NACOS_AUTO_REGISTER`; inspect logs and `get_status()`.
+- Fix: restore the intended switches (`NACOS_AUTO_REGISTER` defaults to `True`),
   or call `nacos.register_instance(app)` explicitly after fixing the reported cause.
 - If `operation_running=True`, the lifecycle is still converging. If it becomes
   `False` while `target_registered=True` and `registered=False`, inspect
@@ -153,7 +152,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   automatic registration is active.
 - Fix: correct the invalid configuration, or use `NACOS_FAIL_FAST=False`
   (default) so the safe error remains observable while startup continues. For
-  Gunicorn `--preload`, set `NACOS_AUTO_REGISTER_ON_INIT=False` and register in
+  Gunicorn `--preload`, set `NACOS_AUTO_REGISTER=False` and register in
   the worker hook after fork.
 
 ## 13. `get_config()` returns a string, not a dict

@@ -7,7 +7,7 @@ from tests.helpers import wait_registered
 
 
 def test_manual_deregister(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
     wait_registered(nacos, app)
 

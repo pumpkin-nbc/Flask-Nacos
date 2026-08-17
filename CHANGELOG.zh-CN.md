@@ -25,8 +25,8 @@
 
 - `register_instance()` 接受可选 Flask app并固定返回 `None`，Client 创建、SDK 注册、
   生命周期重试与心跳启动均由具名 daemon 线程执行。
-- `NACOS_AUTO_REGISTER_ON_INIT` 默认值保持 `True`，但初始化现在只在后台调度注册，
-  初始化线程不创建 Client，也不等待 Nacos。
+- 删除重复的初始化专用自动注册开关；`NACOS_AUTO_REGISTER` 现在是唯一自动注册开关，
+  初始化通过公开注册命令调度后台工作且不等待 Nacos。
 - Client 按 Flask app/PID惰性创建；状态、健康与 `.client` 缓存读取无 SDK副作用。
 - `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并且在禁止新注册后仍可
   清理已有实例。
@@ -327,7 +327,6 @@
 - 新增请求超时配置。
 - 新增可选 Flask 健康检查路由。
 - 新增 `get_status()` 用于查看扩展运行状态。
-- 新增 `NACOS_AUTO_REGISTER_ON_INIT`，提供更精细的自动注册控制。
 
 ### 变更
 

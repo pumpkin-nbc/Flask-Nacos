@@ -11,9 +11,9 @@
 
 - 现象：Flask 应用已运行，但实例没有出现在 Nacos 中。
 - 可能原因：某个注册开关被显式关闭、确定性注册预检失败，或后台注册操作失败。
-- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED`、
-  `NACOS_AUTO_REGISTER`、`NACOS_AUTO_REGISTER_ON_INIT`；查看日志和 `get_status()`。
-- 解决建议：恢复预期的开关（初始化调度默认值为 `True`），或修复状态中报告的原因后
+- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与
+  `NACOS_AUTO_REGISTER`；查看日志和 `get_status()`。
+- 解决建议：恢复预期的开关（`NACOS_AUTO_REGISTER` 默认值为 `True`），或修复状态中报告的原因后
   显式调用 `nacos.register_instance(app)`。
 - 若 `operation_running=True`，生命周期仍在收敛；若其变为 `False`，同时
   `target_registered=True` 且 `registered=False`，请检查 `last_error` 与安全日志，修复后
@@ -138,7 +138,7 @@
 - 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
   是非空且不能只包含空白字符的字符串。
 - 解决建议：修正非法配置，或使用 `NACOS_FAIL_FAST=False`（默认），让安全错误保持可见
-  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 fork
+  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER=False`，并在 fork
   后的 worker hook 中注册。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict

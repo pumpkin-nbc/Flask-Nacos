@@ -33,7 +33,6 @@ def create_app() -> Flask:
         # Workers sharing this IP:port map to one Nacos instance. Do not let an
         # individual worker remove that shared endpoint during graceful exit.
         NACOS_AUTO_REGISTER=True,
-        NACOS_AUTO_REGISTER_ON_INIT=True,
         NACOS_AUTO_DEREGISTER=False,
         NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
         NACOS_LOG_CONSOLE_ENABLED=os.environ.get("NACOS_LOG_CONSOLE_ENABLED", "true"),

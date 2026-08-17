@@ -174,14 +174,11 @@ configuration center is disabled.
 
 ## 7. Lifecycle
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | no | Whether `init_app(app)` schedules background registration. |
-
-Example (disable the default init-time scheduling for an explicit Gunicorn hook):
+`NACOS_AUTO_REGISTER` is the single automatic-registration switch. Disable it
+when registration must start from an explicit Gunicorn worker hook:
 
 ```python
-app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+app.config["NACOS_AUTO_REGISTER"] = False
 nacos.register_instance(app)
 ```
 

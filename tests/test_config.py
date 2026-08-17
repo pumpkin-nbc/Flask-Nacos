@@ -109,7 +109,6 @@ def test_new_030_config_defaults():
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is False
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/health/nacos"
     assert cfg["NACOS_STATUS_ENABLED"] is True
-    assert cfg["NACOS_AUTO_REGISTER_ON_INIT"] is True
 
 
 def test_new_030_config_overrides():
@@ -121,7 +120,6 @@ def test_new_030_config_overrides():
         NACOS_REQUEST_TIMEOUT="10",
         NACOS_HEALTH_CHECK_ENABLED="true",
         NACOS_HEALTH_CHECK_PATH="/healthz",
-        NACOS_AUTO_REGISTER_ON_INIT="false",
     )
     cfg = load_config(app)
 
@@ -131,7 +129,6 @@ def test_new_030_config_overrides():
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 10.0
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is True
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/healthz"
-    assert cfg["NACOS_AUTO_REGISTER_ON_INIT"] is False
 
 
 @pytest.mark.parametrize(

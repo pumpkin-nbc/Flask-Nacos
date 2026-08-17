@@ -4,9 +4,8 @@
 
 ## 普通 WSGI 启动
 
-`NACOS_AUTO_REGISTER_ON_INIT` 默认值为 `True`，因此普通非预加载应用工厂在
-`init_app(app)` 执行时调度注册。Client 创建与 Naming I/O 由短生命周期 daemon Worker
-完成。
+使用默认的 `NACOS_AUTO_REGISTER=True` 时，普通非预加载应用工厂会在
+`init_app(app)` 执行时调度注册。Client 创建与 Naming I/O 由短生命周期 daemon Worker完成。
 
 请显式配置消费者可访问的 `NACOS_SERVICE_IP` 与 `NACOS_SERVICE_PORT`；Flask 能在本机
 localhost 访问，不代表其他机器可以访问注册到 Nacos 的地址。
@@ -18,7 +17,7 @@ localhost 访问，不代表其他机器可以访问注册到 Nacos 的地址。
 
 ```python
 # application configuration
-NACOS_AUTO_REGISTER_ON_INIT = False
+NACOS_AUTO_REGISTER = False
 ```
 
 然后在 Gunicorn 的 worker hook 中，于 fork 完成后调用现有生命周期命令：

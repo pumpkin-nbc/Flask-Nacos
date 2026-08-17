@@ -34,7 +34,6 @@ def test_health_endpoint_returns_ok(make_app, patched_create_client):
         {
             "NACOS_HEALTH_CHECK_ENABLED": True,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_SERVICE_NAME": "fund-service",
             "NACOS_SERVICE_PORT": 5000,
         }
@@ -79,7 +78,6 @@ def test_health_endpoint_error_status(make_app, patched_create_client):
             "NACOS_HEALTH_CHECK_ENABLED": True,
             "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": False,
         }
     )

@@ -92,9 +92,9 @@ init_app(app)
   -> return while a daemon Worker creates the Client and performs Naming I/O
 ```
 
-`NACOS_AUTO_REGISTER_ON_INIT` (default `True`) controls the initialization
-command. `NACOS_AUTO_REGISTER` and `NACOS_REGISTER_ENABLED` also default to
-`True` and must be enabled for automatic registration.
+`NACOS_AUTO_REGISTER` (default `True`) is the single automatic-registration
+switch. Automatic registration requires `NACOS_ENABLED`,
+`NACOS_REGISTER_ENABLED`, and `NACOS_AUTO_REGISTER` to be enabled.
 
 ## Application factory
 
@@ -270,7 +270,7 @@ parent Runtime is discarded; ordinary business requests or explicit SDK
 operations may resume automatic registration, while status, health, and
 `.client` reads do not.
 
-For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER_ON_INIT=False` and call
+For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER=False` and call
 `nacos.register_instance(app)` in the post-fork/worker-init hook. This avoids
 starting SDK runtime in the preload master.
 

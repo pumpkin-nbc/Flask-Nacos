@@ -58,8 +58,6 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_HEALTH_CHECK_PATH": "/health/nacos",
     # Deprecated compatibility setting; get_status() is always available.
     "NACOS_STATUS_ENABLED": True,
-    # Auto-registration control. Initialization schedules background work.
-    "NACOS_AUTO_REGISTER_ON_INIT": True,
     # Service discovery selection strategy (0.4.0).
     "NACOS_DISCOVERY_STRATEGY": "first",
     # Service discovery filtering (0.4.0).
@@ -108,7 +106,6 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_RETRY_ENABLED",
         "NACOS_HEALTH_CHECK_ENABLED",
         "NACOS_STATUS_ENABLED",
-        "NACOS_AUTO_REGISTER_ON_INIT",
         "NACOS_INSTANCE_NORMALIZE",
         "NACOS_FAIL_FAST",
         "NACOS_LOG_ENABLED",

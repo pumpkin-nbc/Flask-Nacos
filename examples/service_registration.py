@@ -21,7 +21,6 @@ app.config.update(
     NACOS_SERVICE_PORT=int(os.environ.get("NACOS_SERVICE_PORT", "5000")),
     # Auto-register during trusted application initialization.
     NACOS_AUTO_REGISTER=True,
-    NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_AUTO_DEREGISTER=True,
     NACOS_FAIL_FAST=False,
 )

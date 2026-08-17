@@ -4,9 +4,9 @@ English | [简体中文](production.zh-CN.md)
 
 ## Normal WSGI startup
 
-The default is `True` for `NACOS_AUTO_REGISTER_ON_INIT`, so a normal
-non-preloaded application factory schedules registration when `init_app(app)`
-runs. Client creation and Naming I/O happen in a short-lived daemon Worker.
+With the default `NACOS_AUTO_REGISTER=True`, a normal non-preloaded application
+factory schedules registration when `init_app(app)` runs. Client creation and
+Naming I/O happen in a short-lived daemon Worker.
 
 Configure the externally reachable `NACOS_SERVICE_IP` and
 `NACOS_SERVICE_PORT`; binding Flask to localhost does not make that advertised
@@ -20,7 +20,7 @@ register the master. Recommended configuration:
 
 ```python
 # application configuration
-NACOS_AUTO_REGISTER_ON_INIT = False
+NACOS_AUTO_REGISTER = False
 ```
 
 Then call the existing lifecycle command from Gunicorn's worker hook after the

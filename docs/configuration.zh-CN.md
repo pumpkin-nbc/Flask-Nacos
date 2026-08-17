@@ -164,14 +164,11 @@ app.config.update(
 
 ## 7. 生命周期
 
-| 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
-| --- | --- | --- | --- | --- |
-| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | 否 | `init_app(app)` 是否调度后台注册。 |
-
-示例（关闭默认初始化调度，改由 Gunicorn 钩子显式注册）：
+`NACOS_AUTO_REGISTER` 是唯一的自动注册开关。需要改由 Gunicorn worker钩子显式注册时，
+将其关闭：
 
 ```python
-app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+app.config["NACOS_AUTO_REGISTER"] = False
 nacos.register_instance(app)
 ```
 

@@ -8,19 +8,18 @@ Flask-Nacos 1.1.0 使用目标状态生命周期。`target_registered` 表示最
 
 ## 自动注册
 
-三个注册开关的默认值均为 `True`：
+两个注册开关的默认值均为 `True`：
 
 ```python
 app.config.update(
     NACOS_AUTO_REGISTER=True,
-    NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_REGISTER_ENABLED=True,
     NACOS_SERVICE_NAME="orders-api",
     NACOS_SERVICE_PORT=5000,
 )
 ```
 
-三个开关与 `NACOS_ENABLED` 都为 true 时，`init_app(app)` 校验注册快照并调用公开的
+两个开关与 `NACOS_ENABLED` 都为 true 时，`init_app(app)` 校验注册快照并调用公开的
 `register_instance(app)`。该命令立即返回，Client 创建与 Naming RPC由 Worker完成。
 
 `NACOS_FAIL_FAST=True` 时，确定性注册配置非法会在 `init_app(app)` 提交扩展状态前抛出。
@@ -32,7 +31,7 @@ app.config.update(
 需要由进程自行选择生命周期边界时，关闭初始化注册：
 
 ```python
-app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+app.config["NACOS_AUTO_REGISTER"] = False
 nacos.init_app(app)
 
 # Explicit app is useful outside a Flask context.
@@ -137,7 +136,7 @@ Client、Worker、锁、Event 与注册事实都绑定 PID。fork 后父 Runtime
 `/health/nacos` 和 `.client` 不会消费 pending。
 
 Gunicorn `--preload` 会在 worker fork 前由 master初始化应用。推荐设置
-`NACOS_AUTO_REGISTER_ON_INIT=False`，并在 Gunicorn 的 post-fork/worker-init hook中显式
+`NACOS_AUTO_REGISTER=False`，并在 Gunicorn 的 post-fork/worker-init hook中显式
 调用 `nacos.register_instance(app)`。Runtime重建无法撤销 master在 fork 前已经启动的注册。
 
 多个 worker共享相同 service/group/cluster/IP/port 时，Nacos 只看到一个远端实例。应设置

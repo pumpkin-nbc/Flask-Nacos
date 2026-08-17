@@ -84,7 +84,7 @@ def test_service_registration_guides_include_lifecycle_flowcharts():
     chinese = (DOCS_DIR / "service-registration.zh-CN.md").read_text(encoding="utf-8")
     shared_markers = (
         "register_instance(app)",
-        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_AUTO_REGISTER",
         "NACOS_FAIL_FAST",
         "target_registered",
         "operation_running",
@@ -110,18 +110,18 @@ def test_service_registration_guides_include_lifecycle_flowcharts():
         _parse_as_python_38(code, f"service-registration-{index}.py")
 
 
-def test_auto_register_on_init_default_is_documented_as_true():
+def test_auto_register_default_is_documented_as_true():
     english = {
-        ROOT / "README.md": "`NACOS_AUTO_REGISTER_ON_INIT` (default `True`)",
-        DOCS_DIR / "configuration.md": ("| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"),
-        DOCS_DIR / "production.md": "The default is `True`",
-        DOCS_DIR / "service-registration.md": ("All three registration switches default to `True`"),
+        ROOT / "README.md": "`NACOS_AUTO_REGISTER` (default `True`)",
+        DOCS_DIR / "configuration.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
+        DOCS_DIR / "production.md": "`NACOS_AUTO_REGISTER=True`",
+        DOCS_DIR / "service-registration.md": "Both registration switches default to `True`",
     }
     chinese = {
-        ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）",
-        DOCS_DIR / "configuration.zh-CN.md": ("| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"),
-        DOCS_DIR / "production.zh-CN.md": "默认值为 `True`",
-        DOCS_DIR / "service-registration.zh-CN.md": ("三个注册开关的默认值均为 `True`"),
+        ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER`（默认 `True`）",
+        DOCS_DIR / "configuration.zh-CN.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
+        DOCS_DIR / "production.zh-CN.md": "`NACOS_AUTO_REGISTER=True`",
+        DOCS_DIR / "service-registration.zh-CN.md": "两个注册开关的默认值均为 `True`",
     }
 
     for path, marker in {**english, **chinese}.items():
@@ -353,7 +353,7 @@ def test_bilingual_docs_describe_auto_registration_preflight():
     )
     shared_markers = (
         "NACOS_SERVICE_NAME",
-        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_AUTO_REGISTER",
         "NACOS_FAIL_FAST",
         "init_app(app)",
         "preload",
@@ -363,6 +363,33 @@ def test_bilingual_docs_describe_auto_registration_preflight():
         text = path.read_text(encoding="utf-8")
         for marker in shared_markers:
             assert marker in text
+
+
+def test_removed_auto_registration_key_is_absent_from_current_tree():
+    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+    text_roots = (
+        ROOT / "flask_nacos",
+        ROOT / "examples",
+        ROOT / "docs",
+        ROOT / "scripts",
+        ROOT / "tests",
+    )
+    paths = [
+        ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "CHANGELOG.md",
+        ROOT / "CHANGELOG.zh-CN.md",
+        ROOT / "pyproject.toml",
+    ]
+    for text_root in text_roots:
+        paths.extend(
+            path
+            for path in text_root.rglob("*")
+            if path.is_file() and path.suffix in {".md", ".py", ".toml", ".yml", ".yaml"}
+        )
+
+    for path in paths:
+        assert removed_key not in path.read_text(encoding="utf-8"), path
 
 
 def test_bilingual_docs_describe_safe_logging_and_multi_worker_identity():

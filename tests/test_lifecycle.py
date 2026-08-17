@@ -40,6 +40,7 @@ def test_pid_change_rebuilds_all_process_local_resources_once(
     assert child.client_lock is not parent.client_lock
     assert child.network_operation_lock is not parent.network_operation_lock
     assert child.operation_wakeup is not parent.operation_wakeup
+    assert child.auto_register_pending is False
 
 
 def test_fork_auto_register_pending_is_not_consumed_by_status_health_or_client_property(
@@ -50,7 +51,6 @@ def test_fork_auto_register_pending_is_not_consumed_by_status_health_or_client_p
     app = make_app(
         {
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_HEALTH_CHECK_ENABLED": True,
         }
     )
@@ -87,7 +87,7 @@ def test_public_get_client_atomically_consumes_fork_pending(
 ):
     pid = [100]
     monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True})
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
     wait_registered(nacos, app)
 
@@ -108,7 +108,6 @@ def test_fork_preserves_non_fail_fast_registration_config_error(
         {
             "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_AUTO_REGISTER_ON_INIT": True,
             "NACOS_FAIL_FAST": False,
             "NACOS_HEALTH_CHECK_ENABLED": True,
         }

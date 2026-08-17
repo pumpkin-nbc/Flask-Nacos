@@ -32,8 +32,8 @@ app.config.update(NACOS_ENABLED=False)
 nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
 with app.app_context():
-    assert nacos.config["NACOS_AUTO_REGISTER_ON_INIT"] is True, (
-        "NACOS_AUTO_REGISTER_ON_INIT must default to True"
+    assert nacos.config["NACOS_AUTO_REGISTER"] is True, (
+        "NACOS_AUTO_REGISTER must default to True"
     )
     assert nacos.client is None, "cache-only client property must remain lazy"
 

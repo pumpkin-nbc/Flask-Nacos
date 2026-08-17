@@ -214,7 +214,6 @@ class FlaskNacos:
             cfg.get("NACOS_ENABLED", True)
             and cfg.get("NACOS_REGISTER_ENABLED", True)
             and cfg.get("NACOS_AUTO_REGISTER", True)
-            and cfg.get("NACOS_AUTO_REGISTER_ON_INIT", True)
         )
 
     @staticmethod
