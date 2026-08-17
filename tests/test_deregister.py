@@ -1,17 +1,17 @@
 """Tests for service deregistration (auto via atexit and manual)."""
 
+from types import SimpleNamespace
+
 from flask_nacos import FlaskNacos
 from tests.helpers import wait_registered
 
 
 def test_manual_deregister(make_app, patched_create_client, fake_client):
-    app = make_app(
-        {"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True}
-    )
+    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": True})
     nacos = FlaskNacos(app)
-    wait_registered(nacos)
+    wait_registered(nacos, app)
 
-    assert nacos.deregister_instance() is True
+    assert nacos.deregister_instance(app) is True
     fake_client.remove_naming_instance.assert_called_once()
     args, kwargs = fake_client.remove_naming_instance.call_args
     assert args[0] == "test-service"
@@ -26,7 +26,9 @@ def test_auto_deregister_registers_atexit(make_app, patched_create_client, monke
     import flask_nacos.extension as extension_module
 
     monkeypatch.setattr(
-        extension_module.atexit, "register", lambda fn: registered.append(fn)
+        extension_module,
+        "atexit",
+        SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
     app = make_app({"NACOS_AUTO_DEREGISTER": True})
@@ -41,28 +43,34 @@ def test_atexit_callback_deregisters(make_app, patched_create_client, fake_clien
     import flask_nacos.extension as extension_module
 
     monkeypatch.setattr(
-        extension_module.atexit, "register", lambda fn: registered.append(fn)
+        extension_module,
+        "atexit",
+        SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
     app = make_app({"NACOS_AUTO_DEREGISTER": True})
     nacos = FlaskNacos(app)
-    nacos.register_instance()
-    wait_registered(nacos)
+    nacos.register_instance(app)
+    wait_registered(nacos, app)
 
     registered[0]()
     fake_client.remove_naming_instance.assert_called_once()
 
 
-def test_no_atexit_when_disabled(make_app, patched_create_client, monkeypatch):
+def test_atexit_is_installed_even_when_remote_cleanup_is_disabled(
+    make_app, patched_create_client, monkeypatch
+):
     registered = []
 
     import flask_nacos.extension as extension_module
 
     monkeypatch.setattr(
-        extension_module.atexit, "register", lambda fn: registered.append(fn)
+        extension_module,
+        "atexit",
+        SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
     app = make_app({"NACOS_AUTO_DEREGISTER": False})
     FlaskNacos(app)
 
-    assert registered == []
+    assert len(registered) == 1

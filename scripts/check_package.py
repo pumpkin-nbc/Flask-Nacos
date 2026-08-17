@@ -50,9 +50,7 @@ EXPECTED_VERSION = read_pyproject_version(ROOT)
 if EXPECTED_VERSION is None:
     raise RuntimeError("could not read [project].version from pyproject.toml")
 EXPECTED_PROJECT_URLS = {
-    "Changelog": (
-        "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"
-    ),
+    "Changelog": ("https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/CHANGELOG.md"),
     "Documentation": "https://github.com/pumpkin-nbc/Flask-Nacos/tree/master/docs",
     "Security": "https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/SECURITY.md",
 }
@@ -62,9 +60,7 @@ REQUIRED_CLASSIFIERS = {
     "Typing :: Typed",
 }
 
-_RELATIVE_MARKDOWN_LINK_RE = re.compile(
-    r"\]\((?!https?://|mailto:|#)([^)]+)\)", re.IGNORECASE
-)
+_RELATIVE_MARKDOWN_LINK_RE = re.compile(r"\]\((?!https?://|mailto:|#)([^)]+)\)", re.IGNORECASE)
 
 
 def _normalize_text(value: str) -> str:
@@ -113,9 +109,7 @@ def validate_wheel_names(names: List[str]) -> List[str]:
     return problems
 
 
-def validate_wheel_metadata(
-    metadata_text: str, expected_readme: Optional[str] = None
-) -> List[str]:
+def validate_wheel_metadata(metadata_text: str, expected_readme: Optional[str] = None) -> List[str]:
     """Validate identity, licensing, URLs, classifiers, and long description."""
     metadata = Parser().parsestr(metadata_text)
     problems: List[str] = []
@@ -133,8 +127,7 @@ def validate_wheel_metadata(
         )
     if metadata.get("Version") != EXPECTED_VERSION:
         problems.append(
-            "wrong package version: "
-            f"expected {EXPECTED_VERSION!r}, got {metadata.get('Version')!r}"
+            f"wrong package version: expected {EXPECTED_VERSION!r}, got {metadata.get('Version')!r}"
         )
     if metadata.get("Requires-Python") != EXPECTED_REQUIRES_PYTHON:
         problems.append(
@@ -144,14 +137,11 @@ def validate_wheel_metadata(
         )
 
     requirements = metadata.get_all("Requires-Dist", [])
-    flask_requirements = [
-        value for value in requirements if value.lower().startswith("flask")
-    ]
+    flask_requirements = [value for value in requirements if value.lower().startswith("flask")]
     normalized_flask = [value.replace(" ", "").lower() for value in flask_requirements]
     if normalized_flask != ["flask>=1.0"]:
         problems.append(
-            "wrong Flask requirement: expected 'Flask>=1.0', "
-            f"got {flask_requirements!r}"
+            f"wrong Flask requirement: expected 'Flask>=1.0', got {flask_requirements!r}"
         )
 
     expression = metadata.get("License-Expression")
@@ -189,8 +179,7 @@ def validate_wheel_metadata(
         relative_link = _RELATIVE_MARKDOWN_LINK_RE.search(payload)
         if relative_link:
             problems.append(
-                "long description contains relative Markdown link: "
-                f"{relative_link.group(1)!r}"
+                f"long description contains relative Markdown link: {relative_link.group(1)!r}"
             )
         if expected_readme is not None and _normalize_text(payload) != _normalize_text(
             expected_readme
@@ -209,8 +198,7 @@ def validate_sdist_metadata(metadata_text: str) -> List[str]:
     if actual == EXPECTED_CORE_METADATA_VERSION:
         return []
     return [
-        "wrong sdist Metadata-Version: "
-        f"expected {EXPECTED_CORE_METADATA_VERSION!r}, got {actual!r}"
+        f"wrong sdist Metadata-Version: expected {EXPECTED_CORE_METADATA_VERSION!r}, got {actual!r}"
     ]
 
 
@@ -312,9 +300,7 @@ def main() -> int:
     if len(wheels) == 1:
         with zipfile.ZipFile(wheels[0]) as archive:
             names = archive.namelist()
-            metadata_names = [
-                name for name in names if name.endswith(".dist-info/METADATA")
-            ]
+            metadata_names = [name for name in names if name.endswith(".dist-info/METADATA")]
             if len(metadata_names) != 1:
                 problems.append("wheel must contain exactly one .dist-info/METADATA file")
             else:
@@ -331,8 +317,7 @@ def main() -> int:
             metadata_members = [
                 member
                 for member in archive.getmembers()
-                if member.name.endswith("/PKG-INFO")
-                and member.name.count("/") == 1
+                if member.name.endswith("/PKG-INFO") and member.name.count("/") == 1
             ]
             if len(metadata_members) != 1:
                 problems.append("sdist must contain exactly one root PKG-INFO file")
@@ -351,10 +336,7 @@ def main() -> int:
             print(f"  - {problem}", file=sys.stderr)
         return 1
 
-    print(
-        f"[check_package] OK - wheel: {Path(wheels[0]).name}, "
-        f"sdist: {Path(sdists[0]).name}"
-    )
+    print(f"[check_package] OK - wheel: {Path(wheels[0]).name}, sdist: {Path(sdists[0]).name}")
     return 0
 
 

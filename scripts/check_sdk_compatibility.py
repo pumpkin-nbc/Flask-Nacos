@@ -80,9 +80,7 @@ def validate_version(version: str, expected: Optional[str] = None) -> None:
             f"{SDK_DISTRIBUTION} {version} is outside the supported >=2.0.0,<3.0.0 range"
         )
     if expected is not None and version != expected:
-        raise ValueError(
-            f"expected {SDK_DISTRIBUTION} {expected}, found {version}"
-        )
+        raise ValueError(f"expected {SDK_DISTRIBUTION} {expected}, found {version}")
 
 
 def _parameter_names(callable_object) -> Set[str]:

@@ -60,8 +60,6 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_STATUS_ENABLED": True,
     # Auto-registration control. Initialization schedules background work.
     "NACOS_AUTO_REGISTER_ON_INIT": True,
-    # Lifecycle control (0.4.0).
-    "NACOS_DEREGISTER_ON_EXIT": True,
     # Service discovery selection strategy (0.4.0).
     "NACOS_DISCOVERY_STRATEGY": "first",
     # Service discovery filtering (0.4.0).
@@ -111,7 +109,6 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_HEALTH_CHECK_ENABLED",
         "NACOS_STATUS_ENABLED",
         "NACOS_AUTO_REGISTER_ON_INIT",
-        "NACOS_DEREGISTER_ON_EXIT",
         "NACOS_INSTANCE_NORMALIZE",
         "NACOS_FAIL_FAST",
         "NACOS_LOG_ENABLED",
@@ -148,9 +145,7 @@ def load_config(app) -> Dict[str, Any]:
     if weight_coerced is not None:
         merged["NACOS_SERVICE_WEIGHT"] = weight_coerced
 
-    heartbeat_coerced = to_float(
-        merged["NACOS_SERVICE_HEARTBEAT_INTERVAL"], None
-    )
+    heartbeat_coerced = to_float(merged["NACOS_SERVICE_HEARTBEAT_INTERVAL"], None)
     if heartbeat_coerced is not None:
         merged["NACOS_SERVICE_HEARTBEAT_INTERVAL"] = heartbeat_coerced
 
@@ -192,13 +187,9 @@ def validate_connection_config(config: Dict[str, Any]) -> None:
     secret_key_set = config.get("NACOS_SECRET_KEY") not in (None, "")
 
     if username_set != password_set:
-        raise NacosConfigError(
-            "NACOS_USERNAME and NACOS_PASSWORD must be configured together"
-        )
+        raise NacosConfigError("NACOS_USERNAME and NACOS_PASSWORD must be configured together")
     if access_key_set != secret_key_set:
-        raise NacosConfigError(
-            "NACOS_ACCESS_KEY and NACOS_SECRET_KEY must be configured together"
-        )
+        raise NacosConfigError("NACOS_ACCESS_KEY and NACOS_SECRET_KEY must be configured together")
     if username_set and access_key_set:
         raise NacosConfigError(
             "Username/password authentication and AK/SK authentication "
@@ -214,10 +205,7 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
     """
     service_name = config.get("NACOS_SERVICE_NAME")
     if not isinstance(service_name, str) or not service_name.strip():
-        logger.error(
-            "Service registration failed: NACOS_SERVICE_NAME must be a "
-            "non-empty string"
-        )
+        logger.error("Service registration failed: NACOS_SERVICE_NAME must be a non-empty string")
         raise NacosValidationError(
             "NACOS_SERVICE_NAME must be a non-empty string to register a service"
         )
@@ -237,9 +225,7 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
         logger.error("Service registration failed: NACOS_SERVICE_EPHEMERAL must be a bool")
         raise NacosValidationError("NACOS_SERVICE_EPHEMERAL must be a bool")
     if config.get("NACOS_SERVICE_EPHEMERAL"):
-        validate_heartbeat_interval(
-            config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0)
-        )
+        validate_heartbeat_interval(config.get("NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0))
 
 
 __all__ = [

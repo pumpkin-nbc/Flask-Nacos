@@ -22,9 +22,7 @@ def create_app() -> Flask:
     """Create and configure a Flask application integrated with Nacos."""
     app = Flask(__name__)
 
-    service_name = os.environ.get(
-        "NACOS_SERVICE_NAME", "flask-nacos-complete-demo"
-    )
+    service_name = os.environ.get("NACOS_SERVICE_NAME", "flask-nacos-complete-demo")
     service_port = int(os.environ.get("NACOS_SERVICE_PORT", "5000"))
     service_group = os.environ.get("NACOS_SERVICE_GROUP", "DEFAULT_GROUP")
 
@@ -43,32 +41,19 @@ def create_app() -> Flask:
         NACOS_GROUP_NAME=service_group,
         NACOS_SERVICE_GROUP=service_group,
         NACOS_CONFIG_ENABLED=True,
-        NACOS_CONFIG_DATA_ID=os.environ.get(
-            "NACOS_CONFIG_DATA_ID", "flask-nacos-demo.properties"
-        ),
+        NACOS_CONFIG_DATA_ID=os.environ.get("NACOS_CONFIG_DATA_ID", "flask-nacos-demo.properties"),
         NACOS_CONFIG_GROUP=os.environ.get("NACOS_CONFIG_GROUP", "DEFAULT_GROUP"),
-        NACOS_REQUEST_TIMEOUT=float(
-            os.environ.get("NACOS_REQUEST_TIMEOUT", "5.0")
-        ),
+        NACOS_REQUEST_TIMEOUT=float(os.environ.get("NACOS_REQUEST_TIMEOUT", "5.0")),
         NACOS_AUTO_REGISTER=True,
         NACOS_AUTO_REGISTER_ON_INIT=True,
-        NACOS_AUTO_DEREGISTER=True,
-        NACOS_DEREGISTER_ON_EXIT=os.environ.get(
-            "NACOS_DEREGISTER_ON_EXIT", "true"
-        ),
+        NACOS_AUTO_DEREGISTER=os.environ.get("NACOS_AUTO_DEREGISTER", "true"),
         NACOS_HEALTH_CHECK_ENABLED=True,
         NACOS_HEALTH_CHECK_PATH="/health/nacos",
         NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
-        NACOS_LOG_CONSOLE_ENABLED=os.environ.get(
-            "NACOS_LOG_CONSOLE_ENABLED", "true"
-        ),
-        NACOS_LOG_FILE_ENABLED=os.environ.get(
-            "NACOS_LOG_FILE_ENABLED", "true"
-        ),
+        NACOS_LOG_CONSOLE_ENABLED=os.environ.get("NACOS_LOG_CONSOLE_ENABLED", "true"),
+        NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
         NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
-        NACOS_LOG_FILENAME=os.environ.get(
-            "NACOS_LOG_FILENAME", "flask-nacos.log"
-        ),
+        NACOS_LOG_FILENAME=os.environ.get("NACOS_LOG_FILENAME", "flask-nacos.log"),
         # Keep the Flask app available while Nacos is temporarily unavailable.
         NACOS_FAIL_FAST=False,
     )
@@ -95,9 +80,12 @@ def create_app() -> Flask:
         status = nacos.get_status()
         return jsonify(
             {
-                "nacos_enabled": status.get("nacos_enabled", False),
-                "client_initialized": status.get("client_initialized", False),
+                "enabled": status.get("enabled", False),
+                "client_created": status.get("client_created", False),
+                "target_registered": status.get("target_registered", False),
                 "registered": status.get("registered", False),
+                "operation_running": status.get("operation_running", False),
+                "last_error": status.get("last_error"),
                 "service_name": status.get("service_name"),
                 "service_port": status.get("service_port"),
             }
@@ -130,7 +118,11 @@ def create_app() -> Flask:
         target_service = request.args.get("service") or service_name
         cluster = request.args.get("cluster") or None
 
-        if nacos.get_client() is None:
+        try:
+            client = nacos.get_client()
+        except FlaskNacosError:
+            client = None
+        if client is None:
             return (
                 jsonify(
                     {

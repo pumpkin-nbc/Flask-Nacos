@@ -46,9 +46,7 @@ def read_dunder_version(root: Path) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def read_changelog_version(
-    root: Path, filename: str = "CHANGELOG.md"
-) -> Optional[str]:
+def read_changelog_version(root: Path, filename: str = "CHANGELOG.md") -> Optional[str]:
     """Return the most recent ``## X.Y.Z`` heading from a changelog file."""
     changelog = root / filename
     if not changelog.is_file():

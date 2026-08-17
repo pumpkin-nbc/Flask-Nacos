@@ -79,6 +79,7 @@ import os
 from flask import Flask, jsonify
 
 from flask_nacos import FlaskNacos
+from flask_nacos.exceptions import FlaskNacosError
 
 SERVICE_NAME = "flask-nacos-beginner"
 CONFIG_DATA_ID = "flask-nacos-beginner.properties"
@@ -113,14 +114,10 @@ app.config.update(
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
     NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),
     NACOS_LOG_LEVEL=os.environ.get("NACOS_LOG_LEVEL", "INFO"),
-    NACOS_LOG_CONSOLE_ENABLED=os.environ.get(
-        "NACOS_LOG_CONSOLE_ENABLED", "true"
-    ),
+    NACOS_LOG_CONSOLE_ENABLED=os.environ.get("NACOS_LOG_CONSOLE_ENABLED", "true"),
     NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
     NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
-    NACOS_LOG_FILENAME=os.environ.get(
-        "NACOS_LOG_FILENAME", "flask-nacos.log"
-    ),
+    NACOS_LOG_FILENAME=os.environ.get("NACOS_LOG_FILENAME", "flask-nacos.log"),
     # Temporarily set NACOS_FAIL_FAST=true when an exact startup error is needed.
     NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
@@ -129,7 +126,7 @@ nacos = FlaskNacos(app)
 
 
 def _not_ready(feature: str):
-    if nacos.get_status()["nacos_enabled"]:
+    if nacos.get_status()["enabled"]:
         hint = "Check the Nacos address, authentication, namespace, and Flask logs."
     else:
         hint = "Start Nacos, set NACOS_ENABLED=true, and restart this app."
@@ -140,9 +137,12 @@ def _public_status():
     """Return only status fields that are safe to expose over HTTP."""
     status = nacos.get_status()
     return {
-        "nacos_enabled": status.get("nacos_enabled", False),
-        "client_initialized": status.get("client_initialized", False),
+        "enabled": status.get("enabled", False),
+        "client_created": status.get("client_created", False),
+        "target_registered": status.get("target_registered", False),
         "registered": status.get("registered", False),
+        "operation_running": status.get("operation_running", False),
+        "last_error": status.get("last_error"),
         "service_name": status.get("service_name"),
         "service_port": status.get("service_port"),
     }
@@ -153,7 +153,7 @@ def index():
     return jsonify(
         {
             "message": "Your Flask-Nacos beginner app is running.",
-            "nacos_enabled": nacos.get_status()["nacos_enabled"],
+            "enabled": nacos.get_status()["enabled"],
             "next": [
                 "/nacos/status",
                 "/health/nacos",
@@ -171,19 +171,25 @@ def nacos_status():
 
 @app.route("/nacos/config", methods=["GET"])
 def nacos_config():
-    if nacos.get_client() is None:
+    try:
+        client = nacos.get_client()
+    except FlaskNacosError:
+        return _not_ready("config")
+    if client is None:
         return _not_ready("config")
     content = nacos.get_config()  # Uses NACOS_CONFIG_DATA_ID by default.
     if content is None:
         return _not_ready("config")
-    return jsonify(
-        {"available": True, "data_id": CONFIG_DATA_ID, "content": content}
-    )
+    return jsonify({"available": True, "data_id": CONFIG_DATA_ID, "content": content})
 
 
 @app.route("/nacos/instances", methods=["GET"])
 def nacos_instances():
-    if nacos.get_client() is None:
+    try:
+        client = nacos.get_client()
+    except FlaskNacosError:
+        return _not_ready("discovery")
+    if client is None:
         return _not_ready("discovery")
     instances = nacos.list_instances(SERVICE_NAME)
     return jsonify(
@@ -232,9 +238,12 @@ The expected status includes:
 
 ```json
 {
-  "nacos_enabled": false,
-  "client_initialized": false,
+  "enabled": false,
+  "client_created": false,
+  "target_registered": false,
   "registered": false,
+  "operation_running": false,
+  "last_error": null,
   "service_name": "flask-nacos-beginner",
   "service_port": 3000
 }
@@ -296,20 +305,22 @@ should be:
 
 ```json
 {
-  "nacos_enabled": true,
-  "client_initialized": true,
+  "enabled": true,
+  "client_created": true,
+  "target_registered": true,
   "registered": true,
+  "operation_running": false,
+  "last_error": null,
   "service_name": "flask-nacos-beginner",
   "service_port": 3000
 }
 ```
 
-The client is initialized and the background task registered the service. If the
-value stays `false`, inspect the Flask-Nacos log and the full status from Python
-for `registration_in_progress` and `last_registration_error_type`. The Nacos
-console should list `flask-nacos-beginner`. The health endpoint should now report
-`"status": "ok"`; it still reports local extension state, not remote Nacos
-availability.
+The Client was created and the Worker registered the service. If `registered`
+stays `false`, inspect `operation_running`, `last_error`, and the safe
+Flask-Nacos logs. The Nacos console should list `flask-nacos-beginner`. The
+health endpoint should now report `"status": "ok"`; it still reports local
+lifecycle state, not remote Nacos availability.
 
 Because this is an ephemeral instance, the SDK sends a heartbeat every 5 seconds.
 The initial `healthy=True` flag does not replace heartbeat renewal. If the healthy

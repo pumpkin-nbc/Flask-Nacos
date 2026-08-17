@@ -57,16 +57,16 @@ app.config.update(
 ```
 
 请填写 namespace ID，而不是控制台显示名称。根据服务端认证方式选择用户名/密码或
-AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥；认证配置非法时，
-client 初始化会遵循 `NACOS_FAIL_FAST`。
+AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥；认证结构在
+`init_app()` 阶段校验，`NACOS_FAIL_FAST` 决定确定性错误是否阻止状态提交。
 
 ## 2. 服务注册
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否启用初始化阶段的自动注册；不影响手动注册。 |
+| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否允许新注册；不阻止清理已经注册的实例。 |
 | `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 自动注册总开关。 |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 退出时自动注销。 |
+| `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 是否允许退出回调注销当前进程已确认的实例。 |
 | `NACOS_SERVICE_NAME` | str | `None` | 是（注册时） | 服务名。 |
 | `NACOS_SERVICE_IP` | str | `None` | 建议 | 服务 IP；未设置时自动识别。 |
 | `NACOS_SERVICE_PORT` | int | `None` | 是（注册时） | 服务端口，`1-65535`。 |
@@ -167,17 +167,17 @@ app.config.update(
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | 否 | `init_app(app)` 是否调度后台注册。 |
-| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | 否 | 是否注册 `atexit` 处理器在进程退出时注销。 |
 
 示例（关闭默认初始化调度，改由 Gunicorn 钩子显式注册）：
 
 ```python
 app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
-nacos.register_instance()
+nacos.register_instance(app)
 ```
 
-`register_instance()` 始终非阻塞并返回 `None`。注册按 app、按进程 single-flight；通过
-`get_status()` 观察完成状态。
+`register_instance()` 在 Client 创建与网络 I/O 前返回 `None`。注册按 app、按进程
+single-flight；通过 `get_status()` 观察 `target_registered`、`registered`、
+`operation_running` 与 `last_error`。`NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
 
 ## 8. 日志
 

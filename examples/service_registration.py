@@ -34,9 +34,12 @@ def status():
     current = nacos.get_status()
     return jsonify(
         {
-            "nacos_enabled": current.get("nacos_enabled", False),
-            "client_initialized": current.get("client_initialized", False),
+            "enabled": current.get("enabled", False),
+            "client_created": current.get("client_created", False),
+            "target_registered": current.get("target_registered", False),
             "registered": current.get("registered", False),
+            "operation_running": current.get("operation_running", False),
+            "last_error": current.get("last_error"),
             "service_name": current.get("service_name"),
             "service_port": current.get("service_port"),
         }

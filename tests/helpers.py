@@ -13,12 +13,12 @@ def wait_until(predicate, timeout=2.0):
     raise AssertionError("condition was not reached before timeout")
 
 
-def wait_registered(nacos, expected=True, timeout=2.0):
+def wait_registered(nacos, app, expected=True, timeout=2.0):
     """Wait for registration work to settle at the expected local state."""
     wait_until(
         lambda: (
-            nacos.get_status()["registration_in_progress"] is False
-            and nacos.get_status()["registered"] is expected
+            nacos.get_status(app)["operation_running"] is False
+            and nacos.get_status(app)["registered"] is expected
         ),
         timeout=timeout,
     )

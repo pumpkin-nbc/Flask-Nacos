@@ -34,8 +34,11 @@ def test_get_config_still_present():
 
 def test_registration_api_is_consolidated():
     signature = inspect.signature(FlaskNacos.register_instance)
-    assert list(signature.parameters) == ["self"]
+    assert list(signature.parameters) == ["self", "app"]
+    assert signature.parameters["app"].default is None
     assert signature.return_annotation is None
+    assert not hasattr(FlaskNacos, "ensure_registered_async")
+    assert not hasattr(FlaskNacos, "register_instance_async")
 
 
 def test_source_license_files_are_apache_2():

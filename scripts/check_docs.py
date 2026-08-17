@@ -93,9 +93,7 @@ def check_links(root: Path = ROOT) -> List[Problem]:
                 resolved = (doc.parent / path_part).resolve()
                 if not resolved.exists():
                     rel = doc.relative_to(root).as_posix()
-                    problems.append(
-                        Problem(rel, lineno, f"broken link to {target!r}")
-                    )
+                    problems.append(Problem(rel, lineno, f"broken link to {target!r}"))
     return problems
 
 
@@ -109,9 +107,7 @@ def check_example_refs(root: Path = ROOT) -> List[Problem]:
                 ref = match.group(0)
                 if not (root / ref).exists():
                     rel = doc.relative_to(root).as_posix()
-                    problems.append(
-                        Problem(rel, lineno, f"missing example file {ref!r}")
-                    )
+                    problems.append(Problem(rel, lineno, f"missing example file {ref!r}"))
     return problems
 
 

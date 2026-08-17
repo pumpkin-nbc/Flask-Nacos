@@ -11,31 +11,32 @@
 
 ### 新增
 
-- 通过无参数的 `FlaskNacos.register_instance()` 命令新增非阻塞、按需、per-app、
-  per-process single-flight 注册生命周期。
-- `get_status()` 本地状态增加 `registration_in_progress`、
-  `deregistration_requested` 与 `last_registration_error_type`。
-- 增加注册/注销竞争的“最后一次明确操作优先”收敛、fork 生命周期重置、`atexit` 等待
-  进行中注册后的清理与并发回归测试。
+- 通过 `register_instance(app=None) -> None` 新增目标状态生命周期收敛，生命周期 Worker
+  按 app/PID 归属，Naming RPC全局 single-flight。
+- 新增固定本地状态模型：`target_registered`、`registered`、`operation_running`、安全
+  `last_error`，以及 Client 与实际注册身份快照。
+- 新增 Naming 内部成功/失败/跳过三态、准确注册身份复用、可中断重试、fork Runtime
+  重建与有界退出清理。
 - CI 扩展到 Python 3.14，以及 Flask 1.0.x、1.1.x、2.x、3.0.x、3.1.x 的有效组合。
 - wheel 与 sdist 固定生成 Core Metadata 2.4，在保留 PEP 639 许可证元数据的同时兼容
   当前打包工具的严格校验。
 
 ### 变更
 
-- `register_instance()` 改为无参数、固定返回 `None`，SDK 注册、重试和
-  心跳启动均由具名 daemon 线程执行。
+- `register_instance()` 接受可选 Flask app并固定返回 `None`，Client 创建、SDK 注册、
+  生命周期重试与心跳启动均由具名 daemon 线程执行。
 - `NACOS_AUTO_REGISTER_ON_INIT` 默认值保持 `True`，但初始化现在只在后台调度注册，
-  不再等待 Nacos。
-- 删除 `NACOS_REGISTER_ONCE_PER_PROCESS`；注册始终按 app、按进程
-  single-flight，并在成功后保持幂等。
-- `deregister_instance()` 支持注册中的延迟清理，并保证最后一次明确注册/注销命令生效。
+  初始化线程不创建 Client，也不等待 Nacos。
+- Client 按 Flask app/PID惰性创建；状态、健康与 `.client` 缓存读取无 SDK副作用。
+- `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并且在禁止新注册后仍可
+  清理已有实例。
+- `NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
 - 同步双语 Quickstart 与可运行的 beginner 示例，补齐完整工厂案例实际读取的全部环境变量，
   并移除简化示例中硬编码的演示凭据。
 
 ### 兼容性
 
-- 生命周期层复用现有校验、重试、服务身份、心跳及注册状态机。
+- 生命周期运行时错误通过安全本地状态与日志观测；fail-fast 仅控制确定性配置失败。
 - Python 运行要求继续为 `>=3.8`；Flask 依赖改为无额外上限的 `>=1.0`。
 - 开发类型检查固定使用 mypy `<1.15`，这是仍能在 Python 3.8 运行并明确以其为检查
   目标的最后一个版本系列。

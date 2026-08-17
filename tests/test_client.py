@@ -86,9 +86,7 @@ def test_create_client_uses_configured_log_directory(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
     log_directory = tmp_path / "logs"
 
-    create_client(
-        _config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(log_directory))
-    )
+    create_client(_config(NACOS_LOG_ENABLED=True, NACOS_LOG_PATH=str(log_directory)))
 
     constructor.assert_called_once_with(
         "nacos.example:8848",
@@ -97,9 +95,7 @@ def test_create_client_uses_configured_log_directory(monkeypatch, tmp_path):
     )
 
 
-def test_create_client_does_not_pass_an_existing_file_as_log_directory(
-    monkeypatch, tmp_path
-):
+def test_create_client_does_not_pass_an_existing_file_as_log_directory(monkeypatch, tmp_path):
     constructor = MagicMock(return_value=object())
     monkeypatch.setitem(sys.modules, "nacos", SimpleNamespace(NacosClient=constructor))
     legacy_file = tmp_path / "logs"
@@ -133,9 +129,7 @@ def test_create_client_wraps_missing_sdk(monkeypatch):
     assert isinstance(exc_info.value.__cause__, ImportError)
 
 
-def test_real_sdk_constructor_creates_no_home_or_temporary_log(
-    monkeypatch, tmp_path
-):
+def test_real_sdk_constructor_creates_no_home_or_temporary_log(monkeypatch, tmp_path):
     pytest.importorskip("nacos")
     fake_home = tmp_path / "home"
     sdk_temp = tmp_path / "temp"
@@ -152,9 +146,7 @@ def test_real_sdk_constructor_creates_no_home_or_temporary_log(
     assert not (sdk_temp / "nacos-client-python.log").exists()
 
 
-def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(
-    monkeypatch, tmp_path
-):
+def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(monkeypatch, tmp_path):
     pytest.importorskip("nacos")
     configured_directory = tmp_path / "disabled-logs"
     sdk_temp = tmp_path / "temp"
@@ -176,9 +168,7 @@ def test_real_sdk_does_not_create_configured_directory_when_logging_disabled(
 
 def test_heartbeat_wrapper_logs_success_and_preserves_result(monkeypatch):
     sdk_client = SimpleNamespace()
-    sdk_client.send_heartbeat = MagicMock(
-        return_value={"clientBeatInterval": 5000}
-    )
+    sdk_client.send_heartbeat = MagicMock(return_value={"clientBeatInterval": 5000})
     safe_logger = MagicMock()
     monkeypatch.setattr(client_module, "logger", safe_logger)
 
@@ -225,8 +215,7 @@ def test_heartbeat_wrapper_logs_sanitized_failure_and_reraises(monkeypatch):
         )
 
     safe_logger.error.assert_called_once_with(
-        "Nacos heartbeat failed "
-        "(service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
+        "Nacos heartbeat failed (service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
         "orders",
         "10.0.0.8",
         8080,
@@ -278,9 +267,7 @@ def test_invalid_authentication_fails_before_client_creation(
     assert "nacos" not in app.extensions
 
 
-def test_invalid_authentication_is_safe_when_not_fail_fast(
-    make_app, patched_create_client
-):
+def test_invalid_authentication_is_safe_when_not_fail_fast(make_app, patched_create_client):
     app = make_app(
         {
             "NACOS_USERNAME": "user",
@@ -293,13 +280,12 @@ def test_invalid_authentication_is_safe_when_not_fail_fast(
 
     extension = FlaskNacos(app)
 
-    assert extension.client is None
+    with app.app_context():
+        assert extension.client is None
     assert patched_create_client["count"] == 0
 
 
-def test_invalid_authentication_does_not_log_credentials(
-    make_app, patched_create_client, caplog
-):
+def test_invalid_authentication_does_not_log_credentials(make_app, patched_create_client, caplog):
     credentials = (
         "private-auth-user",
         "private-auth-password",
@@ -321,7 +307,8 @@ def test_invalid_authentication_does_not_log_credentials(
     with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
         extension = FlaskNacos(app)
 
-    assert extension.client is None
+    with app.app_context():
+        assert extension.client is None
     output = "\n".join(record.getMessage() for record in caplog.records)
     assert all(value not in output for value in credentials)
     assert patched_create_client["count"] == 0

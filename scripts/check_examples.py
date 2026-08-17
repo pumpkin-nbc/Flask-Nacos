@@ -67,9 +67,7 @@ def scan() -> List[Problem]:
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for identifier in FORBIDDEN_IDENTIFIERS:
                 if identifier in line:
-                    problems.append(
-                        Problem(rel, lineno, f"unsupported identifier {identifier!r}")
-                    )
+                    problems.append(Problem(rel, lineno, f"unsupported identifier {identifier!r}"))
             for marker in YAML_MARKERS:
                 if marker in line:
                     problems.append(

@@ -81,17 +81,18 @@ def test_readme_references_docs():
 
 def test_service_registration_guides_include_lifecycle_flowcharts():
     english = (DOCS_DIR / "service-registration.md").read_text(encoding="utf-8")
-    chinese = (DOCS_DIR / "service-registration.zh-CN.md").read_text(
-        encoding="utf-8"
-    )
+    chinese = (DOCS_DIR / "service-registration.zh-CN.md").read_text(encoding="utf-8")
     shared_markers = (
-        "register_instance()",
+        "register_instance(app)",
         "NACOS_AUTO_REGISTER_ON_INIT",
         "NACOS_FAIL_FAST",
-        "registration_in_progress",
-        "deregistration_requested",
-        "last_registration_error_type",
-        "NACOS_DEREGISTER_ON_EXIT=False",
+        "target_registered",
+        "operation_running",
+        "last_error",
+        "NACOS_AUTO_DEREGISTER=False",
+        "SUCCEEDED",
+        "FAILED",
+        "SKIPPED",
         "daemon",
         "single-flight",
         "flowchart TD",
@@ -112,23 +113,15 @@ def test_service_registration_guides_include_lifecycle_flowcharts():
 def test_auto_register_on_init_default_is_documented_as_true():
     english = {
         ROOT / "README.md": "`NACOS_AUTO_REGISTER_ON_INIT` (default `True`)",
-        DOCS_DIR / "configuration.md": (
-            "| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"
-        ),
+        DOCS_DIR / "configuration.md": ("| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"),
         DOCS_DIR / "production.md": "The default is `True`",
-        DOCS_DIR / "service-registration.md": (
-            "All three registration switches default to `True`"
-        ),
+        DOCS_DIR / "service-registration.md": ("All three registration switches default to `True`"),
     }
     chinese = {
         ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER_ON_INIT`（默认 `True`）",
-        DOCS_DIR / "configuration.zh-CN.md": (
-            "| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"
-        ),
+        DOCS_DIR / "configuration.zh-CN.md": ("| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` |"),
         DOCS_DIR / "production.zh-CN.md": "默认值为 `True`",
-        DOCS_DIR / "service-registration.zh-CN.md": (
-            "三个注册开关的默认值均为 `True`"
-        ),
+        DOCS_DIR / "service-registration.zh-CN.md": ("三个注册开关的默认值均为 `True`"),
     }
 
     for path, marker in {**english, **chinese}.items():
@@ -150,9 +143,7 @@ def test_api_reference_snippets_are_bilingual_and_python_38_compatible():
 def test_bilingual_compatibility_docs_match_ci_support_matrix():
     english = (DOCS_DIR / "compatibility.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "compatibility.zh-CN.md").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     for marker in ("3.14", "Flask `>=1.0`", "Flask 1.0.4", "Flask 3.0.x"):
         assert marker in english
@@ -200,9 +191,7 @@ def test_bilingual_release_guides_document_oidc_gates():
 def test_complete_example_guides_share_commands_and_defaults():
     english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
-    example_source = (ROOT / "examples" / "complete_factory_app.py").read_text(
-        encoding="utf-8"
-    )
+    example_source = (ROOT / "examples" / "complete_factory_app.py").read_text(encoding="utf-8")
     shared_markers = (
         "examples/complete_factory_app.py",
         "examples/docker-compose-nacos.yml up -d",
@@ -213,7 +202,7 @@ def test_complete_example_guides_share_commands_and_defaults():
         "/api/nacos/config",
         "/api/nacos/instances",
         "/health/nacos",
-        "NACOS_DEREGISTER_ON_EXIT",
+        "NACOS_AUTO_DEREGISTER",
         "NACOS_LOG_CONSOLE_ENABLED",
         "NACOS_LOG_FILE_ENABLED",
         "NACOS_LOG_PATH",
@@ -225,9 +214,7 @@ def test_complete_example_guides_share_commands_and_defaults():
         assert marker in english
         assert marker in chinese
 
-    environment_keys = set(
-        re.findall(r'os\.environ\.get\(\s*"([A-Z0-9_]+)"', example_source)
-    )
+    environment_keys = set(re.findall(r'os\.environ\.get\(\s*"([A-Z0-9_]+)"', example_source))
     assert environment_keys
     for key in environment_keys:
         assert key in english
@@ -265,12 +252,8 @@ def test_complete_guides_document_centralized_extension_initialization():
         compile(code, f"complete-example-{index}.py", "exec")
 
     app_code = next(code for code in english_blocks if code.startswith("# app/app.py"))
-    assert app_code.index("app.config.from_object") < app_code.index(
-        "extension_config(app)"
-    )
-    assert app_code.index("extension_config(app)") < app_code.index(
-        "app.register_blueprint"
-    )
+    assert app_code.index("app.config.from_object") < app_code.index("extension_config(app)")
+    assert app_code.index("extension_config(app)") < app_code.index("app.register_blueprint")
 
 
 def test_beginner_quickstarts_are_copyable_and_consistent():
@@ -308,9 +291,7 @@ def test_beginner_quickstarts_are_copyable_and_consistent():
     assert english_code is not None
     assert chinese_code is not None
     assert english_code.group(1) == chinese_code.group(1)
-    beginner_source = (ROOT / "examples" / "beginner_app.py").read_text(
-        encoding="utf-8"
-    )
+    beginner_source = (ROOT / "examples" / "beginner_app.py").read_text(encoding="utf-8")
     assert english_code.group(1).rstrip() == beginner_source.rstrip()
     compile(english_code.group(1), "quickstart-app.py", "exec")
 

@@ -7,7 +7,8 @@ the repository root. This page links to it for convenience.
 
 - [View the full changelog](../CHANGELOG.md)
 
-The latest release is `1.1.0`. It makes the no-argument
-`register_instance()` command non-blocking, keeps init-time registration enabled
-by default as background work, and adds per-app/per-process single-flight lifecycle status.
-It also validates Python 3.8-3.14 and current Flask `>=1.0` combinations.
+The latest release is `1.1.0`. `register_instance(app=None)` now returns
+immediately and drives a target-state lifecycle through one per-app/PID Worker
+and Naming single-flight. Client creation is lazy, while initialization-time
+registration remains enabled by default. It also validates Python 3.8-3.14 and
+current Flask `>=1.0` combinations.

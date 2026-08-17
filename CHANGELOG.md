@@ -11,14 +11,15 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Added
 
-- Added a non-blocking, on-demand registration lifecycle through the no-argument
-  `FlaskNacos.register_instance()` command, with per-app and per-process
-  single-flight scheduling.
-- Added `registration_in_progress`, `deregistration_requested`, and
-  `last_registration_error_type` to the local `get_status()` result.
-- Added last-explicit-operation-wins reconciliation for register/deregister
-  races, fork-aware lifecycle reset, graceful `atexit` cleanup of in-flight
-  registration, and concurrency regression tests.
+- Added target-state lifecycle convergence through
+  `register_instance(app=None) -> None`, with per-app/PID Worker ownership and
+  Naming RPC single-flight.
+- Added the fixed local status model: `target_registered`, `registered`,
+  `operation_running`, and safe `last_error`, plus Client and registered
+  identity snapshots.
+- Added three-state internal Naming results (success, failure, skip), exact
+  registered-identity reuse, interruptible retry, fork Runtime rebuilding, and
+  bounded shutdown cleanup.
 - Expanded CI coverage through Python 3.14 and the valid Flask 1.0.x, 1.1.x,
   2.x, 3.0.x, and 3.1.x runtime combinations.
 - Pinned wheel and sdist output to Core Metadata 2.4 for strict validation by
@@ -26,23 +27,25 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
-- `register_instance()` now accepts no arguments, always returns
-  `None`, and schedules SDK registration, retries, and heartbeat startup in a
-  named daemon thread.
+- `register_instance()` accepts an optional Flask app, returns `None`, and
+  schedules Client creation, SDK registration, lifecycle retry, and heartbeat
+  startup in a named daemon thread.
 - `NACOS_AUTO_REGISTER_ON_INIT` remains `True` by default, but initialization now
-  schedules registration in the background without waiting for Nacos.
-- Removed `NACOS_REGISTER_ONCE_PER_PROCESS`; registration is always
-  per-app, per-process, single-flight, and idempotent after success.
-- `deregister_instance()` accepts delayed cleanup while registration is in
-  progress and preserves the last explicit register/deregister command.
+  calls the public registration command without creating a Client or waiting
+  for Nacos in the initialization thread.
+- Client creation is lazy and bound to one Flask app/PID. Status, health, and
+  `.client` cache reads have no SDK side effects.
+- `deregister_instance(app=None)` preserves the last lifecycle command and can
+  still clean an existing instance when new registration is disabled.
+- `NACOS_AUTO_DEREGISTER` is the single exit deregistration switch.
 - Synchronized the bilingual Quickstart code with the runnable beginner app,
   documented every environment variable consumed by the complete factory
   example, and removed hardcoded demo credentials from simplified examples.
 
 ### Compatibility
 
-- The lifecycle layer reuses the existing validation, retry, service
-  identity, heartbeat, and registration state machine.
+- Lifecycle runtime failures are reported through safe local status and logs;
+  fail-fast remains limited to deterministic configuration failures.
 - The runtime requirement remains Python `>=3.8`; Flask is now declared as
   `>=1.0` without an artificial upper bound.
 - Development type checking stays on mypy `<1.15`, the last line that can run

@@ -69,9 +69,11 @@ def _annotation_nodes(tree: ast.AST) -> Iterable[ast.AST]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             args = node.args
-            all_args = list(
-                getattr(args, "posonlyargs", []) or []
-            ) + list(args.args) + list(args.kwonlyargs)
+            all_args = (
+                list(getattr(args, "posonlyargs", []) or [])
+                + list(args.args)
+                + list(args.kwonlyargs)
+            )
             if args.vararg:
                 all_args.append(args.vararg)
             if args.kwarg:
@@ -145,9 +147,7 @@ def _check_source_file(path: Path, rel: str, problems: List[Problem]) -> None:
                 )
         for marker in YAML_MARKERS:
             if marker in line:
-                problems.append(
-                    Problem(rel, lineno, f"YAML parsing is not supported ({marker!r})")
-                )
+                problems.append(Problem(rel, lineno, f"YAML parsing is not supported ({marker!r})"))
 
 
 def scan(root: Path = ROOT) -> List[Problem]:

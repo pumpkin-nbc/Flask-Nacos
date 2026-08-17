@@ -113,13 +113,9 @@ def test_normalize_rejects_invalid_endpoint(instance):
         normalize_instance(instance)
 
 
-@pytest.mark.parametrize(
-    "weight", [float("nan"), float("inf"), "invalid", True, False]
-)
+@pytest.mark.parametrize("weight", [float("nan"), float("inf"), "invalid", True, False])
 def test_normalize_invalid_weight_falls_back_to_one(weight):
-    result = normalize_instance(
-        {"ip": "127.0.0.1", "port": 8000, "weight": weight}
-    )
+    result = normalize_instance({"ip": "127.0.0.1", "port": 8000, "weight": weight})
 
     assert result["weight"] == 1.0
 
@@ -144,7 +140,8 @@ def test_bad_instance_skipped_without_failing_discovery(
     app = make_app()
     nacos = FlaskNacos(app)
 
-    result = nacos.list_instances("user-service")
+    with app.app_context():
+        result = nacos.list_instances("user-service")
     assert len(result) == 2
     assert {r["port"] for r in result} == {8000, 8001}
 
@@ -160,8 +157,10 @@ def test_bad_endpoints_are_skipped_without_failing_discovery(
             {"ip": "127.0.0.1", "port": 8002, "healthy": True},
         ]
     }
-    nacos = FlaskNacos(make_app())
+    app = make_app()
+    nacos = FlaskNacos(app)
 
-    result = nacos.list_instances("user-service")
+    with app.app_context():
+        result = nacos.list_instances("user-service")
 
     assert [instance["port"] for instance in result] == [8000, 8002]

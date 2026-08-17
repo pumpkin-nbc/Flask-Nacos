@@ -2,108 +2,107 @@
 
 English | [简体中文](production.zh-CN.md)
 
-Guidance for running flask-nacos in production.
+## Normal WSGI startup
 
-See also: [Configuration](configuration.md) -
-[Service Registration](service-registration.md) -
-[Troubleshooting](troubleshooting.md).
+The default is `True` for `NACOS_AUTO_REGISTER_ON_INIT`, so a normal
+non-preloaded application factory schedules registration when `init_app(app)`
+runs. Client creation and Naming I/O happen in a short-lived daemon Worker.
 
-## Gunicorn
+Configure the externally reachable `NACOS_SERVICE_IP` and
+`NACOS_SERVICE_PORT`; binding Flask to localhost does not make that advertised
+address reachable from another machine.
 
-```bash
-gunicorn "app:create_app()" -w 4 -b 0.0.0.0:5000
+## Gunicorn `--preload`
+
+Preload imports and initializes the Flask application in the master before
+workers fork. Starting SDK runtime or registration there is unsafe and may also
+register the master. Recommended configuration:
+
+```python
+# application configuration
+NACOS_AUTO_REGISTER_ON_INIT = False
 ```
 
-Each worker is an independent process and runs `init_app`, so local registration
-state is tracked per process. Nacos still treats workers advertising the same
-service/group/cluster/IP/port as one shared instance.
+Then call the existing lifecycle command from Gunicorn's worker hook after the
+fork:
 
-## uWSGI
+```python
+def post_fork(server, worker):
+    from myservice import app, nacos
 
-uWSGI behaves like Gunicorn: each worker initializes the extension, but workers
-advertising the same IP and port refer to one Nacos instance. For a shared
-endpoint, disable worker exit deregistration or use one external lifecycle
-coordinator.
+    nacos.register_instance(app)
+```
 
-## Multi-worker registration
+Flask-Nacos does not guess the server type or worker count and provides no
+Gunicorn-specific public API. PID Runtime rebuilding prevents workers from
+using a parent Client, lock, Event, or registration fact; it cannot undo work
+that the preload master already started.
 
-Under multi-worker servers, the master forks workers and Flask-Nacos keeps a
-per-app, per-process, single-flight registration lifecycle. Repeated commands
-after success are no-ops; a forked worker resets inherited local state and may
-register its own instance. On shutdown, a process only attempts to deregister
-the identity it registered.
+## Multiple workers and shared endpoints
 
-Process-local state does not create distinct Nacos identities. If workers share
-one advertised endpoint, an exiting worker can remove that shared instance while
-other workers still serve traffic. Set `NACOS_DEREGISTER_ON_EXIT=False` for the
-workers, or let one external coordinator own registration and deregistration.
+Workers advertising the same service/group/cluster/IP/port represent the same
+Nacos instance, even though every process owns a separate local Runtime and
+Client. One worker must not delete that shared instance while others still
+serve traffic:
 
-## Docker
+```python
+NACOS_AUTO_DEREGISTER = False
+```
 
-- Set `NACOS_SERVER_ADDR` to the reachable Nacos address for the container
-  network.
-- Set `NACOS_SERVICE_IP` and `NACOS_SERVICE_PORT` explicitly so other services
-  can reach this instance; do not rely on auto-detection inside containers.
-- Inject credentials via environment variables, not baked into the image.
+Alternatively, let one external coordinator own registration and
+deregistration. When each worker advertises a distinct IP or port, the default
+`NACOS_AUTO_DEREGISTER=True` can be appropriate.
 
-A local Nacos for testing is available via
-[`examples/docker-compose-nacos.yml`](../examples/docker-compose-nacos.yml)
-(local use only).
+`NACOS_REGISTER_ENABLED=False` prevents new registration but intentionally
+does not prevent cleanup of an instance already registered by the current
+Runtime.
 
-## Explicit service IP and port
+## Shutdown behavior
 
-Always configure `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
-`NACOS_SERVICE_PORT` explicitly in production.
+The exit callback marks the current PID Runtime as shutting down and wakes any
+retry wait. Normal lifecycle paths cannot begin another Naming RPC afterward.
 
-## Auto-deregistration notes
+- With `NACOS_AUTO_DEREGISTER=False`, exit returns without waiting or changing
+  the user's registration target.
+- With `True`, exit may wait for only the already-active Naming RPC, using its
+  remaining timeout plus a small scheduling allowance and a five-second wait
+  cap. It then performs at most one exit deregistration with the cached exact
+  identity.
 
-`atexit`-based deregistration is best-effort: it may not run on hard kills
-(`SIGKILL`) or crashes. Nacos will eventually drop unhealthy ephemeral instances,
-but for graceful shutdowns ensure your process exits cleanly.
+Exit deregistration never retries, schedules follow-up registration, or guesses
+a missing identity.
 
-## `NACOS_AUTO_REGISTER_ON_INIT`
+## Container deployment
 
-The default is `True`, so each application initialization schedules background
-registration. Explicitly set it to `False` when a post-fork hook, readiness
-route, or management command owns the `register_instance()` lifecycle.
+Use a graceful stop interval long enough for the SDK request timeout. Explicitly
+set the advertised IP/port and prefer console logs:
 
-## `NACOS_DEREGISTER_ON_EXIT`
+```python
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = True
+NACOS_LOG_FILE_ENABLED = False
+```
 
-Controls whether the `atexit` deregistration handler is installed (only when
-`NACOS_AUTO_DEREGISTER` is also `True`).
+## Logging and secrets
 
-## Logging in production
+Native SDK logs are isolated and Flask-Nacos does not create
+`~/logs/nacos`. Safe extension logging is disabled by default. When file output
+is enabled, `NACOS_LOG_PATH` defaults to `./logs` and
+`NACOS_LOG_FILENAME` defaults to `flask-nacos.log`.
 
-`NACOS_LOG_*` controls sanitized Flask-Nacos records only. Native SDK logging
-from `nacos-sdk-python` is always silenced because it may contain sensitive
-request or response data. Recommendations:
+Keep Nacos username/password or AK/SK in environment variables or a secret
+manager. Do not return complete application configuration or internal status
+from an unauthenticated endpoint.
 
-1. If you need file logs, set `NACOS_LOG_ENABLED=True` and configure
-   `NACOS_LOG_PATH`/`NACOS_LOG_FILENAME` (plus rotation settings when needed).
-2. In containers, prefer stdout: set `NACOS_LOG_ENABLED=True`,
-   `NACOS_LOG_CONSOLE_ENABLED=True`, and `NACOS_LOG_FILE_ENABLED=False`.
-3. If your project already has a unified logging system, set
-   `NACOS_LOG_PROPAGATE=True` and `NACOS_LOG_FILE_ENABLED=False`; let your existing
-   handlers format and route the records.
-4. To silence Flask-Nacos safety logs as well, set `NACOS_LOG_ENABLED=False`.
-5. Do not rely on the nacos-sdk-python default log path in production.
-6. Logging defaults to disabled, so no configured directory or `~/logs/nacos`
-   directory is created. When enabled, the defaults write
-   `./logs/flask-nacos.log`.
+## HTTPS limitation
 
-## Logging safety
+The supported synchronous Nacos SDK 2.x line has limitations around HTTPS
+server certificate verification. Treat this as a deployment risk: use a trusted
+private network, a terminating proxy with appropriate controls, or another
+verified transport boundary until the upstream SDK behavior meets your policy.
 
-Secrets (`NACOS_PASSWORD`, `NACOS_ACCESS_KEY`, `NACOS_SECRET_KEY`) are never
-written to logs. Keep your own application logs free of credentials too.
+## Health and observability
 
-## HTTPS certificate verification
-
-Synchronous `nacos-sdk-python` 2.x does not expose reliable HTTPS certificate-
-verification controls. Use a trusted network or terminate TLS through a proxy or
-sidecar that validates the Nacos server certificate. Do not assume that an
-`https://` address alone provides server-identity verification.
-
-## Keep secrets out of source control
-
-Never commit real credentials, internal Nacos addresses, or internal IPs.
-Prefer injecting configuration via environment variables or a secrets manager.
+`/health/nacos` and `get_status()` report local lifecycle state only. They do not
+query Nacos or inspect SDK heartbeat success. Add a separate remote probe when
+your readiness policy requires current Nacos reachability.

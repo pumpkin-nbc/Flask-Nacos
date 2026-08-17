@@ -258,9 +258,7 @@ def test_validate_wheel_metadata_accepts_apache_2(check_package):
 
 
 def test_distribution_metadata_requires_version_2_4(check_package):
-    metadata = _valid_metadata().replace(
-        "Metadata-Version: 2.4", "Metadata-Version: 2.5"
-    )
+    metadata = _valid_metadata().replace("Metadata-Version: 2.4", "Metadata-Version: 2.5")
 
     wheel_problems = check_package.validate_wheel_metadata(metadata)
     sdist_problems = check_package.validate_sdist_metadata(metadata)
@@ -270,9 +268,11 @@ def test_distribution_metadata_requires_version_2_4(check_package):
 
 
 def test_wheel_metadata_requires_supported_python_and_unbounded_flask(check_package):
-    metadata = _valid_metadata().replace(
-        "Requires-Python: >=3.8", "Requires-Python: >=3.9"
-    ).replace("Requires-Dist: Flask>=1.0", "Requires-Dist: Flask>=1.0,<4.0")
+    metadata = (
+        _valid_metadata()
+        .replace("Requires-Python: >=3.8", "Requires-Python: >=3.9")
+        .replace("Requires-Dist: Flask>=1.0", "Requires-Dist: Flask>=1.0,<4.0")
+    )
 
     problems = check_package.validate_wheel_metadata(metadata)
 
@@ -326,9 +326,7 @@ def test_validate_sdist_names_requires_bilingual_docs_and_release_dirs(
     problems = check_package.validate_sdist_names(without_chinese)
     assert "sdist missing required file: README.zh-CN.md" in problems
 
-    without_chinese_changelog = [
-        name for name in names if not name.endswith("CHANGELOG.zh-CN.md")
-    ]
+    without_chinese_changelog = [name for name in names if not name.endswith("CHANGELOG.zh-CN.md")]
     problems = check_package.validate_sdist_names(without_chinese_changelog)
     assert "sdist missing required file: CHANGELOG.zh-CN.md" in problems
 
@@ -386,9 +384,7 @@ def test_index_preflight_rejects_existing_version(check_index_version, monkeypat
 
 
 def test_release_workflow_uses_protected_oidc_publish_jobs():
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
     assert '      - "v*"' in workflow
     assert "name: testpypi" in workflow
@@ -403,9 +399,7 @@ def test_release_workflow_uses_protected_oidc_publish_jobs():
 
 
 def test_ci_has_strict_package_and_sdk_compatibility_checks():
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "twine check --strict dist/*" in workflow
     assert 'sdk_spec: "nacos-sdk-python==2.0.0"' in workflow
     assert 'sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"' in workflow
@@ -425,9 +419,7 @@ def test_sdk_version_validation_accepts_supported_versions(check_sdk_compatibili
 
 
 @pytest.mark.parametrize("version", ["1.9.9", "3.0.0", "invalid"])
-def test_sdk_version_validation_rejects_unsupported_versions(
-    check_sdk_compatibility, version
-):
+def test_sdk_version_validation_rejects_unsupported_versions(check_sdk_compatibility, version):
     with pytest.raises(ValueError):
         check_sdk_compatibility.validate_version(version)
 

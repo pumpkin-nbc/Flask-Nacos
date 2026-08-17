@@ -17,18 +17,19 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   `NACOS_AUTO_REGISTER`, `NACOS_AUTO_REGISTER_ON_INIT`; inspect logs and
   `get_status()`.
 - Fix: restore the intended switches (init-time scheduling defaults to `True`),
-  or call `nacos.register_instance()` explicitly after fixing the reported cause.
-- If `registration_in_progress=True`, wait and check again. If it becomes
-  `False` while `registered=False`, inspect `last_registration_error_type` and
-  safe logs, then call `register_instance()` again after fixing the cause.
+  or call `nacos.register_instance(app)` explicitly after fixing the reported cause.
+- If `operation_running=True`, the lifecycle is still converging. If it becomes
+  `False` while `target_registered=True` and `registered=False`, inspect
+  `last_error` and safe logs, then call `register_instance(app)` again after
+  fixing the cause.
 
 ## Registration network failure does not raise from `register_instance()`
 
 - Cause: 1.1 registration is always a background lifecycle command.
 - Fix: use `get_status()` and logs for Nacos timeouts/retry exhaustion.
-  `NACOS_FAIL_FAST=True` still raises deterministic config, client availability,
-  and thread-start errors synchronously, but it cannot raise a later daemon
-  thread network error into the caller.
+  `NACOS_FAIL_FAST=True` only raises cached deterministic registration errors.
+  Thread creation/start, Client, SDK, timeout, and connection failures are
+  safely recorded and never escape `register_instance()`.
 
 ## 2. Registration fails: `NACOS_SERVICE_NAME` empty
 
@@ -51,13 +52,15 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: check the registered IP in Nacos / `get_status()`.
 - Fix: set `NACOS_SERVICE_IP` explicitly.
 
-## 5. Nacos client initialization fails
+## 5. Nacos Client creation fails
 
-- Symptom: `client_initialized` is `False` in `get_status()`.
+- Symptom: `client_created` remains `False`, registration stops with a safe
+  `last_error`, or explicit `get_client()` raises `FlaskNacosError`.
 - Cause: bad `NACOS_SERVER_ADDR`, network issues, or auth failure.
 - Investigate: verify the server address and connectivity; read logs.
-- Fix: correct the address/credentials. Set `NACOS_FAIL_FAST=True` temporarily
-  to surface the error during startup.
+- Fix: correct the address/credentials. Authentication shape is deterministic
+  and can be surfaced during startup with `NACOS_FAIL_FAST=True`; runtime
+  connection failure remains a background lifecycle error.
 
 ## 6. Wrong username / password
 
@@ -114,7 +117,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   process stopped, or the query uses a different namespace/group.
 - Investigate: keep the Flask process alive; inspect SDK heartbeat logs; confirm
   `NACOS_SERVICE_EPHEMERAL=True`, the namespace, and the group. `/health/nacos`
-  only reports local client initialization and is not a remote heartbeat probe.
+  only reports local lifecycle state and is not a remote heartbeat probe.
 - Fix: use flask-nacos with the default
   `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`, or set another finite positive interval.
   Do not use the initial `healthy=True` flag as a substitute for heartbeats.
@@ -134,7 +137,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   advertising the same IP and port share one instance even though Flask-Nacos
   tracks their local state separately.
 - Investigate: compare the complete advertised identities, not the worker count.
-- Fix: for a shared endpoint set `NACOS_DEREGISTER_ON_EXIT=False`, or let one
+- Fix: for a shared endpoint set `NACOS_AUTO_DEREGISTER=False`, or let one
   external coordinator own registration and deregistration. See
   [Production](production.md).
 
@@ -142,15 +145,16 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 
 - Symptom: the app crashes during `FlaskNacos(app)` / `init_app(app)`, or a
   lazy-loading WSGI server shows the error on the first request.
-- Cause: `NACOS_FAIL_FAST=True` turns Nacos errors into exceptions. When
-  automatic registration is active, missing or invalid registration settings
-  are checked before client creation.
+- Cause: `NACOS_FAIL_FAST=True` turns deterministic configuration errors into
+  exceptions. When automatic registration is active, missing or invalid
+  registration settings are checked before Client creation.
 - Investigate: read the exception and confirm when the application factory is
   executed. `NACOS_SERVICE_NAME` must be a non-empty, non-whitespace string when
   automatic registration is active.
-- Fix: fix the underlying Nacos issue, or use `NACOS_FAIL_FAST=False` (default)
-  so failures are logged and startup continues. Configure the WSGI server for
-  eager loading/preloading if validation must finish before traffic is accepted.
+- Fix: correct the invalid configuration, or use `NACOS_FAIL_FAST=False`
+  (default) so the safe error remains observable while startup continues. For
+  Gunicorn `--preload`, set `NACOS_AUTO_REGISTER_ON_INIT=False` and register in
+  the worker hook after fork.
 
 ## 13. `get_config()` returns a string, not a dict
 

@@ -14,17 +14,17 @@
 - 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED`、
   `NACOS_AUTO_REGISTER`、`NACOS_AUTO_REGISTER_ON_INIT`；查看日志和 `get_status()`。
 - 解决建议：恢复预期的开关（初始化调度默认值为 `True`），或修复状态中报告的原因后
-  显式调用 `nacos.register_instance()`。
-- 若 `registration_in_progress=True`，请等待后再查询；若其变为 `False` 且
-  `registered=False`，检查 `last_registration_error_type` 与安全日志，修复后再次调用
-  `register_instance()`。
+  显式调用 `nacos.register_instance(app)`。
+- 若 `operation_running=True`，生命周期仍在收敛；若其变为 `False`，同时
+  `target_registered=True` 且 `registered=False`，请检查 `last_error` 与安全日志，修复后
+  再次调用 `register_instance(app)`。
 
 ## 注册网络错误不会从 `register_instance()` 抛出
 
 - 可能原因：1.1 的注册始终是后台生命周期命令。
 - 解决建议：通过 `get_status()` 与日志查看 Nacos 超时或重试耗尽。
-  `NACOS_FAIL_FAST=True` 仍会同步抛出确定性配置、client 可用性和线程启动错误，但无法把
-  daemon 线程稍后发生的网络错误抛回原调用方。
+  `NACOS_FAIL_FAST=True` 只同步抛出缓存的确定性注册错误。Thread 创建/启动、Client、
+  SDK、超时与连接错误都安全写入状态，不会从 `register_instance()` 抛出。
 
 ## 2. 注册失败：`NACOS_SERVICE_NAME` 为空
 
@@ -47,12 +47,14 @@
 - 排查方法：查看 Nacos / `get_status()` 中注册的 IP。
 - 解决建议：显式设置 `NACOS_SERVICE_IP`。
 
-## 5. Nacos client 初始化失败
+## 5. Nacos Client 创建失败
 
-- 现象：`get_status()` 中 `client_initialized` 为 `False`。
+- 现象：`client_created` 一直为 `False`、注册以安全 `last_error` 结束，或显式
+  `get_client()` 抛出 `FlaskNacosError`。
 - 可能原因：`NACOS_SERVER_ADDR` 错误、网络问题或认证失败。
 - 排查方法：核对服务地址与连通性；查看日志。
-- 解决建议：修正地址/凭据。可临时设置 `NACOS_FAIL_FAST=True` 让错误在启动时暴露。
+- 解决建议：修正地址/凭据。认证结构属于确定性配置，可用 `NACOS_FAIL_FAST=True` 在启动
+  阶段暴露；运行期连接错误仍是后台生命周期错误。
 
 ## 6. 用户名 / 密码错误
 
@@ -106,7 +108,7 @@
   namespace/group。
 - 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志，确认
   `NACOS_SERVICE_EPHEMERAL=True`、namespace 与 group。`/health/nacos` 只反映本地
-  client 初始化状态，不是远端心跳探测。
+  生命周期状态，不是远端心跳探测。
 - 解决建议：使用 Flask-Nacos 默认的 `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`，或设置
   另一个大于 0 的有限间隔。不要用初始 `healthy=True` 代替持续心跳。
 
@@ -124,20 +126,20 @@
 - 可能原因：Nacos 使用 service/group/cluster/IP/port 标识实例。多个 worker 公布相同 IP
   和端口时共享同一个实例，尽管 Flask-Nacos 会分别维护它们的本地状态。
 - 排查方法：比较完整的注册地址，不要仅比较 worker 数量。
-- 解决建议：共享端点设置 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册
+- 解决建议：共享端点设置 `NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册
   与注销。详见[生产部署](production.zh-CN.md)。
 
 ## 12. `NACOS_FAIL_FAST=True` 导致启动失败
 
 - 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间崩溃，或采用延迟加载的 WSGI
   服务器直到第一次请求才显示异常。
-- 可能原因：`NACOS_FAIL_FAST=True` 会把 Nacos 错误变成异常。启用自动注册时，会在创建
-  client 前校验缺失或非法的注册配置。
+- 可能原因：`NACOS_FAIL_FAST=True` 会把确定性配置错误变成异常。启用自动注册时，会在
+  创建 Client 前校验缺失或非法的注册配置。
 - 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
   是非空且不能只包含空白字符的字符串。
-- 解决建议：修复底层 Nacos 问题，或使用 `NACOS_FAIL_FAST=False`（默认），让失败被
-  记录并继续启动。如果校验必须在接收流量前完成，请为 WSGI 服务器启用 eager
-  load/preload。
+- 解决建议：修正非法配置，或使用 `NACOS_FAIL_FAST=False`（默认），让安全错误保持可见
+  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER_ON_INIT=False`，并在 fork
+  后的 worker hook 中注册。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict
 

@@ -11,7 +11,8 @@ def test_strategy_first(make_app, patched_create_client):
     app = make_app()
     nacos = FlaskNacos(app)
 
-    instance = nacos.get_one_healthy_instance("user-service", strategy="first")
+    with app.app_context():
+        instance = nacos.get_one_healthy_instance("user-service", strategy="first")
     assert instance["port"] == 8000
 
 
@@ -20,7 +21,8 @@ def test_strategy_random(make_app, patched_create_client, monkeypatch):
     app = make_app()
     nacos = FlaskNacos(app)
 
-    instance = nacos.get_one_healthy_instance("user-service", strategy="random")
+    with app.app_context():
+        instance = nacos.get_one_healthy_instance("user-service", strategy="random")
     assert instance["port"] == 8001
 
 
@@ -35,7 +37,8 @@ def test_strategy_weight(make_app, patched_create_client, monkeypatch):
     app = make_app()
     nacos = FlaskNacos(app)
 
-    instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
+    with app.app_context():
+        instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
     assert instance["port"] == 8001
     assert captured["weights"] == [1.0, 1.0]
 
@@ -52,7 +55,8 @@ def test_strategy_weight_all_non_positive_degrades_to_first(
     app = make_app()
     nacos = FlaskNacos(app)
 
-    instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
+    with app.app_context():
+        instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
     assert instance["port"] == 8000
 
 
@@ -61,24 +65,24 @@ def test_default_strategy_from_config(make_app, patched_create_client, monkeypat
     app = make_app({"NACOS_DISCOVERY_STRATEGY": "random"})
     nacos = FlaskNacos(app)
 
-    instance = nacos.get_one_healthy_instance("user-service")
+    with app.app_context():
+        instance = nacos.get_one_healthy_instance("user-service")
     assert instance["port"] == 8001
 
 
-def test_unsupported_strategy_returns_none_when_not_fail_fast(
-    make_app, patched_create_client
-):
+def test_unsupported_strategy_returns_none_when_not_fail_fast(make_app, patched_create_client):
     app = make_app({"NACOS_FAIL_FAST": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.get_one_healthy_instance("user-service", strategy="bogus") is None
+    with app.app_context():
+        assert nacos.get_one_healthy_instance("user-service", strategy="bogus") is None
 
 
 def test_unsupported_strategy_raises_when_fail_fast(make_app, patched_create_client):
     app = make_app({"NACOS_FAIL_FAST": True})
     nacos = FlaskNacos(app)
 
-    with pytest.raises(NacosDiscoveryError):
+    with app.app_context(), pytest.raises(NacosDiscoveryError):
         nacos.get_one_healthy_instance("user-service", strategy="bogus")
 
 
@@ -87,4 +91,5 @@ def test_no_healthy_instance_returns_none(make_app, patched_create_client, fake_
     app = make_app()
     nacos = FlaskNacos(app)
 
-    assert nacos.get_one_healthy_instance("user-service", strategy="weight") is None
+    with app.app_context():
+        assert nacos.get_one_healthy_instance("user-service", strategy="weight") is None

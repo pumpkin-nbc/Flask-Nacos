@@ -9,9 +9,12 @@ from tests.helpers import wait_registered
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "beginner_app.py"
 PUBLIC_STATUS_FIELDS = {
-    "nacos_enabled",
-    "client_initialized",
+    "enabled",
+    "client_created",
+    "target_registered",
     "registered",
+    "operation_running",
+    "last_error",
     "service_name",
     "service_port",
 }
@@ -34,12 +37,12 @@ def test_beginner_example_runs_without_nacos(monkeypatch):
 
     home = client.get("/")
     assert home.status_code == 200
-    assert home.get_json()["nacos_enabled"] is False
+    assert home.get_json()["enabled"] is False
 
     status = client.get("/nacos/status")
     assert status.status_code == 200
     assert set(status.get_json()) == PUBLIC_STATUS_FIELDS
-    assert status.get_json()["client_initialized"] is False
+    assert status.get_json()["client_created"] is False
 
     health = client.get("/health/nacos")
     assert health.status_code == 200
@@ -67,7 +70,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
     fake_client.get_config.return_value = "greeting=hello-from-nacos"
     module = _load_example()
     app = module["app"]
-    wait_registered(module["nacos"])
+    wait_registered(module["nacos"], app)
     client = app.test_client()
 
     cfg = app.extensions["nacos"]["config"]
@@ -89,7 +92,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
 
     status = client.get("/nacos/status").get_json()
     assert set(status) == PUBLIC_STATUS_FIELDS
-    assert status["client_initialized"] is True
+    assert status["client_created"] is True
     assert status["registered"] is True
 
     health = client.get("/health/nacos")
@@ -135,7 +138,7 @@ def test_beginner_example_hides_client_failure_details(monkeypatch, caplog, tmp_
 
     status = client.get("/nacos/status")
     assert status.status_code == 200
-    assert status.get_json()["client_initialized"] is False
+    assert status.get_json()["client_created"] is False
 
     responses = [client.get("/nacos/config"), client.get("/nacos/instances")]
     assert all(response.status_code == 503 for response in responses)
@@ -149,9 +152,7 @@ def test_beginner_example_hides_client_failure_details(monkeypatch, caplog, tmp_
     assert "private-example-password" not in log_output
 
 
-def test_beginner_example_supports_access_key_authentication(
-    monkeypatch, patched_create_client
-):
+def test_beginner_example_supports_access_key_authentication(monkeypatch, patched_create_client):
     monkeypatch.setenv("NACOS_ENABLED", "true")
     monkeypatch.setenv("NACOS_ACCESS_KEY", "example-access-key")
     monkeypatch.setenv("NACOS_SECRET_KEY", "example-secret-key")

@@ -83,7 +83,7 @@ Invoke-RestMethod -Method Post `
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | 默认配置 data ID。 |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | 配置 group。 |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置读取超时秒数。 |
-| `NACOS_DEREGISTER_ON_EXIT` | `true` | 进程正常退出时注销当前应用注册的实例。 |
+| `NACOS_AUTO_DEREGISTER` | `true` | 是否允许当前进程在退出时注销已确认的实例。 |
 | `NACOS_LOG_ENABLED` | `false` | 启用 Flask-Nacos 脱敏日志。 |
 | `NACOS_LOG_CONSOLE_ENABLED` | `true` | 日志启用时输出到控制台。 |
 | `NACOS_LOG_FILE_ENABLED` | `true` | 日志启用时写入轮转文件。 |
@@ -176,9 +176,12 @@ def nacos_status():
     status = nacos.get_status()
     return jsonify(
         {
-            "nacos_enabled": status.get("nacos_enabled", False),
-            "client_initialized": status.get("client_initialized", False),
+            "enabled": status.get("enabled", False),
+            "client_created": status.get("client_created", False),
+            "target_registered": status.get("target_registered", False),
             "registered": status.get("registered", False),
+            "operation_running": status.get("operation_running", False),
+            "last_error": status.get("last_error"),
             "service_name": status.get("service_name"),
             "service_port": status.get("service_port"),
         }
@@ -202,11 +205,11 @@ def read_config_in_background(app):
 ```
 
 状态路由使用字段白名单。不要在公开 API 中返回完整的 `get_status()` 映射，因为其中包含
-Nacos 地址、namespace、服务 IP 和进程标识等部署信息。
+服务 IP 和进程标识等部署信息。
 
 Celery task、工作线程和独立脚本必须进入对应的 `app.app_context()`，除非现有集成已经
-自动提供应用上下文。`app.extensions["nacos"]` 保存的是包含 `config` 和 `client` 的
-内部状态映射，并不是 `FlaskNacos` 对象；业务代码应按上例从 `app.extensions` 模块导入
+自动提供应用上下文。`app.extensions["nacos"]` 保存的是内部状态映射，并不是
+`FlaskNacos` 对象；业务代码应按上例从 `app.extensions` 模块导入
 全局 `nacos`。
 
 Nacos 配置应放在 Flask 配置类或环境变量中，不要写入 `app/extensions.py`。
@@ -224,8 +227,8 @@ NACOS_AUTO_REGISTER = False
 python examples/complete_factory_app.py
 ```
 
-`create_app()` 执行时，Flask-Nacos 会创建 SDK client、调度后台注册任务并安装
-`/health/nacos`，应用工厂不会等待 Nacos 网络 I/O。同一进程中的注册是 single-flight，
+`create_app()` 执行时，Flask-Nacos 会调度后台注册并安装 `/health/nacos`，但初始化线程
+不会创建 SDK Client；应用工厂不会等待 Nacos 网络 I/O。同一进程中的注册是 single-flight，
 因此状态接口最初可能短暂返回 `registered=false`。进程正常退出时，退出处理器会等待
 进行中的注册，并且只注销由当前应用成功注册的实例。
 
@@ -252,7 +255,7 @@ Flask-Nacos 安装的健康检查路由：
 curl http://127.0.0.1:5000/health/nacos
 ```
 
-该健康路由反映 client 初始化状态，并不是对远端 Nacos 服务的探测。
+该健康路由反映本地生命周期状态，不创建 Client，也不是对远端 Nacos 服务的探测。
 
 读取默认 data ID。接口调用 `nacos.get_config()` 时没有传 data ID，因此会使用
 `NACOS_CONFIG_DATA_ID`：
@@ -283,14 +286,14 @@ docker compose -f examples/docker-compose-nacos.yml down
 在支持 Gunicorn 的平台上运行应用工厂：
 
 ```bash
-export NACOS_DEREGISTER_ON_EXIT="false"
+export NACOS_AUTO_DEREGISTER="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
 每个 worker 都会执行 `create_app()`。注册生命周期始终按 app、按进程 single-flight，
 fork 后会重建继承的锁与本地状态。共享同一 IP 和端口的 worker
 在 Nacos 中对应同一个实例标识，而不是每个 worker 一个实例。请为该共享端点设置
-`NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册与注销。
+`NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册与注销。
 
 SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`NACOS_LOG_*` 只控制 Flask-Nacos
 安全日志；默认既不创建 `~/logs/nacos`，也不创建日志文件。设置

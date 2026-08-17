@@ -6,9 +6,12 @@ import flask_nacos.extension as extension_module
 from tests.helpers import wait_registered
 
 PUBLIC_STATUS_FIELDS = {
-    "nacos_enabled",
-    "client_initialized",
+    "enabled",
+    "client_created",
+    "target_registered",
     "registered",
+    "operation_running",
+    "last_error",
     "service_name",
     "service_port",
 }
@@ -18,9 +21,7 @@ def _load_example():
     return importlib.import_module("examples.complete_factory_app")
 
 
-def test_complete_example_configuration_and_routes(
-    monkeypatch, patched_create_client, fake_client
-):
+def test_complete_example_configuration_and_routes(monkeypatch, patched_create_client, fake_client):
     monkeypatch.setenv("NACOS_SERVER_ADDR", "nacos.example.test:8848")
     monkeypatch.setenv("NACOS_NAMESPACE_ID", "example-namespace")
     monkeypatch.setenv("NACOS_USERNAME", "example-user")
@@ -36,7 +37,7 @@ def test_complete_example_configuration_and_routes(
 
     example = _load_example()
     app = example.create_app()
-    wait_registered(example.nacos)
+    wait_registered(example.nacos, app)
     state = app.extensions["nacos"]
     cfg = state["config"]
 
@@ -59,7 +60,15 @@ def test_complete_example_configuration_and_routes(
 
     health = client.get("/health/nacos")
     assert health.status_code == 200
-    assert health.get_json()["service_name"] == "orders-api"
+    assert health.get_json() == {
+        "status": "ok",
+        "enabled": True,
+        "client_created": True,
+        "target_registered": True,
+        "registered": True,
+        "operation_running": False,
+        "last_error": None,
+    }
 
     status = client.get("/api/nacos/status")
     assert status.status_code == 200
@@ -73,13 +82,9 @@ def test_complete_example_configuration_and_routes(
         "content": "feature.enabled=true",
         "data_id": "orders.properties",
     }
-    fake_client.get_config.assert_called_once_with(
-        "orders.properties", "CONFIG_GROUP", timeout=2.5
-    )
+    fake_client.get_config.assert_called_once_with("orders.properties", "CONFIG_GROUP", timeout=2.5)
 
-    instances = client.get(
-        "/api/nacos/instances?service=users-api&cluster=CANARY"
-    )
+    instances = client.get("/api/nacos/instances?service=users-api&cluster=CANARY")
     assert instances.status_code == 200
     payload = instances.get_json()
     assert payload["available"] is True
@@ -115,8 +120,6 @@ def test_complete_example_returns_safe_unavailable_responses(monkeypatch):
     instances_response = client.get("/api/nacos/instances")
     assert instances_response.status_code == 503
 
-    combined = config_response.get_data(as_text=True) + instances_response.get_data(
-        as_text=True
-    )
+    combined = config_response.get_data(as_text=True) + instances_response.get_data(as_text=True)
     assert "private-example-user" not in combined
     assert "private-example-password" not in combined

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Check that the public API matches the Flask-Nacos 1.1 snapshot.
 
-Version 1.1 intentionally changes registration into a no-argument lifecycle
-command. This guard enforces the supported public signature.
+Version 1.1 uses explicit/current-app lifecycle commands. This guard enforces
+the supported signatures and rejects unpublished asynchronous variants.
 
 Uses only the standard library (``importlib`` / ``inspect``). It imports the
 package but never creates a real Nacos connection. Exits non-zero on any
@@ -29,6 +29,8 @@ REQUIRED_METHODS = (
 
 # Identifiers that must never appear on the public surface.
 FORBIDDEN_METHODS = (
+    "ensure_registered_async",
+    "register_instance_async",
     "get_config_as_dict",
     "load_config_to_flask",
 )
@@ -55,10 +57,21 @@ def scan() -> List[str]:
     register = getattr(extension, "register_instance", None)
     if callable(register):
         signature = inspect.signature(register)
-        if list(signature.parameters) != ["self"]:
-            problems.append("register_instance() must accept only self")
+        if list(signature.parameters) != ["self", "app"]:
+            problems.append("register_instance() must accept self and optional app")
+        elif signature.parameters["app"].default is not None:
+            problems.append("register_instance(app) must default app to None")
         if signature.return_annotation is not None:
             problems.append("register_instance() must be annotated as returning None")
+
+    for name in ("deregister_instance", "get_status", "get_client"):
+        method = getattr(extension, name, None)
+        if callable(method):
+            signature = inspect.signature(method)
+            if list(signature.parameters) != ["self", "app"]:
+                problems.append(f"{name}() must accept self and optional app")
+            elif signature.parameters["app"].default is not None:
+                problems.append(f"{name}(app) must default app to None")
 
     all_names = getattr(flask_nacos, "__all__", [])
     for name in FORBIDDEN_METHODS:

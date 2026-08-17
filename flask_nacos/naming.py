@@ -65,8 +65,7 @@ def register_instance(
             "NACOS_SERVICE_HEARTBEAT_INTERVAL", 5.0
         )
     logger.info(
-        "Registering service instance (service=%s, ip=%s, port=%s, group=%s, "
-        "ephemeral=%s)",
+        "Registering service instance (service=%s, ip=%s, port=%s, group=%s, ephemeral=%s)",
         identity["service_name"],
         identity["ip"],
         identity["port"],
@@ -125,9 +124,7 @@ def deregister_instance(
             identity["ip"],
             identity["port"],
             cluster_name=identity["cluster_name"],
-            ephemeral=identity.get(
-                "ephemeral", config.get("NACOS_SERVICE_EPHEMERAL", True)
-            ),
+            ephemeral=identity.get("ephemeral", config.get("NACOS_SERVICE_EPHEMERAL", True)),
             group_name=identity["group_name"],
         )
     except Exception as exc:
@@ -226,8 +223,7 @@ def list_instances(
         output = filtered
 
     logger.info(
-        "Service discovery succeeded (service=%s, group=%s, healthy_only=%s, "
-        "cluster=%s, count=%d)",
+        "Service discovery succeeded (service=%s, group=%s, healthy_only=%s, cluster=%s, count=%d)",
         service_name,
         group_name,
         healthy_only,
@@ -244,9 +240,7 @@ def get_one_healthy_instance(
     group: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Return a single healthy instance for ``service_name`` (or ``None``)."""
-    instances = list_instances(
-        client, config, service_name, group=group, healthy_only=True
-    )
+    instances = list_instances(client, config, service_name, group=group, healthy_only=True)
     if not instances:
         return None
     return instances[0]

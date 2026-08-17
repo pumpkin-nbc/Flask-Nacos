@@ -167,7 +167,7 @@ def test_new_040_config_defaults():
     app = Flask(__name__)
     cfg = load_config(app)
 
-    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
+    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "first"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] is None
     assert cfg["NACOS_DISCOVERY_METADATA"] == {}
@@ -178,7 +178,6 @@ def test_new_040_config_defaults():
 def test_new_040_config_overrides():
     app = Flask(__name__)
     app.config.update(
-        NACOS_DEREGISTER_ON_EXIT="false",
         NACOS_DISCOVERY_STRATEGY="weight",
         NACOS_DISCOVERY_CLUSTER="CANARY",
         NACOS_DISCOVERY_METADATA={"version": "v1"},
@@ -186,7 +185,7 @@ def test_new_040_config_overrides():
     )
     cfg = load_config(app)
 
-    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is False
+    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "weight"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] == "CANARY"
     assert cfg["NACOS_DISCOVERY_METADATA"] == {"version": "v1"}
