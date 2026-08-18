@@ -4,7 +4,8 @@ English | [简体中文](service-registration.zh-CN.md)
 
 Flask-Nacos 1.1.0 uses a target-state lifecycle. `target_registered` is the
 latest requested state; `registered` is the last locally confirmed Naming
-fact. A short-lived daemon Worker moves the fact toward the latest target.
+fact. One daemon convergence Worker moves the fact toward the latest target and
+exits as soon as convergence completes or can no longer continue safely.
 
 ## Automatic registration
 
@@ -45,8 +46,9 @@ with app.app_context():
 ```
 
 Repeated calls while a Worker runs do not increment the lifecycle generation or
-start another Worker. After an idle failed attempt, a new explicit call starts a
-new finite attempt.
+start another Worker. After an unknown or deterministic failure leaves an unmet
+target idle, a new explicit call starts a new finite attempt. A Worker already
+recovering from a verified transient failure remains the single owner.
 
 ## Lifecycle flow
 
@@ -79,24 +81,34 @@ flowchart TD
     C -- "no, registration needed" --> E["Start one Register Worker"]
     C -- "no, idle registered cleanup" --> F["Run synchronous deregistration"]
     E --> G["Check latest target before Client creation"]
-    G --> H["Create or reuse app/PID Client"]
-    H --> I["Acquire Naming single-flight lock"]
+    G --> H{"Create or reuse app/PID Client"}
+    H -- "success" --> I["Acquire Naming single-flight lock"]
+    H -- "failure" --> P["Classify failure immediately"]
     F --> I
     I --> J{"RPC still required by latest target?"}
     J -- "no" --> K["SKIPPED: do not call SDK"]
     J -- "yes" --> L["Execute one Naming RPC"]
     K --> M["Re-read latest target and fact"]
-    L --> M
+    L -- "success" --> M
+    L -- "failure" --> P
+    P --> Q{"Failure class"}
+    Q -- "deterministic" --> R["Stop with safe local error"]
+    Q -- "unknown" --> S{"Finite budget remains?"}
+    Q -- "transient" --> S
+    S -- "yes" --> T["Interruptible finite wait"]
+    T --> G
+    S -- "no, unknown" --> R
+    S -- "no, transient" --> U["Recovery round: bounded backoff + jitter"]
+    U --> G
     M --> N{"registered equals target?"}
     N -- "yes" --> O["Clear recovered error and finish"]
-    N -- "no" --> P["Worker retries or performs compensation"]
-    P --> G
+    N -- "no" --> G
 ```
 
-The Worker can register, retry, compensate with deregistration, and register
-again inside one lifecycle operation. It exits as soon as state converges or an
-unrecoverable finite attempt ends. The Nacos SDK—not this Worker—maintains the
-heartbeat after successful ephemeral registration.
+The Worker can register, retry, recover, compensate with deregistration, and
+register again inside one lifecycle operation. It exits as soon as state
+converges or a failure can no longer continue safely. The Nacos SDK—not this
+Worker—maintains the heartbeat after successful ephemeral registration.
 
 ## Naming single-flight and three results
 
@@ -128,12 +140,34 @@ normal deregistration safely returns `False` with
 `NACOS_REGISTER_ENABLED=False` prevents new registration but does not block
 cleanup of an existing registered instance.
 
-## Retry and target changes
+## Retry, transient recovery, and target changes
 
-Retry is finite and uses `NACOS_RETRY_TIMES` and `NACOS_RETRY_INTERVAL`. The
-Worker waits on an Event. Register, deregister, or shutdown wakes it immediately;
-the Event is cleared before waiting and state is rechecked to prevent a lost
-wakeup.
+Every Client or Naming failure is classified immediately from structured
+evidence; exception text is never parsed:
+
+| Failure class | Finite phase | After finite budget |
+| --- | --- | --- |
+| Deterministic | Stop immediately | Not applicable |
+| Unknown | Existing attempt count and interval | Stop and expose safe error |
+| Transient | Existing attempt count and interval | Low-frequency lifecycle recovery |
+
+Lifecycle recovery applies only to transport failures that can be identified
+reliably, such as explicit timeout/connection/network errors and selected HTTP
+statuses. Each recovery round waits first, using bounded exponential backoff
+with jitter. It never retries more frequently than
+`max(NACOS_RETRY_INTERVAL, 1 second)`, and each failure is classified again.
+`NACOS_RETRY_ENABLED=False` means exactly one current attempt and no recovery.
+
+The retry/recovery phase belongs to the current Naming direction. Switching
+between register and compensating deregister resets that direction's phase;
+generation changes alone only cause re-evaluation. The Worker waits on an Event.
+Register, deregister, or shutdown wakes it immediately; the Event is cleared
+before waiting and state is rechecked to prevent a lost wakeup.
+
+This is registration lifecycle transient-failure self-recovery. It applies only
+to confirmed transient faults and performs no remote registration monitoring.
+Explicit idle deregistration and exit deregistration remain single best-effort
+calls.
 
 The last valid lifecycle command wins. For example, register → deregister →
 register ends registered when the final operation succeeds, even if an older
@@ -171,7 +205,7 @@ not remove the shared endpoint, or use a single external coordinator.
 | Core state | Multiple request booleans | `target_registered` and `registered` |
 | Worker | Executes one register command | Continues one convergence operation |
 | RPC result | Success or failure | Success, failure, or skip |
-| Retry | Could be spread across paths | Register Worker only |
+| Retry | Finite task retry could stop convergence | Register Worker owns finite retry and verified-transient recovery |
 | Single-flight | Prevent duplicate register threads | All Naming RPCs |
 | Client | Created during initialization | Lazy per app/PID |
 | Fork | Could inherit process resources | Entire Runtime rebuilt |

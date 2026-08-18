@@ -166,6 +166,16 @@ Infinity, and out-of-range values are rejected without retrying. Retry values
 are ignored when retries are disabled; request timeout is ignored when the
 configuration center is disabled.
 
+For configuration-center and discovery calls these settings retain their
+ordinary finite meaning. The Register Worker also uses the same finite attempt
+budget. Only after that budget is exhausted may a failure with explicit
+transient transport evidence enter low-frequency lifecycle recovery. Unknown
+failures stop at the finite limit and deterministic failures stop immediately.
+`NACOS_RETRY_ENABLED=False` permits only the current registration attempt and
+disables recovery. Recovery uses an internal bounded backoff with jitter; it
+adds no public retry setting and never waits less than
+`max(NACOS_RETRY_INTERVAL, 1 second)`.
+
 ## 6. Runtime status
 
 | Key | Type | Default | Required | Description |

@@ -4,6 +4,7 @@ import atexit
 import logging
 import math
 import os
+import random
 import time
 import weakref
 from dataclasses import dataclass, field
@@ -15,6 +16,13 @@ from flask import current_app, has_app_context, request
 
 from . import config as config_module
 from . import config_center, discovery, lifecycle, naming
+from ._recovery import (
+    _classify_lifecycle_failure,
+    _LifecycleFailure,
+    _LifecycleFailureClass,
+    _LifecycleFailureStage,
+    _synthetic_lifecycle_failure,
+)
 from .client import create_client
 from .exceptions import FlaskNacosError, NacosConfigError
 from .health import HEALTH_ENDPOINT, register_health_route
@@ -46,6 +54,9 @@ _INIT_LOCK = RLock()
 _NAMING_RPC_TIMEOUT_FALLBACK = 3.0
 _EXIT_RPC_WAIT_MAX = 5.0
 _EXIT_RPC_SCHEDULING_GRACE = 0.25
+_LIFECYCLE_RECOVERY_MIN_INTERVAL = 1.0
+_LIFECYCLE_RECOVERY_PRIVATE_CAP = 30.0
+_LIFECYCLE_WARNING_INTERVAL = 60.0
 
 
 class _NamingResult(Enum):
@@ -54,6 +65,27 @@ class _NamingResult(Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+@dataclass(frozen=True)
+class _NamingOutcome:
+    """Sanitized result of at most one logical Naming SDK call."""
+
+    result: _NamingResult
+    failure: Optional[_LifecycleFailure]
+    rpc_executed: bool
+    stage: _LifecycleFailureStage
+
+
+@dataclass
+class _WorkerLogState:
+    """Worker-local warning throttle; never exposed through Runtime state."""
+
+    direction: Optional[str] = None
+    error_type: Optional[str] = None
+    last_warning_at: Optional[float] = None
+    recovery_announced: bool = False
+    recovery_active: bool = False
 
 
 @dataclass
@@ -482,14 +514,20 @@ class FlaskNacos:
         worker = current_thread()
         cfg = state["config"]
         retry_enabled = bool(cfg.get("NACOS_RETRY_ENABLED", True))
-        max_attempts = validate_retry_times(cfg.get("NACOS_RETRY_TIMES", 3)) if retry_enabled else 1
+        max_attempts = (
+            validate_retry_times(cfg.get("NACOS_RETRY_TIMES", 3)) if retry_enabled else 1
+        )
         retry_interval = (
-            validate_retry_interval(cfg.get("NACOS_RETRY_INTERVAL", 1.0)) if retry_enabled else 0.0
+            validate_retry_interval(cfg.get("NACOS_RETRY_INTERVAL", 1.0))
+            if retry_enabled
+            else 0.0
         )
         direction: Optional[str] = None
-        attempts = 0
+        finite_attempts = 0
+        recovery_round = 0
         client: Any = None
         register_identity: Optional[Dict[str, Any]] = None
+        log_state = _WorkerLogState()
 
         try:
             while True:
@@ -506,38 +544,92 @@ class FlaskNacos:
 
                 if direction != needed:
                     direction = needed
-                    attempts = 0
+                    finite_attempts = 0
+                    recovery_round = 0
+                    log_state = _WorkerLogState(direction=needed)
                     if direction == "register":
                         register_identity = None
 
-                # The first gate deliberately happens before client creation.
-                if needed == "register":
+                if recovery_round > 0:
+                    recovery_delay = self._lifecycle_recovery_delay(
+                        retry_interval, recovery_round
+                    )
+                    if not self._interruptible_retry_wait(
+                        runtime, worker, recovery_delay
+                    ):
+                        continue
                     with runtime.state_lock:
                         if (
                             runtime.operation_thread is not worker
                             or runtime.operation_kind != "register"
                             or runtime.shutting_down
-                            or not runtime.target_registered
-                            or runtime.registered
+                            or runtime.registered == runtime.target_registered
                         ):
+                            if runtime.registered == runtime.target_registered:
+                                runtime.last_error = None
                             continue
+                        latest_needed = (
+                            "register" if runtime.target_registered else "deregister"
+                        )
+                    if latest_needed != needed:
+                        continue
 
+                # The first gate deliberately happens before client creation.
+                with runtime.state_lock:
+                    if (
+                        runtime.operation_thread is not worker
+                        or runtime.operation_kind != "register"
+                        or runtime.shutting_down
+                        or runtime.registered == runtime.target_registered
+                        or (needed == "register" and not runtime.target_registered)
+                        or (needed == "deregister" and runtime.target_registered)
+                    ):
+                        if runtime.registered == runtime.target_registered:
+                            runtime.last_error = None
+                        continue
+
+                client_attempted = False
+                failure_stage = _LifecycleFailureStage.CLIENT_CREATE
                 try:
                     if client is None:
+                        client_attempted = True
                         client = self._get_or_create_client(state, runtime)
                     if needed == "register" and register_identity is None:
+                        failure_stage = _LifecycleFailureStage.REGISTRATION_PREPARE
                         register_identity = naming.resolve_instance_identity(cfg)
                 except Exception as exc:
-                    attempts += 1
-                    self._record_worker_failure(runtime, needed, exc)
-                    if not self._should_retry_worker(
-                        runtime, worker, needed, attempts, max_attempts
-                    ):
+                    failure = self._classify_lifecycle_failure(
+                        exc,
+                        stage=failure_stage,
+                        direction=needed,
+                    )
+                    action, finite_attempts, recovery_round = self._handle_worker_failure(
+                        runtime,
+                        worker,
+                        needed,
+                        failure,
+                        finite_attempts=finite_attempts,
+                        recovery_round=recovery_round,
+                        retry_enabled=retry_enabled,
+                        max_attempts=max_attempts,
+                        real_recovery_attempt=bool(
+                            client_attempted
+                            and failure_stage is _LifecycleFailureStage.CLIENT_CREATE
+                        ),
+                        log_state=log_state,
+                    )
+                    if action == "stop":
                         return
-                    self._interruptible_retry_wait(runtime, worker, retry_interval)
+                    if action == "finite_wait":
+                        self._interruptible_retry_wait(runtime, worker, retry_interval)
                     continue
 
-                result = self._execute_naming_rpc(
+                stage = (
+                    _LifecycleFailureStage.REGISTER_RPC
+                    if needed == "register"
+                    else _LifecycleFailureStage.COMPENSATING_DEREGISTER_RPC
+                )
+                outcome = self._execute_naming_rpc(
                     state,
                     runtime,
                     needed,
@@ -545,39 +637,65 @@ class FlaskNacos:
                     identity=register_identity,
                     allow_during_shutdown=False,
                     record_lifecycle_error=True,
+                    stage=stage,
+                    log_failure=False,
                 )
 
                 with runtime.state_lock:
-                    if runtime.registered == runtime.target_registered:
+                    converged = runtime.registered == runtime.target_registered
+                    if converged:
                         runtime.last_error = None
-                        return
-                    if runtime.shutting_down:
-                        return
+                    shutting_down = runtime.shutting_down
                     latest_needed = "register" if runtime.target_registered else "deregister"
 
-                if result is _NamingResult.FAILED and latest_needed == needed:
-                    attempts += 1
-                    if not self._should_retry_worker(
-                        runtime, worker, needed, attempts, max_attempts
-                    ):
+                if converged:
+                    if outcome.result is _NamingResult.SUCCEEDED and recovery_round > 0:
+                        self._log_worker_recovered(needed, log_state)
+                    return
+                if shutting_down:
+                    return
+
+                if outcome.result is _NamingResult.FAILED and latest_needed == needed:
+                    failure = outcome.failure or _synthetic_lifecycle_failure(
+                        "NamingFailure"
+                    )
+                    action, finite_attempts, recovery_round = self._handle_worker_failure(
+                        runtime,
+                        worker,
+                        needed,
+                        failure,
+                        finite_attempts=finite_attempts,
+                        recovery_round=recovery_round,
+                        retry_enabled=retry_enabled,
+                        max_attempts=max_attempts,
+                        real_recovery_attempt=outcome.rpc_executed,
+                        log_state=log_state,
+                    )
+                    if action == "stop":
                         return
-                    self._interruptible_retry_wait(runtime, worker, retry_interval)
+                    if action == "finite_wait":
+                        self._interruptible_retry_wait(runtime, worker, retry_interval)
                     continue
 
                 # SUCCEEDED or SKIPPED always causes a fresh target read. A
                 # target change also resets the attempt budget for its direction.
                 if latest_needed != needed:
                     direction = None
-                    attempts = 0
-                elif result is _NamingResult.SUCCEEDED:
-                    attempts = 0
-                if needed == "deregister" and result is _NamingResult.SUCCEEDED:
+                elif outcome.result is _NamingResult.SUCCEEDED:
+                    finite_attempts = 0
+                    recovery_round = 0
+                if needed == "deregister" and outcome.result is _NamingResult.SUCCEEDED:
                     register_identity = None
         except Exception as exc:
-            self._record_worker_failure(runtime, direction or "register", exc)
+            failure = self._classify_lifecycle_failure(
+                exc,
+                stage=_LifecycleFailureStage.REGISTRATION_PREPARE,
+                direction=direction or "register",
+            )
+            self._record_lifecycle_failure(runtime, direction or "register", failure)
             logger.error(
                 "Nacos registration Worker stopped (error_type=%s)",
-                type(exc).__name__,
+                failure.safe_error_type,
             )
         finally:
             with runtime.state_lock:
@@ -588,14 +706,22 @@ class FlaskNacos:
                     if runtime.registered == runtime.target_registered:
                         runtime.last_error = None
 
-    def _should_retry_worker(
+    def _handle_worker_failure(
         self,
         runtime: _AppRuntimeState,
         worker: Any,
         direction: str,
-        attempts: int,
+        failure: _LifecycleFailure,
+        *,
+        finite_attempts: int,
+        recovery_round: int,
+        retry_enabled: bool,
         max_attempts: int,
-    ) -> bool:
+        real_recovery_attempt: bool,
+        log_state: _WorkerLogState,
+    ) -> Tuple[str, int, int]:
+        """Apply one classified failure to the direction-local retry phase."""
+        self._record_lifecycle_failure(runtime, direction, failure)
         with runtime.state_lock:
             if (
                 runtime.operation_thread is not worker
@@ -605,17 +731,68 @@ class FlaskNacos:
             ):
                 if runtime.registered == runtime.target_registered:
                     runtime.last_error = None
-                return False
+                return "stop", finite_attempts, recovery_round
             latest = "register" if runtime.target_registered else "deregister"
             if latest != direction:
-                return True
-            return attempts < max_attempts
+                return "reevaluate", finite_attempts, recovery_round
+
+        if recovery_round > 0:
+            if failure.failure_class is not _LifecycleFailureClass.TRANSIENT:
+                self._log_worker_failure(
+                    direction, failure, log_state, entering_recovery=False
+                )
+                return "stop", finite_attempts, recovery_round
+            if real_recovery_attempt:
+                recovery_round += 1
+            self._log_worker_failure(
+                direction, failure, log_state, entering_recovery=False
+            )
+            return "recovery", finite_attempts, recovery_round
+
+        finite_attempts += 1
+        if failure.failure_class is _LifecycleFailureClass.DETERMINISTIC:
+            self._log_worker_failure(
+                direction, failure, log_state, entering_recovery=False
+            )
+            return "stop", finite_attempts, recovery_round
+        if not retry_enabled:
+            self._log_worker_failure(
+                direction, failure, log_state, entering_recovery=False
+            )
+            return "stop", finite_attempts, recovery_round
+        if finite_attempts < max_attempts:
+            self._log_worker_failure(
+                direction, failure, log_state, entering_recovery=False
+            )
+            return "finite_wait", finite_attempts, recovery_round
+        if failure.failure_class is _LifecycleFailureClass.TRANSIENT:
+            recovery_round = 1
+            log_state.recovery_active = True
+            self._log_worker_failure(
+                direction, failure, log_state, entering_recovery=True
+            )
+            return "recovery", finite_attempts, recovery_round
+
+        self._log_worker_failure(direction, failure, log_state, entering_recovery=False)
+        return "stop", finite_attempts, recovery_round
+
+    @staticmethod
+    def _lifecycle_recovery_delay(retry_interval: float, recovery_round: int) -> float:
+        base = max(retry_interval, _LIFECYCLE_RECOVERY_MIN_INTERVAL)
+        if base < _LIFECYCLE_RECOVERY_PRIVATE_CAP:
+            raw = min(
+                base * (2 ** min(recovery_round, 5)),
+                _LIFECYCLE_RECOVERY_PRIVATE_CAP,
+            )
+            lower = max(base, raw * 0.8)
+            return random.uniform(lower, raw)
+        return random.uniform(base, base * 1.2)
 
     @staticmethod
     def _interruptible_retry_wait(
         runtime: _AppRuntimeState, worker: Any, retry_interval: float
-    ) -> None:
-        """Wait without losing a concurrent target-change wakeup."""
+    ) -> bool:
+        """Wait without losing wakeups; return true only after a full timeout."""
         with runtime.state_lock:
             generation = runtime.operation_generation
             target = runtime.target_registered
@@ -624,7 +801,7 @@ class FlaskNacos:
                 or runtime.operation_thread is not worker
                 or runtime.operation_kind != "register"
             ):
-                return
+                return False
 
         runtime.operation_wakeup.clear()
 
@@ -636,29 +813,86 @@ class FlaskNacos:
                 or runtime.operation_generation != generation
                 or runtime.target_registered != target
             ):
-                return
+                return False
 
-        runtime.operation_wakeup.wait(retry_interval)
+        return not runtime.operation_wakeup.wait(retry_interval)
 
     @staticmethod
-    def _record_worker_failure(
-        runtime: _AppRuntimeState, direction: str, exc: BaseException
+    def _record_lifecycle_failure(
+        runtime: _AppRuntimeState, direction: str, failure: _LifecycleFailure
     ) -> None:
-        error_type = type(exc).__name__
         with runtime.state_lock:
             if direction == "register":
                 relevant = runtime.target_registered and not runtime.registered
             else:
                 relevant = not runtime.target_registered and runtime.registered
             if relevant and not runtime.shutting_down:
-                runtime.last_error = error_type
+                runtime.last_error = failure.safe_error_type
             elif runtime.registered == runtime.target_registered:
                 runtime.last_error = None
-        logger.warning(
-            "Nacos lifecycle attempt failed (operation=%s, error_type=%s)",
-            direction,
-            error_type,
+
+    @staticmethod
+    def _log_worker_failure(
+        direction: str,
+        failure: _LifecycleFailure,
+        log_state: _WorkerLogState,
+        *,
+        entering_recovery: bool,
+    ) -> None:
+        now = time.monotonic()
+        changed = bool(
+            log_state.direction != direction
+            or log_state.error_type != failure.safe_error_type
         )
+        interval_elapsed = bool(
+            log_state.last_warning_at is None
+            or now - log_state.last_warning_at >= _LIFECYCLE_WARNING_INTERVAL
+        )
+        warning_due = changed or interval_elapsed or (
+            entering_recovery and not log_state.recovery_announced
+        )
+        if warning_due:
+            phase = "recovery" if entering_recovery or log_state.recovery_active else "finite"
+            logger.warning(
+                "Nacos lifecycle attempt failed "
+                "(operation=%s, error_type=%s, failure_class=%s, phase=%s)",
+                direction,
+                failure.safe_error_type,
+                failure.failure_class.value,
+                phase,
+            )
+            log_state.last_warning_at = now
+        else:
+            logger.debug(
+                "Nacos lifecycle attempt still failing "
+                "(operation=%s, error_type=%s, failure_class=%s)",
+                direction,
+                failure.safe_error_type,
+                failure.failure_class.value,
+            )
+        log_state.direction = direction
+        log_state.error_type = failure.safe_error_type
+        if entering_recovery:
+            log_state.recovery_announced = True
+
+    @staticmethod
+    def _log_worker_recovered(direction: str, log_state: _WorkerLogState) -> None:
+        if not log_state.recovery_active:
+            return
+        logger.info(
+            "Nacos lifecycle recovered after transient failures (operation=%s)",
+            direction,
+        )
+        log_state.recovery_active = False
+
+    @staticmethod
+    def _classify_lifecycle_failure(
+        exc: BaseException,
+        *,
+        stage: _LifecycleFailureStage,
+        direction: str,
+    ) -> _LifecycleFailure:
+        return _classify_lifecycle_failure(exc, stage=stage, direction=direction)
 
     # -- Deregistration lifecycle ----------------------------------------
 
@@ -698,9 +932,14 @@ class FlaskNacos:
         if not run_sync:
             return accepted
 
-        result = _NamingResult.FAILED
+        outcome = _NamingOutcome(
+            _NamingResult.FAILED,
+            _synthetic_lifecycle_failure("DeregisterRuntimeError"),
+            False,
+            _LifecycleFailureStage.SYNC_DEREGISTER_RPC,
+        )
         try:
-            result = self._execute_naming_rpc(
+            outcome = self._execute_naming_rpc(
                 state,
                 runtime,
                 "deregister",
@@ -708,10 +947,22 @@ class FlaskNacos:
                 identity=None,
                 allow_during_shutdown=False,
                 record_lifecycle_error=True,
+                stage=_LifecycleFailureStage.SYNC_DEREGISTER_RPC,
+                log_failure=True,
             )
         except Exception as exc:  # defensive: runtime errors never escape
-            self._record_worker_failure(runtime, "deregister", exc)
-            result = _NamingResult.FAILED
+            failure = self._classify_lifecycle_failure(
+                exc,
+                stage=_LifecycleFailureStage.SYNC_DEREGISTER_RPC,
+                direction="deregister",
+            )
+            self._record_lifecycle_failure(runtime, "deregister", failure)
+            outcome = _NamingOutcome(
+                _NamingResult.FAILED,
+                failure,
+                False,
+                _LifecycleFailureStage.SYNC_DEREGISTER_RPC,
+            )
         finally:
             schedule_register = False
             with runtime.state_lock:
@@ -736,7 +987,7 @@ class FlaskNacos:
                 )
                 self._start_registration_thread(app, state, runtime, thread)
 
-        return result is not _NamingResult.FAILED
+        return outcome.result is not _NamingResult.FAILED
 
     # -- Unified Naming RPC infrastructure --------------------------------
 
@@ -750,18 +1001,30 @@ class FlaskNacos:
         identity: Optional[Dict[str, Any]],
         allow_during_shutdown: bool,
         record_lifecycle_error: bool,
-    ) -> _NamingResult:
+        stage: Optional[_LifecycleFailureStage] = None,
+        log_failure: bool = True,
+    ) -> _NamingOutcome:
         """Execute at most one logical Naming RPC with tri-state semantics."""
+        if stage is None:
+            stage = self._default_naming_stage(rpc_type, allow_during_shutdown)
         rpc_done: Any = None
         rpc_seq: Optional[int] = None
-        result = _NamingResult.FAILED
+        rpc_executed = False
+        lock_acquired = False
+        outcome = _NamingOutcome(
+            _NamingResult.FAILED,
+            _synthetic_lifecycle_failure("NamingInfrastructureError"),
+            False,
+            stage,
+        )
         network_lock = runtime.network_operation_lock
-        network_lock.acquire()
         try:
+            network_lock.acquire()
+            lock_acquired = True
             with runtime.state_lock:
                 gate = self._naming_rpc_gate_locked(runtime, rpc_type, allow_during_shutdown)
                 if gate is _NamingResult.SKIPPED:
-                    return gate
+                    return _NamingOutcome(gate, None, False, stage)
 
                 actual_identity = identity
                 if rpc_type == "deregister":
@@ -773,25 +1036,57 @@ class FlaskNacos:
                         if rpc_type == "deregister"
                         else "MissingRegistrationIdentity"
                     )
-                    if record_lifecycle_error:
-                        self._record_rpc_error_locked(runtime, rpc_type, missing_error_type)
-                    return _NamingResult.FAILED
-                if client is None:
-                    if record_lifecycle_error:
-                        self._record_rpc_error_locked(runtime, rpc_type, "ClientUnavailable")
-                    return _NamingResult.FAILED
-
-                try:
-                    rpc_done = Event()
-                except Exception as exc:
-                    if record_lifecycle_error:
-                        self._record_rpc_error_locked(runtime, rpc_type, "NamingEventCreateError")
-                    logger.error(
-                        "Failed to create Naming RPC event (error_type=%s)",
-                        type(exc).__name__,
+                    failure = _synthetic_lifecycle_failure(
+                        missing_error_type,
+                        _LifecycleFailureClass.DETERMINISTIC,
                     )
-                    return _NamingResult.FAILED
+                    if record_lifecycle_error:
+                        self._record_rpc_error_locked(
+                            runtime, rpc_type, failure.safe_error_type
+                        )
+                    return _NamingOutcome(_NamingResult.FAILED, failure, False, stage)
+                if client is None:
+                    failure = _synthetic_lifecycle_failure(
+                        "ClientUnavailable",
+                        _LifecycleFailureClass.DETERMINISTIC,
+                    )
+                    if record_lifecycle_error:
+                        self._record_rpc_error_locked(
+                            runtime, rpc_type, failure.safe_error_type
+                        )
+                    return _NamingOutcome(_NamingResult.FAILED, failure, False, stage)
 
+            try:
+                rpc_done = Event()
+            except Exception as exc:
+                classified = self._classify_lifecycle_failure(
+                    exc,
+                    stage=stage,
+                    direction=rpc_type,
+                )
+                failure = _synthetic_lifecycle_failure(
+                    "NamingEventCreateError", classified.failure_class
+                )
+                with runtime.state_lock:
+                    gate = self._naming_rpc_gate_locked(
+                        runtime, rpc_type, allow_during_shutdown
+                    )
+                    if gate is _NamingResult.SKIPPED:
+                        return _NamingOutcome(gate, None, False, stage)
+                    if record_lifecycle_error:
+                        self._record_rpc_error_locked(
+                            runtime, rpc_type, failure.safe_error_type
+                        )
+                logger.error(
+                    "Failed to create Naming RPC event (error_type=%s)",
+                    classified.safe_error_type,
+                )
+                return _NamingOutcome(_NamingResult.FAILED, failure, False, stage)
+
+            with runtime.state_lock:
+                gate = self._naming_rpc_gate_locked(runtime, rpc_type, allow_during_shutdown)
+                if gate is _NamingResult.SKIPPED:
+                    return _NamingOutcome(gate, None, False, stage)
                 runtime.naming_rpc_seq += 1
                 rpc_seq = runtime.naming_rpc_seq
                 runtime.naming_rpc_active = True
@@ -799,66 +1094,117 @@ class FlaskNacos:
                 runtime.naming_rpc_started_at = time.monotonic()
                 runtime.naming_rpc_timeout = self._naming_timeout_seconds(state["config"])
 
-            error_type: Optional[str] = None
+            rpc_failure: Optional[_LifecycleFailure] = None
             try:
+                rpc_executed = True
                 if rpc_type == "register":
                     naming.register_instance(client, state["config"], identity=actual_identity)
                 elif rpc_type == "deregister":
                     naming.deregister_instance(client, state["config"], identity=actual_identity)
                 else:
                     raise RuntimeError("UnsupportedNamingOperation")
-                result = _NamingResult.SUCCEEDED
+                outcome = _NamingOutcome(_NamingResult.SUCCEEDED, None, True, stage)
             except Exception as exc:
-                result = _NamingResult.FAILED
-                error_type = type(exc).__name__
-                logger.warning(
-                    "Nacos Naming RPC failed (operation=%s, error_type=%s)",
-                    rpc_type,
-                    error_type,
+                rpc_failure = self._classify_lifecycle_failure(
+                    exc,
+                    stage=stage,
+                    direction=rpc_type,
                 )
+                outcome = _NamingOutcome(
+                    _NamingResult.FAILED,
+                    rpc_failure,
+                    rpc_executed,
+                    stage,
+                )
+                if log_failure:
+                    logger.warning(
+                        "Nacos Naming RPC failed "
+                        "(operation=%s, error_type=%s, failure_class=%s)",
+                        rpc_type,
+                        rpc_failure.safe_error_type,
+                        rpc_failure.failure_class.value,
+                    )
 
             try:
                 with runtime.state_lock:
-                    if result is _NamingResult.SUCCEEDED:
+                    if outcome.result is _NamingResult.SUCCEEDED:
                         if rpc_type == "register":
+                            committed_identity = dict(actual_identity)
+                            runtime.registered_identity = committed_identity
                             runtime.registered = True
-                            runtime.registered_identity = dict(actual_identity)
                         else:
                             runtime.registered = False
                             runtime.registered_identity = None
                         runtime.last_error = None
-                    elif record_lifecycle_error and error_type is not None:
-                        self._record_rpc_error_locked(runtime, rpc_type, error_type)
+                    elif record_lifecycle_error and rpc_failure is not None:
+                        self._record_rpc_error_locked(
+                            runtime, rpc_type, rpc_failure.safe_error_type
+                        )
             except Exception as exc:
-                result = _NamingResult.FAILED
+                commit_failure = _synthetic_lifecycle_failure("NamingResultCommitError")
+                outcome = _NamingOutcome(
+                    _NamingResult.FAILED,
+                    commit_failure,
+                    rpc_executed,
+                    stage,
+                )
                 with runtime.state_lock:
                     if record_lifecycle_error:
-                        self._record_rpc_error_locked(runtime, rpc_type, "NamingResultCommitError")
+                        self._record_rpc_error_locked(
+                            runtime, rpc_type, commit_failure.safe_error_type
+                        )
                 logger.error(
                     "Failed to commit Naming RPC result (error_type=%s)",
                     type(exc).__name__,
                 )
-            return result
+            return outcome
         except Exception as exc:
+            failure = self._classify_lifecycle_failure(
+                exc,
+                stage=stage,
+                direction=rpc_type,
+            )
             with runtime.state_lock:
                 if record_lifecycle_error:
-                    self._record_rpc_error_locked(runtime, rpc_type, type(exc).__name__)
+                    self._record_rpc_error_locked(
+                        runtime, rpc_type, failure.safe_error_type
+                    )
             logger.error(
                 "Naming RPC infrastructure failed (operation=%s, error_type=%s)",
                 rpc_type,
-                type(exc).__name__,
+                failure.safe_error_type,
             )
-            return _NamingResult.FAILED
+            return _NamingOutcome(
+                _NamingResult.FAILED,
+                failure,
+                rpc_executed,
+                stage,
+            )
         finally:
-            network_lock.release()
-            if rpc_done is not None:
-                with runtime.state_lock:
-                    if runtime.naming_rpc_seq == rpc_seq:
-                        runtime.naming_rpc_active = False
-                        runtime.naming_rpc_started_at = None
-                        runtime.naming_rpc_timeout = None
-                        runtime.naming_rpc_done = None
-                rpc_done.set()
+            try:
+                if lock_acquired:
+                    network_lock.release()
+            finally:
+                if rpc_done is not None:
+                    try:
+                        with runtime.state_lock:
+                            if runtime.naming_rpc_seq == rpc_seq:
+                                runtime.naming_rpc_active = False
+                                runtime.naming_rpc_started_at = None
+                                runtime.naming_rpc_timeout = None
+                                runtime.naming_rpc_done = None
+                    finally:
+                        rpc_done.set()
+
+    @staticmethod
+    def _default_naming_stage(
+        rpc_type: str, allow_during_shutdown: bool
+    ) -> _LifecycleFailureStage:
+        if rpc_type == "register":
+            return _LifecycleFailureStage.REGISTER_RPC
+        if allow_during_shutdown:
+            return _LifecycleFailureStage.EXIT_DEREGISTER_RPC
+        return _LifecycleFailureStage.SYNC_DEREGISTER_RPC
 
     @staticmethod
     def _naming_rpc_gate_locked(
@@ -1209,7 +1555,7 @@ class FlaskNacos:
             self._deregister_on_exit(state, runtime)
 
     def _deregister_on_exit(self, state: Dict[str, Any], runtime: _AppRuntimeState) -> None:
-        result = self._execute_naming_rpc(
+        outcome = self._execute_naming_rpc(
             state,
             runtime,
             "deregister",
@@ -1217,8 +1563,10 @@ class FlaskNacos:
             identity=None,
             allow_during_shutdown=True,
             record_lifecycle_error=False,
+            stage=_LifecycleFailureStage.EXIT_DEREGISTER_RPC,
+            log_failure=False,
         )
-        if result is _NamingResult.FAILED:
+        if outcome.result is _NamingResult.FAILED:
             with runtime.state_lock:
                 missing_identity = bool(runtime.registered and runtime.registered_identity is None)
             if missing_identity:

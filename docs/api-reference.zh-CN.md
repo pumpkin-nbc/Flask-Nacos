@@ -35,7 +35,7 @@ get_client(app=None) -> Any
 初始化会校验确定性配置并安装本地钩子，但不会创建 Nacos Client。
 
 启用自动注册时，`init_app()` 调用与业务代码相同的公开 `register_instance(app)` 命令，
-网络请求由短生命周期 daemon Worker执行。
+网络请求由一个 daemon收敛 Worker执行；收敛后退出，不会成为第二套心跳监控。
 
 ## 应用选择
 
@@ -58,13 +58,18 @@ with app.app_context():
 返回 `None`。
 
 - 注册进行中或已经完成时重复调用是幂等的。
-- 上次尝试失败且当前空闲时，再次调用会启动新的有限尝试。
+- UNKNOWN/确定性失败且当前空闲时，再次调用会启动新的有限尝试；已确认瞬时故障会保留现有
+  Worker进行低频生命周期自恢复。
 - `NACOS_REGISTER_ENABLED=False` 时该命令无副作用。
 - `NACOS_ENABLED=False` 时该命令完全禁用且无副作用。
 - `NACOS_FAIL_FAST=True` 时，缓存的确定性注册配置错误可以同步抛出；Thread、Client、
   SDK、超时与连接失败只安全写入本地状态，不由该命令抛出。
 
 临时实例注册成功后，心跳由 SDK接管，Flask-Nacos Worker随即退出，并不是永久心跳线程。
+
+每次失败都会立即分类：确定性失败停止，UNKNOWN在现有有限预算后停止，只有已确认瞬时传输
+故障会继续进行可中断、有界退避的自恢复。`NACOS_RETRY_ENABLED=False` 时只执行当前一次
+尝试。自恢复不增加远端轮询，也不改变该方法固定返回 `None` 的契约。
 
 ## `deregister_instance(app=None)`
 

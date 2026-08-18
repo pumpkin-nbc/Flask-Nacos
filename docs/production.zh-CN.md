@@ -5,7 +5,11 @@
 ## 普通 WSGI 启动
 
 使用默认的 `NACOS_AUTO_REGISTER=True` 时，普通非预加载应用工厂会在
-`init_app(app)` 执行时调度注册。Client 创建与 Naming I/O 由短生命周期 daemon Worker完成。
+`init_app(app)` 执行时调度注册。Client 创建与 Naming I/O 由一个 daemon收敛 Worker完成。
+
+启动时遇到已确认的瞬时网络故障，Worker会先使用配置的有限重试预算，随后保持为低频、
+可中断的生命周期自恢复 owner；注册收敛、目标改变、shutdown开始或后续失败不再属于瞬时
+故障时结束。自恢复不依赖 HTTP 请求、readiness或其他业务触发。
 
 请显式配置消费者可访问的 `NACOS_SERVICE_IP` 与 `NACOS_SERVICE_PORT`；Flask 能在本机
 localhost 访问，不代表其他机器可以访问注册到 Nacos 的地址。
@@ -88,3 +92,6 @@ Nacos 用户名/密码或 AK/SK 应放入环境变量或密钥管理器。不要
 
 `/health/nacos` 与 `get_status()` 只反映本地生命周期，不查询 Nacos，也不读取 SDK 心跳
 成功状态。就绪策略要求当前 Nacos 可达时，请增加独立远端探针。
+
+瞬时启动故障自恢复期间可能持续看到 `operation_running=True` 与 `registered=False`；它表示
+本地仍在收敛，不是远端健康结果。读取 status 或 health 既不会加速，也不会触发重试。

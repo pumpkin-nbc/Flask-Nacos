@@ -392,6 +392,41 @@ def test_removed_auto_registration_key_is_absent_from_current_tree():
         assert removed_key not in path.read_text(encoding="utf-8"), path
 
 
+def test_bilingual_docs_describe_transient_lifecycle_recovery_without_remote_monitoring():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "configuration.md",
+        DOCS_DIR / "service-registration.md",
+        DOCS_DIR / "production.md",
+        DOCS_DIR / "troubleshooting.md",
+        DOCS_DIR / "compatibility.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "configuration.zh-CN.md",
+        DOCS_DIR / "service-registration.zh-CN.md",
+        DOCS_DIR / "production.zh-CN.md",
+        DOCS_DIR / "troubleshooting.zh-CN.md",
+        DOCS_DIR / "compatibility.zh-CN.md",
+    )
+
+    for path in english_files:
+        text = path.read_text(encoding="utf-8")
+        assert "transient" in text.lower(), path
+        assert "recovery" in text.lower(), path
+    for path in chinese_files:
+        text = path.read_text(encoding="utf-8")
+        assert "瞬时" in text, path
+        assert "自恢复" in text, path
+
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in english_files + chinese_files
+    ).lower()
+    assert "forever retry" not in combined
+    assert "infinite retry" not in combined
+    assert "无限重试" not in combined
+
+
 def test_bilingual_docs_describe_safe_logging_and_multi_worker_identity():
     english_files = (
         ROOT / "README.md",

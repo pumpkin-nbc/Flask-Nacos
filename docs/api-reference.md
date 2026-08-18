@@ -39,7 +39,8 @@ Nacos Client.
 
 When automatic registration is enabled, `init_app()` calls the same public
 `register_instance(app)` command used by application code. The network request
-runs in a short-lived daemon Worker.
+runs in one daemon convergence Worker, which exits after convergence and never
+becomes a second heartbeat monitor.
 
 ## Application selection
 
@@ -64,7 +65,9 @@ Sets the local target to registered, schedules at most one lifecycle Worker,
 and returns `None` without waiting for Client creation or network I/O.
 
 - Repeated calls are idempotent while registration is running or complete.
-- A call after a failed, idle attempt starts a new finite attempt.
+- A call after an unknown/deterministic failed idle attempt starts a new finite
+  attempt. Verified transient failures retain the existing Worker for
+  low-frequency lifecycle recovery.
 - `NACOS_REGISTER_ENABLED=False` makes this command a no-op.
 - `NACOS_ENABLED=False` makes this command a side-effect-free no-op.
 - With `NACOS_FAIL_FAST=True`, a cached deterministic registration error may be
@@ -73,6 +76,12 @@ and returns `None` without waiting for Client creation or network I/O.
 
 Registration success starts the SDK's heartbeat for ephemeral instances. The
 Flask-Nacos Worker then exits; it is not a permanent heartbeat thread.
+
+Failures are classified immediately. Deterministic failures stop, unknown
+failures stop after the existing finite budget, and only verified transient
+transport failures continue with interruptible bounded-backoff recovery.
+`NACOS_RETRY_ENABLED=False` allows only the current attempt. Recovery does not
+add remote polling and does not change the method's `None` return contract.
 
 ## `deregister_instance(app=None)`
 

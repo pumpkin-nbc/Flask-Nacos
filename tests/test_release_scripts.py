@@ -198,6 +198,7 @@ def test_sensitive_scan_ignores_uv_managed_python(check_sensitive_info, tmp_path
 def test_validate_wheel_names_accepts_good_wheel(check_package):
     good = [
         "flask_nacos/__init__.py",
+        "flask_nacos/_recovery.py",
         "flask_nacos/extension.py",
         "flask_nacos/py.typed",
         "flask_nacos-0.6.0.dist-info/METADATA",

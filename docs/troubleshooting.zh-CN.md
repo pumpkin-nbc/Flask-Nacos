@@ -15,16 +15,27 @@
   `NACOS_AUTO_REGISTER`；查看日志和 `get_status()`。
 - 解决建议：恢复预期的开关（`NACOS_AUTO_REGISTER` 默认值为 `True`），或修复状态中报告的原因后
   显式调用 `nacos.register_instance(app)`。
-- 若 `operation_running=True`，生命周期仍在收敛；若其变为 `False`，同时
-  `target_registered=True` 且 `registered=False`，请检查 `last_error` 与安全日志，修复后
-  再次调用 `register_instance(app)`。
+- 若 `operation_running=True`，生命周期仍在收敛。已确认的瞬时网络故障会让 Worker保持低频
+  自恢复，不需要 HTTP 或业务触发。若其变为 `False`，同时 `target_registered=True` 且
+  `registered=False`，则最近失败属于确定性/UNKNOWN（或已关闭重试）；请检查 `last_error`
+  与安全日志，修复后再次调用 `register_instance(app)`。
 
 ## 注册网络错误不会从 `register_instance()` 抛出
 
 - 可能原因：1.1 的注册始终是后台生命周期命令。
-- 解决建议：通过 `get_status()` 与日志查看 Nacos 超时或重试耗尽。
+- 解决建议：通过 `get_status()` 与日志查看 Nacos 超时、有限重试与瞬时故障生命周期自恢复。
   `NACOS_FAIL_FAST=True` 只同步抛出缓存的确定性注册错误。Thread 创建/启动、Client、
   SDK、超时与连接错误都安全写入状态，不会从 `register_instance()` 抛出。
+
+## 为什么有限重试后 `operation_running=True` 仍持续存在？
+
+- 可能原因：最近注册失败存在可靠瞬时传输故障证据。普通有限预算耗尽后，Register Worker
+  继续持有 owner，并使用有界退避与抖动进行低频恢复。
+- 排查方法：安全 WARNING 会标明错误类型和 recovery阶段；`get_status()` 仍是无副作用的
+  本地视图。
+- 解决建议：通常无需额外触发，只需恢复 Nacos/网络。注销或 shutdown 会立即唤醒等待。
+  如果进程必须在当前一次失败后停止，可设置 `NACOS_RETRY_ENABLED=False`。认证、参数和
+  UNKNOWN SDK失败不会持续进入生命周期自恢复。
 
 ## 2. 注册失败：`NACOS_SERVICE_NAME` 为空
 

@@ -326,7 +326,7 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
     runtime = state["_runtime"]
     runtime.target_registered = True
 
-    result = nacos._execute_naming_rpc(
+    outcome = nacos._execute_naming_rpc(
         state,
         runtime,
         "register",
@@ -335,7 +335,8 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
         allow_during_shutdown=False,
         record_lifecycle_error=True,
     )
-    assert result is extension_module._NamingResult.FAILED
+    assert outcome.result is extension_module._NamingResult.FAILED
+    assert outcome.rpc_executed is False
     assert runtime.last_error == "MissingRegistrationIdentity"
 
     identity = {
@@ -346,7 +347,7 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
         "group_name": "DEFAULT_GROUP",
         "ephemeral": True,
     }
-    result = nacos._execute_naming_rpc(
+    outcome = nacos._execute_naming_rpc(
         state,
         runtime,
         "register",
@@ -355,7 +356,8 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
         allow_during_shutdown=False,
         record_lifecycle_error=True,
     )
-    assert result is extension_module._NamingResult.FAILED
+    assert outcome.result is extension_module._NamingResult.FAILED
+    assert outcome.rpc_executed is False
     assert runtime.last_error == "ClientUnavailable"
 
     class BrokenEvent:
@@ -363,7 +365,7 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
             raise RuntimeError("event unavailable")
 
     monkeypatch.setattr(extension_module, "Event", BrokenEvent)
-    result = nacos._execute_naming_rpc(
+    outcome = nacos._execute_naming_rpc(
         state,
         runtime,
         "register",
@@ -372,7 +374,8 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
         allow_during_shutdown=False,
         record_lifecycle_error=True,
     )
-    assert result is extension_module._NamingResult.FAILED
+    assert outcome.result is extension_module._NamingResult.FAILED
+    assert outcome.rpc_executed is False
     assert runtime.last_error == "NamingEventCreateError"
 
 

@@ -3,8 +3,8 @@
 [English](service-registration.md) | 简体中文
 
 Flask-Nacos 1.1.0 使用目标状态生命周期。`target_registered` 表示最后一次请求的状态，
-`registered` 表示最近一次本地确认的 Naming 事实；短生命周期 daemon Worker负责让事实向
-最新目标收敛。
+`registered` 表示最近一次本地确认的 Naming 事实；一个 daemon收敛 Worker负责让事实向
+最新目标收敛，并在收敛完成或无法安全继续时退出。
 
 ## 自动注册
 
@@ -41,8 +41,9 @@ with app.app_context():
     status = nacos.get_status()
 ```
 
-Worker运行中重复调用不会增加生命周期 generation，也不会启动第二个 Worker。失败尝试结束
-并进入空闲后，再次显式调用会开始新的有限尝试。
+Worker运行中重复调用不会增加生命周期 generation，也不会启动第二个 Worker。UNKNOWN 或
+确定性失败使未完成目标进入空闲后，再次显式调用会开始新的有限尝试；已经在明确瞬时故障
+自恢复中的 Worker仍是唯一 owner。
 
 ## 生命周期流程
 
@@ -74,23 +75,33 @@ flowchart TD
     C -- "否，需要注册" --> E["启动一个 Register Worker"]
     C -- "否，空闲已注册需清理" --> F["同步执行注销"]
     E --> G["创建 Client 前检查最新目标"]
-    G --> H["创建或复用 app/PID Client"]
-    H --> I["获取 Naming single-flight 锁"]
+    G --> H{"创建或复用 app/PID Client"}
+    H -- "成功" --> I["获取 Naming single-flight 锁"]
+    H -- "失败" --> P["立即分类失败"]
     F --> I
     I --> J{"最新目标仍需要该 RPC？"}
     J -- "否" --> K["SKIPPED：不调用 SDK"]
     J -- "是" --> L["执行一笔 Naming RPC"]
     K --> M["重新读取最新目标与事实"]
-    L --> M
+    L -- "成功" --> M
+    L -- "失败" --> P
+    P --> Q{"失败类型"}
+    Q -- "确定性" --> R["保留安全错误并停止"]
+    Q -- "UNKNOWN" --> S{"有限预算尚有剩余？"}
+    Q -- "TRANSIENT" --> S
+    S -- "是" --> T["可中断有限等待"]
+    T --> G
+    S -- "否，UNKNOWN" --> R
+    S -- "否，TRANSIENT" --> U["Recovery轮次：有界退避 + 抖动"]
+    U --> G
     M --> N{"registered 等于 target？"}
     N -- "是" --> O["清除已恢复错误并结束"]
-    N -- "否" --> P["Worker重试或执行补偿"]
-    P --> G
+    N -- "否" --> G
 ```
 
-同一个 Worker可以在一个生命周期 operation中完成注册、重试、补偿注销和再次注册。状态
-收敛或有限尝试无法继续时立即退出。临时实例注册成功后的心跳由 Nacos SDK负责，而不是
-该 Worker。
+同一个 Worker可以在一个生命周期 operation中完成注册、有限重试、瞬时故障自恢复、补偿
+注销和再次注册。状态收敛或失败无法继续安全恢复时立即退出。临时实例注册成功后的心跳由
+Nacos SDK负责，而不是该 Worker。
 
 ## Naming single-flight 与三态结果
 
@@ -115,10 +126,27 @@ flowchart TD
 
 `NACOS_REGISTER_ENABLED=False` 只禁止新注册，不会阻止清理已有注册实例。
 
-## 重试与目标变化
+## 重试、瞬时故障自恢复与目标变化
 
-重试次数有限，由 `NACOS_RETRY_TIMES` 和 `NACOS_RETRY_INTERVAL` 控制。Worker使用 Event
-等待；注册、注销或 shutdown 会立即唤醒。等待前先清 Event，再复查状态，避免丢失并发唤醒。
+每次 Client 或 Naming 失败都会立即依据结构化证据分类，绝不解析异常正文：
+
+| 失败类型 | 有限阶段 | 有限预算耗尽后 |
+| --- | --- | --- |
+| 确定性 | 立即停止 | 不适用 |
+| UNKNOWN | 沿用现有次数与间隔 | 停止并暴露安全错误 |
+| TRANSIENT | 沿用现有次数与间隔 | 进入低频生命周期自恢复 |
+
+生命周期自恢复只适用于能够可靠确认的传输型瞬时故障，例如明确超时、连接/网络错误和选定
+HTTP 状态。每轮 Recovery 都先等待，使用带抖动的有界指数退避，且不会比
+`max(NACOS_RETRY_INTERVAL, 1秒)` 更频繁；每次新失败都会重新分类。
+`NACOS_RETRY_ENABLED=False` 表示只执行当前一次尝试，不进入自恢复。
+
+有限重试和 Recovery阶段属于当前实际 Naming方向。register 与补偿 deregister 之间切换时
+重置方向级阶段；generation变化本身只触发重新求值。Worker使用 Event等待；注册、注销或
+shutdown 会立即唤醒。等待前先清 Event，再复查状态，避免丢失并发唤醒。
+
+这项能力是“注册生命周期瞬时故障自恢复”，只处理已确认的瞬时故障，也不监控远端注册
+状态。空闲显式注销与退出注销仍只执行一笔 best-effort调用。
 
 最后一次有效生命周期命令优先。例如 register → deregister → register 最终会在操作成功后
 保持注册，即使旧 RPC在中途目标变化之后才返回。
@@ -150,7 +178,7 @@ Gunicorn `--preload` 会在 worker fork 前由 master初始化应用。推荐设
 | 核心状态 | 多个请求布尔值 | `target_registered` 与 `registered` |
 | Worker | 执行一次 register | 持续推动一次收敛 operation |
 | RPC 结果 | 成功或失败 | 成功、失败或跳过 |
-| Retry | 可能分散在不同路径 | 仅 Register Worker |
+| Retry | 有限任务重试可能停止收敛 | Register Worker统一负责有限重试与已确认瞬时故障自恢复 |
 | Single-flight | 防重复 register 线程 | 所有 Naming RPC |
 | Client | 初始化时创建 | app/PID 惰性创建 |
 | Fork | 可能继承进程资源 | 整个 Runtime 重建 |

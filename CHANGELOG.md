@@ -20,6 +20,10 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Added three-state internal Naming results (success, failure, skip), exact
   registered-identity reuse, interruptible retry, fork Runtime rebuilding, and
   bounded shutdown cleanup.
+- Added registration lifecycle self-recovery for explicitly identified
+  transient transport failures. It preserves the existing finite attempt
+  budget, then uses interruptible bounded backoff with jitter; deterministic
+  failures stop immediately and unknown failures stop at the finite limit.
 - Expanded CI coverage through Python 3.14 and the valid Flask 1.0.x, 1.1.x,
   2.x, 3.0.x, and 3.1.x runtime combinations.
 - Pinned wheel and sdist output to Core Metadata 2.4 for strict validation by
@@ -38,6 +42,10 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - `deregister_instance(app=None)` preserves the last lifecycle command and can
   still clean an existing instance when new registration is disabled.
 - `NACOS_AUTO_DEREGISTER` is the single exit deregistration switch.
+- Kept retry/recovery ownership inside the Register Worker. Client creation and
+  Naming failures share conservative classification without mixing Client state
+  into Naming RPC outcome metadata, and successful convergence still hands
+  heartbeat maintenance entirely to the Nacos SDK.
 - Synchronized the bilingual Quickstart code with the runnable beginner app,
   documented every environment variable consumed by the complete factory
   example, and removed hardcoded demo credentials from simplified examples.

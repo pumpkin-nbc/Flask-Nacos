@@ -6,7 +6,13 @@ English | [简体中文](production.zh-CN.md)
 
 With the default `NACOS_AUTO_REGISTER=True`, a normal non-preloaded application
 factory schedules registration when `init_app(app)` runs. Client creation and
-Naming I/O happen in a short-lived daemon Worker.
+Naming I/O happen in one daemon convergence Worker.
+
+If startup meets a verified transient network failure, the Worker first uses
+the configured finite retry budget and then remains as a low-frequency,
+interruptible lifecycle recovery owner. It stops when registration converges,
+the target changes, shutdown starts, or a later failure is no longer classified
+as transient. No request or readiness probe is required to trigger recovery.
 
 Configure the externally reachable `NACOS_SERVICE_IP` and
 `NACOS_SERVICE_PORT`; binding Flask to localhost does not make that advertised
@@ -106,3 +112,7 @@ verified transport boundary until the upstream SDK behavior meets your policy.
 `/health/nacos` and `get_status()` report local lifecycle state only. They do not
 query Nacos or inspect SDK heartbeat success. Add a separate remote probe when
 your readiness policy requires current Nacos reachability.
+
+During transient startup recovery, `operation_running=True` can remain visible
+while `registered=False`; this is local convergence activity, not a remote
+health result. Status and health reads neither speed up nor trigger retries.

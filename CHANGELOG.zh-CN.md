@@ -17,6 +17,8 @@
   `last_error`，以及 Client 与实际注册身份快照。
 - 新增 Naming 内部成功/失败/跳过三态、准确注册身份复用、可中断重试、fork Runtime
   重建与有界退出清理。
+- 为有明确证据的瞬时传输故障新增注册生命周期自恢复：先保持现有有限尝试预算，耗尽后使用
+  可中断、带抖动的有界退避；确定性失败立即停止，UNKNOWN失败在有限上限停止。
 - CI 扩展到 Python 3.14，以及 Flask 1.0.x、1.1.x、2.x、3.0.x、3.1.x 的有效组合。
 - wheel 与 sdist 固定生成 Core Metadata 2.4，在保留 PEP 639 许可证元数据的同时兼容
   当前打包工具的严格校验。
@@ -31,6 +33,8 @@
 - `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并且在禁止新注册后仍可
   清理已有实例。
 - `NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
+- 有限重试与自恢复继续统一由 Register Worker负责。Client 创建和 Naming失败共用保守分类，
+  但 Client状态不会混入 Naming RPC Outcome元数据；收敛成功后心跳仍完全交由 Nacos SDK。
 - 同步双语 Quickstart 与可运行的 beginner 示例，补齐完整工厂案例实际读取的全部环境变量，
   并移除简化示例中硬编码的演示凭据。
 

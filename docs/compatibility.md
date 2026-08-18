@@ -49,6 +49,22 @@ supported by Flask and its dependencies.
 - Nacos server: **2.x**.
 - Nacos SDK: `nacos-sdk-python>=2.0.0,<3.0.0` (synchronous client).
 
+## Naming failure compatibility
+
+Transient lifecycle recovery primarily uses stable structured evidence: standard timeout
+and connection exceptions, selected network/DNS errno values, structured HTTP
+statuses, and SDK error codes. Generic SDK exceptions remain unknown and stop
+after the existing finite retry budget.
+
+The classic SDK's bare `nacos.exception.NacosRequestException` contains no
+structured cause in a verified node-unavailable path. Flask-Nacos therefore has
+a narrow private compatibility rule for Naming register and compensating
+deregister in SDK `2.0.0` and `2.0.11`. The rule requires the installed exact
+type and exact failure stage. It does not apply during Client construction,
+synchronous/exit deregistration, to a same-named replacement type, or to an
+unverified SDK release. Other 2.x exception systems remain supported through
+their own structured evidence; no common exception hierarchy is assumed.
+
 ## Nacos SDK response-shape compatibility
 
 Different SDK versions return service-discovery results in slightly different

@@ -119,7 +119,7 @@ status = nacos.get_status(app)
 client = nacos.get_client(app)
 ```
 
-`register_instance(app=None) -> None` 将最终目标设为已注册，并最多发布一个短生命周期 daemon
+`register_instance(app=None) -> None` 将最终目标设为已注册，并最多发布一个 daemon收敛
 Worker。Client 构造、网络重试、Naming RPC 与 SDK 心跳启动都不会延迟调用方。
 
 `deregister_instance(app=None) -> bool` 将最终目标设为未注册。幂等/接受/成功清理，或新的
@@ -145,6 +145,17 @@ metadata、ephemeral/心跳、认证与重试配置。
 
 `NACOS_FAIL_FAST` 不会把生命周期运行时失败变成同步注册异常。Thread 创建/启动、Client
 创建、超时、连接与 SDK失败只以安全类型/错误码写入 `last_error`。
+
+注册生命周期失败会立即、保守地分类：
+
+- 配置、认证、权限、参数或内部不变量等确定性失败会立即结束 Worker；
+- 无法可靠判断的失败只使用现有有限重试预算；
+- 有结构化证据确认的瞬时传输故障先使用相同有限预算，耗尽后进入低频、可中断、带有界
+  退避与抖动的生命周期自恢复，直到目标变化、进程退出、后续失败不再属于瞬时故障，或注册成功。
+
+`NACOS_RETRY_ENABLED=False` 会同时关闭有限重试和生命周期自恢复。自恢复仅处理已确认的
+瞬时故障，也不轮询远端状态；`registered == target_registered` 后 Worker立即退出，心跳与
+连接维护仍完全由 Nacos SDK负责。
 
 `NACOS_RETRY_TIMES` 必须是 `>=1` 的整数；`NACOS_RETRY_INTERVAL` 必须是 `>=0` 的有限
 数字；配置中心开启时 `NACOS_REQUEST_TIMEOUT` 必须是 `>0` 的有限数字。支持数字字符串，

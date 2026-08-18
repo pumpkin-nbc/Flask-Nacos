@@ -153,6 +153,7 @@ jobs:
             tests/test_discovery.py \
             tests/test_register.py \
             tests/test_deregister.py \
+            tests/test_lifecycle_recovery.py \
             tests/test_logging.py
 
   required-ci:

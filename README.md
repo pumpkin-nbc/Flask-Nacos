@@ -129,7 +129,7 @@ client = nacos.get_client(app)
 ```
 
 `register_instance(app=None) -> None` changes the final target to registered
-and publishes at most one short-lived daemon Worker. Client construction,
+and publishes at most one daemon convergence Worker. Client construction,
 network retry, Naming RPC, and SDK heartbeat startup never delay the caller.
 
 `deregister_instance(app=None) -> bool` changes the final target to
@@ -165,6 +165,21 @@ authentication, and retry settings before creating extension state.
 `NACOS_FAIL_FAST` does not turn lifecycle runtime failures into synchronous
 registration exceptions. Thread creation/start, Client creation, timeout,
 connection, and SDK failures are recorded by safe type/code in `last_error`.
+
+Registration lifecycle failures are classified immediately and conservatively:
+
+- deterministic configuration, authentication, permission, parameter, or
+  invariant failures stop the Worker immediately;
+- unknown failures use only the existing finite retry budget;
+- explicitly identified transient transport failures use the same finite
+  budget first, then continue low-frequency, interruptible lifecycle recovery
+  with bounded backoff and jitter until the target changes, shutdown begins, a
+  later failure is no longer transient, or registration succeeds.
+
+`NACOS_RETRY_ENABLED=False` disables both finite retry and lifecycle recovery.
+Recovery applies only to proven transient failures and does not poll remote
+state. Once `registered == target_registered`, the Worker exits and the Nacos
+SDK continues to own heartbeat and connection maintenance.
 
 `NACOS_RETRY_TIMES` must be an integer `>=1`; `NACOS_RETRY_INTERVAL` must be a
 finite number `>=0`; `NACOS_REQUEST_TIMEOUT` must be finite and `>0` when the

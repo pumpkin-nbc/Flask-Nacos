@@ -41,6 +41,17 @@ flask-nacos 要求 **Flask `>=1.0`**，不人为设置 Flask 上限。CI 当前�
 - Nacos 服务端：**2.x**。
 - Nacos SDK：`nacos-sdk-python>=2.0.0,<3.0.0`（同步客户端）。
 
+## Naming 失败兼容性
+
+注册生命周期瞬时故障自恢复主要依赖稳定的结构化证据：标准超时/连接异常、选定的网络与 DNS errno、
+结构化 HTTP 状态和 SDK错误码。通用 SDK异常保持 UNKNOWN，只使用现有有限重试预算。
+
+经典 SDK 在经过验证的节点不可用路径中会抛出不带结构化 cause 的裸
+`nacos.exception.NacosRequestException`。因此 Flask-Nacos 仅为 SDK `2.0.0` 和 `2.0.11`
+的 Naming register 与补偿 deregister 保留窄范围私有兼容规则，并要求实际安装的精确类型和
+精确失败阶段。该规则不用于 Client 构造、同步/退出注销、同名替代类型或未经验证的 SDK
+版本。其他 2.x 异常体系继续依据自身结构化证据处理，不假设它们拥有统一异常层次。
+
 ## Nacos SDK 返回结构兼容
 
 不同版本的 SDK 返回的服务发现结果结构略有差异。`list_instances()` 使用内部的

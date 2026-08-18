@@ -17,18 +17,33 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   `NACOS_AUTO_REGISTER`; inspect logs and `get_status()`.
 - Fix: restore the intended switches (`NACOS_AUTO_REGISTER` defaults to `True`),
   or call `nacos.register_instance(app)` explicitly after fixing the reported cause.
-- If `operation_running=True`, the lifecycle is still converging. If it becomes
-  `False` while `target_registered=True` and `registered=False`, inspect
-  `last_error` and safe logs, then call `register_instance(app)` again after
-  fixing the cause.
+- If `operation_running=True`, the lifecycle is still converging. A verified
+  transient network failure can keep the Worker in low-frequency recovery; it
+  will retry without an HTTP or business trigger. If the value becomes `False`
+  while `target_registered=True` and `registered=False`, the last failure was
+  deterministic/unknown (or retry was disabled). Inspect `last_error` and safe
+  logs, fix the cause, then call `register_instance(app)` again.
 
 ## Registration network failure does not raise from `register_instance()`
 
 - Cause: 1.1 registration is always a background lifecycle command.
-- Fix: use `get_status()` and logs for Nacos timeouts/retry exhaustion.
+- Fix: use `get_status()` and logs for Nacos timeouts, finite retries, and
+  transient lifecycle recovery.
   `NACOS_FAIL_FAST=True` only raises cached deterministic registration errors.
   Thread creation/start, Client, SDK, timeout, and connection failures are
   safely recorded and never escape `register_instance()`.
+
+## Why does `operation_running=True` remain after finite retries?
+
+- Cause: the last registration failure has reliable transient transport
+  evidence. The Register Worker retains ownership after the ordinary finite
+  budget and waits with bounded backoff and jitter.
+- Investigate: safe warning logs identify the error type and recovery phase;
+  `get_status()` remains a local, side-effect-free view.
+- Fix: normally none—restore Nacos/network availability. Deregistration or
+  shutdown wakes the wait immediately. Set `NACOS_RETRY_ENABLED=False` when the
+  process must stop after its current attempt. Authentication, parameter, and
+  unknown SDK failures do not remain in lifecycle recovery.
 
 ## 2. Registration fails: `NACOS_SERVICE_NAME` empty
 

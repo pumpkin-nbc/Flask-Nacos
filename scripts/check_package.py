@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REQUIRED_MEMBERS = (
     "flask_nacos/py.typed",
     "flask_nacos/__init__.py",
+    "flask_nacos/_recovery.py",
     "flask_nacos/extension.py",
 )
 REQUIRED_LICENSE_FILES = ("LICENSE", "NOTICE")
