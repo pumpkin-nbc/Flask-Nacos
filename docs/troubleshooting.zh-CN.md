@@ -10,10 +10,32 @@
 ## 1. 应用启动后没有注册到 Nacos
 
 - 现象：Flask 应用已运行，但实例没有出现在 Nacos 中。
-- 可能原因：注册被禁用，或自动注册被关闭。
-- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED`、
-  `NACOS_AUTO_REGISTER`、`NACOS_AUTO_REGISTER_ON_INIT`；查看日志和 `get_status()`。
-- 解决建议：开启相关开关，或显式调用 `nacos.register_instance()`。
+- 可能原因：某个注册开关被显式关闭、确定性注册预检失败，或后台注册操作失败。
+- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与
+  `NACOS_AUTO_REGISTER`；查看日志和 `get_status()`。
+- 解决建议：恢复预期的开关（`NACOS_AUTO_REGISTER` 默认值为 `True`），或修复状态中报告的原因后
+  显式调用 `nacos.register_instance(app)`。
+- 若 `operation_running=True`，生命周期仍在收敛。已确认的瞬时网络故障会让 Worker保持低频
+  自恢复，不需要 HTTP 或业务触发。若其变为 `False`，同时 `target_registered=True` 且
+  `registered=False`，则最近失败属于确定性/UNKNOWN（或已关闭重试）；请检查 `last_error`
+  与安全日志，修复后再次调用 `register_instance(app)`。
+
+## 注册网络错误不会从 `register_instance()` 抛出
+
+- 可能原因：1.1 的注册始终是后台生命周期命令。
+- 解决建议：通过 `get_status()` 与日志查看 Nacos 超时、有限重试与瞬时故障生命周期自恢复。
+  `NACOS_FAIL_FAST=True` 只同步抛出缓存的确定性注册错误。Thread 创建/启动、Client、
+  SDK、超时与连接错误都安全写入状态，不会从 `register_instance()` 抛出。
+
+## 为什么有限重试后 `operation_running=True` 仍持续存在？
+
+- 可能原因：最近注册失败存在可靠瞬时传输故障证据。普通有限预算耗尽后，Register Worker
+  继续持有 owner，并使用有界退避与抖动进行低频恢复。
+- 排查方法：安全 WARNING 会标明错误类型和 recovery阶段；`get_status()` 仍是无副作用的
+  本地视图。
+- 解决建议：通常无需额外触发，只需恢复 Nacos/网络。注销或 shutdown 会立即唤醒等待。
+  如果进程必须在当前一次失败后停止，可设置 `NACOS_RETRY_ENABLED=False`。认证、参数和
+  UNKNOWN SDK失败不会持续进入生命周期自恢复。
 
 ## 2. 注册失败：`NACOS_SERVICE_NAME` 为空
 
@@ -36,12 +58,14 @@
 - 排查方法：查看 Nacos / `get_status()` 中注册的 IP。
 - 解决建议：显式设置 `NACOS_SERVICE_IP`。
 
-## 5. Nacos client 初始化失败
+## 5. Nacos Client 创建失败
 
-- 现象：`get_status()` 中 `client_initialized` 为 `False`。
+- 现象：`client_created` 一直为 `False`、注册以安全 `last_error` 结束，或显式
+  `get_client()` 抛出 `FlaskNacosError`。
 - 可能原因：`NACOS_SERVER_ADDR` 错误、网络问题或认证失败。
 - 排查方法：核对服务地址与连通性；查看日志。
-- 解决建议：修正地址/凭据。可临时设置 `NACOS_FAIL_FAST=True` 让错误在启动时暴露。
+- 解决建议：修正地址/凭据。认证结构属于确定性配置，可用 `NACOS_FAIL_FAST=True` 在启动
+  阶段暴露；运行期连接错误仍是后台生命周期错误。
 
 ## 6. 用户名 / 密码错误
 
@@ -95,7 +119,7 @@
   namespace/group。
 - 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志，确认
   `NACOS_SERVICE_EPHEMERAL=True`、namespace 与 group。`/health/nacos` 只反映本地
-  client 初始化状态，不是远端心跳探测。
+  生命周期状态，不是远端心跳探测。
 - 解决建议：使用 Flask-Nacos 默认的 `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`，或设置
   另一个大于 0 的有限间隔。不要用初始 `healthy=True` 代替持续心跳。
 
@@ -113,20 +137,20 @@
 - 可能原因：Nacos 使用 service/group/cluster/IP/port 标识实例。多个 worker 公布相同 IP
   和端口时共享同一个实例，尽管 Flask-Nacos 会分别维护它们的本地状态。
 - 排查方法：比较完整的注册地址，不要仅比较 worker 数量。
-- 解决建议：共享端点设置 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册
+- 解决建议：共享端点设置 `NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册
   与注销。详见[生产部署](production.zh-CN.md)。
 
 ## 12. `NACOS_FAIL_FAST=True` 导致启动失败
 
 - 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间崩溃，或采用延迟加载的 WSGI
   服务器直到第一次请求才显示异常。
-- 可能原因：`NACOS_FAIL_FAST=True` 会把 Nacos 错误变成异常。启用自动注册时，会在创建
-  client 前校验缺失或非法的注册配置。
+- 可能原因：`NACOS_FAIL_FAST=True` 会把确定性配置错误变成异常。启用自动注册时，会在
+  创建 Client 前校验缺失或非法的注册配置。
 - 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
   是非空且不能只包含空白字符的字符串。
-- 解决建议：修复底层 Nacos 问题，或使用 `NACOS_FAIL_FAST=False`（默认），让失败被
-  记录并继续启动。如果校验必须在接收流量前完成，请为 WSGI 服务器启用 eager
-  load/preload。
+- 解决建议：修正非法配置，或使用 `NACOS_FAIL_FAST=False`（默认），让安全错误保持可见
+  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER=False`，并在 fork
+  后的 worker hook 中注册。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict
 
@@ -151,7 +175,7 @@
 - 可能原因：底层 `nacos-sdk-python` 在创建 client 时，若其 logger 没有 handler 就会自行
   添加文件 handler。
 - 排查方法：确认该文件是在创建 Nacos client 之后才出现。
-- 解决建议：升级到 flask-nacos 1.0.2+。它会静默 SDK 原生 logger，并将 SDK 初始化指向
+- 解决建议：使用 flask-nacos 1.1.0。它会静默 SDK 原生 logger，并将 SDK 初始化指向
   已存在的其他目录，因此不会创建默认文件或 `~/logs/nacos` 目录。不要开启 SDK 原生日志，
   因为其中可能包含敏感请求或配置数据。
 
@@ -182,7 +206,7 @@
 - 可能原因：使用了旧版 flask-nacos，或其他组件在 flask-nacos 配置日志之前就创建了 client。
 - 排查方法：确保 `FlaskNacos(app)` / `init_app(app)` 在任何直接构造 `nacos.NacosClient`
   的代码之前执行。
-- 解决建议：升级到 1.0.2+。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
+- 解决建议：使用 1.1.0。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
   初始化不使用用户主目录。直接创建的 SDK client 不受 Flask-Nacos 控制。
 
 ## 19. flask-nacos 日志重复输出
@@ -217,5 +241,5 @@
 - 现象：多次调用 `init_app(app)` 导致 handler / 日志行成倍增加。
 - 可能原因：简单的 handler 设置会在每次调用时重复添加。
 - 排查方法：统计 `logging.getLogger("flask_nacos")` 上的 handler 数量。
-- 解决建议：1.0.2+ 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
+- 解决建议：1.1.0 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
   添加第二个 console 或 file handler。

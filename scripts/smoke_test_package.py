@@ -29,10 +29,29 @@ assert Path(flask_nacos.__file__).with_name("py.typed").is_file(), "py.typed mis
 
 app = Flask(__name__)
 app.config.update(NACOS_ENABLED=False)
-FlaskNacos(app)
+nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
+with app.app_context():
+    assert nacos.config["NACOS_AUTO_REGISTER"] is True, (
+        "NACOS_AUTO_REGISTER must default to True"
+    )
+    assert nacos.client is None, "cache-only client property must remain lazy"
 
-print("[smoke] import + typing marker + init OK (version=%s)" % expected)
+assert nacos.register_instance(app) is None, "registration command must return None"
+status = nacos.get_status(app)
+assert set(status) == {{
+    "enabled", "pid", "client_created", "service_name", "group_name",
+    "cluster_name", "service_ip", "service_port", "target_registered",
+    "registered", "operation_running", "last_error",
+}}
+assert status["enabled"] is False
+assert status["client_created"] is False
+assert status["target_registered"] is False
+assert status["registered"] is False
+assert status["operation_running"] is False
+assert status["last_error"] is None
+
+print("[smoke] import + typing marker + init + registration API OK (version=%s)" % expected)
 """
 
 
@@ -92,9 +111,7 @@ def _test_artifact(kind: str, artifact: str, expected: str, parent: Path) -> boo
         )
         return False
 
-    check = subprocess.run(
-        [str(py), "-c", _CHECK_SCRIPT.format(expected=expected)], check=False
-    )
+    check = subprocess.run([str(py), "-c", _CHECK_SCRIPT.format(expected=expected)], check=False)
     if check.returncode != 0:
         print(
             f"[smoke_test_package] FAILED - {kind} import/init check failed",

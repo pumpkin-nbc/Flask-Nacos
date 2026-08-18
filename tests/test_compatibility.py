@@ -15,7 +15,8 @@ def test_standard_mode_registers_extension(make_app, patched_create_client):
     app = make_app()
     nacos = FlaskNacos(app)
     assert "nacos" in app.extensions
-    assert nacos.config is not None
+    with app.app_context():
+        assert nacos.config is not None
 
 
 def test_factory_mode_registers_extension(make_app, patched_create_client):
@@ -23,7 +24,8 @@ def test_factory_mode_registers_extension(make_app, patched_create_client):
     nacos = FlaskNacos()
     nacos.init_app(app)
     assert "nacos" in app.extensions
-    assert nacos.config is not None
+    with app.app_context():
+        assert nacos.config is not None
 
 
 def test_repeated_init_app_does_not_raise(make_app, patched_create_client):
@@ -40,9 +42,7 @@ def test_health_route_registers_when_enabled(make_app, patched_create_client):
     assert HEALTH_ENDPOINT in app.view_functions
 
 
-def test_health_route_repeat_registration_is_idempotent(
-    make_app, patched_create_client
-):
+def test_health_route_repeat_registration_is_idempotent(make_app, patched_create_client):
     app = make_app({"NACOS_HEALTH_CHECK_ENABLED": True})
     nacos = FlaskNacos(app)
     # A second explicit registration must not raise and must be skipped.

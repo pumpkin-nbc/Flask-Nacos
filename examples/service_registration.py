@@ -21,11 +21,7 @@ app.config.update(
     NACOS_SERVICE_PORT=int(os.environ.get("NACOS_SERVICE_PORT", "5000")),
     # Auto-register during trusted application initialization.
     NACOS_AUTO_REGISTER=True,
-    NACOS_AUTO_REGISTER_ON_INIT=True,
     NACOS_AUTO_DEREGISTER=True,
-    # With once-per-process True, repeat register_instance() calls are no-ops
-    # within the same process.
-    NACOS_REGISTER_ONCE_PER_PROCESS=True,
     NACOS_FAIL_FAST=False,
 )
 
@@ -37,9 +33,12 @@ def status():
     current = nacos.get_status()
     return jsonify(
         {
-            "nacos_enabled": current.get("nacos_enabled", False),
-            "client_initialized": current.get("client_initialized", False),
+            "enabled": current.get("enabled", False),
+            "client_created": current.get("client_created", False),
+            "target_registered": current.get("target_registered", False),
             "registered": current.get("registered", False),
+            "operation_running": current.get("operation_running", False),
+            "last_error": current.get("last_error"),
             "service_name": current.get("service_name"),
             "service_port": current.get("service_port"),
         }

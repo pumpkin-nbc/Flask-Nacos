@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-"""Check that the public API matches the frozen 1.0.0 candidate snapshot.
+"""Check that the public API matches the Flask-Nacos 1.1 snapshot.
 
-From 0.9.0 the public API is treated as the release-candidate stable surface.
-This guard fails if a frozen method is missing or if an explicitly unsupported
-identifier appears, so the API cannot be accidentally changed or removed before
-1.0.0.
+Version 1.1 uses explicit/current-app lifecycle commands. This guard enforces
+the supported signatures and rejects unpublished asynchronous variants.
 
 Uses only the standard library (``importlib`` / ``inspect``). It imports the
 package but never creates a real Nacos connection. Exits non-zero on any
@@ -12,10 +10,11 @@ problem.
 """
 
 import importlib
+import inspect
 import sys
 from typing import List
 
-# Methods that must exist on FlaskNacos (the frozen public surface).
+# Methods that must exist on FlaskNacos (the supported public surface).
 REQUIRED_METHODS = (
     "init_app",
     "get_client",
@@ -30,6 +29,8 @@ REQUIRED_METHODS = (
 
 # Identifiers that must never appear on the public surface.
 FORBIDDEN_METHODS = (
+    "ensure_registered_async",
+    "register_instance_async",
     "get_config_as_dict",
     "load_config_to_flask",
 )
@@ -53,6 +54,25 @@ def scan() -> List[str]:
         if not callable(getattr(extension, name, None)):
             problems.append(f"missing frozen API method: FlaskNacos.{name}()")
 
+    register = getattr(extension, "register_instance", None)
+    if callable(register):
+        signature = inspect.signature(register)
+        if list(signature.parameters) != ["self", "app"]:
+            problems.append("register_instance() must accept self and optional app")
+        elif signature.parameters["app"].default is not None:
+            problems.append("register_instance(app) must default app to None")
+        if signature.return_annotation is not None:
+            problems.append("register_instance() must be annotated as returning None")
+
+    for name in ("deregister_instance", "get_status", "get_client"):
+        method = getattr(extension, name, None)
+        if callable(method):
+            signature = inspect.signature(method)
+            if list(signature.parameters) != ["self", "app"]:
+                problems.append(f"{name}() must accept self and optional app")
+            elif signature.parameters["app"].default is not None:
+                problems.append(f"{name}(app) must default app to None")
+
     all_names = getattr(flask_nacos, "__all__", [])
     for name in FORBIDDEN_METHODS:
         if hasattr(extension, name):
@@ -66,7 +86,7 @@ def scan() -> List[str]:
 def main() -> int:
     problems = scan()
     if not problems:
-        print("[check_api_snapshot] OK - public API matches the frozen 1.0.0 candidate")
+        print("[check_api_snapshot] OK - public API matches the 1.1 surface")
         return 0
 
     print("[check_api_snapshot] FAILED - public API problems:", file=sys.stderr)

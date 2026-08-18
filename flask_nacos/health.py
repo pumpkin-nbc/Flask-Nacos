@@ -20,33 +20,33 @@ HEALTH_ENDPOINT = "flask_nacos_health"
 
 
 def build_health_payload(extension: "FlaskNacos") -> Dict[str, Any]:
-    """Build the health-check response body from the extension state."""
+    """Build the fixed, local-only health response."""
     status = extension.get_status()
 
-    nacos_enabled = status.get("nacos_enabled", False)
-    client_initialized = status.get("client_initialized", False)
+    enabled = status["enabled"]
+    registered = status["registered"]
+    target_registered = status["target_registered"]
+    operation_running = status["operation_running"]
+    last_error = status["last_error"]
 
-    if not nacos_enabled:
+    if not enabled:
         overall = "disabled"
-    elif not client_initialized:
-        overall = "error"
-    else:
+    elif registered == target_registered:
         overall = "ok"
+    elif operation_running and last_error is None:
+        overall = "ok"
+    else:
+        overall = "error"
 
-    payload: Dict[str, Any] = {
+    return {
         "status": overall,
-        "nacos_enabled": nacos_enabled,
-        "client_initialized": client_initialized,
-        "registered": status.get("registered", False),
+        "enabled": enabled,
+        "client_created": status["client_created"],
+        "target_registered": target_registered,
+        "registered": registered,
+        "operation_running": operation_running,
+        "last_error": last_error,
     }
-
-    # Only include instance identity fields when they are known.
-    for key in ("service_name", "service_ip", "service_port"):
-        value = status.get(key)
-        if value is not None:
-            payload[key] = value
-
-    return payload
 
 
 def register_health_route(app: "Flask", extension: "FlaskNacos") -> bool:

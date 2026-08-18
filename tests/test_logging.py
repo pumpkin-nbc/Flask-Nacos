@@ -1,4 +1,4 @@
-"""Tests for unified NACOS_LOG_* logging control (1.0.2).
+"""Tests for unified NACOS_LOG_* logging control.
 
 These tests verify that flask-nacos configures both its own logger and the
 underlying nacos-sdk-python loggers without side effects: no default file, no
@@ -64,21 +64,16 @@ def _flask_logger():
 
 def _console_handlers(logger):
     return [
-        h
-        for h in logger.handlers
-        if getattr(h, "_flask_nacos_handler_type", None) == "console"
+        h for h in logger.handlers if getattr(h, "_flask_nacos_handler_type", None) == "console"
     ]
 
 
 def _file_handlers(logger):
-    return [
-        h
-        for h in logger.handlers
-        if getattr(h, "_flask_nacos_handler_type", None) == "file"
-    ]
+    return [h for h in logger.handlers if getattr(h, "_flask_nacos_handler_type", None) == "file"]
 
 
 # 1-6: default behavior ------------------------------------------------------
+
 
 def test_default_does_not_create_sdk_default_log_file(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -127,12 +122,11 @@ def test_disabled_default_uses_named_flask_nacos_logger():
     assert logger.name == "flask_nacos"
     # Only a NullHandler is attached by default (blocks the SDK file quietly).
     assert logger.hasHandlers()
-    assert not any(
-        not isinstance(h, logging.NullHandler) for h in logger.handlers
-    )
+    assert not any(not isinstance(h, logging.NullHandler) for h in logger.handlers)
 
 
 # 7: disabled ----------------------------------------------------------------
+
 
 def test_disabled_silences_flask_nacos_and_sdk_loggers():
     app, cfg = _cfg(NACOS_LOG_ENABLED=False)
@@ -164,6 +158,7 @@ def test_disabled_ignores_configured_path_and_filename(tmp_path):
 
 # 8: level -------------------------------------------------------------------
 
+
 def test_debug_level_applies_only_to_flask_nacos_logger():
     app, cfg = _cfg(NACOS_LOG_LEVEL="DEBUG")
     nlog.configure_logger(app, cfg)
@@ -175,6 +170,7 @@ def test_debug_level_applies_only_to_flask_nacos_logger():
 
 
 # 9-10: invalid level with fail-fast rules -----------------------------------
+
 
 def test_invalid_level_without_fail_fast_falls_back_to_info():
     app, cfg = _cfg(NACOS_LOG_LEVEL="BOGUS", NACOS_FAIL_FAST=False)
@@ -237,6 +233,7 @@ def test_get_log_level_helper():
 
 # 11-12: console handler + dedup ---------------------------------------------
 
+
 def test_console_enabled_adds_stream_handler():
     app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True)
     nlog.configure_logger(app, cfg)
@@ -291,9 +288,7 @@ def test_last_configuration_atomically_removes_console_handler():
 def test_repeated_init_app_does_not_duplicate_handlers(monkeypatch):
     from flask_nacos import extension as extension_module
 
-    monkeypatch.setattr(
-        extension_module, "create_client", lambda cfg: object()
-    )
+    monkeypatch.setattr(extension_module, "create_client", lambda cfg: object())
     app = Flask(__name__)
     app.config.update(
         NACOS_ENABLED=True,
@@ -312,6 +307,7 @@ def test_repeated_init_app_does_not_duplicate_handlers(monkeypatch):
 
 # 13-15: file handler --------------------------------------------------------
 
+
 def test_enabled_without_directory_uses_default_path(tmp_path):
     app, cfg = _cfg()
     nlog.configure_logger(app, cfg)
@@ -322,9 +318,7 @@ def test_enabled_without_directory_uses_default_path(tmp_path):
 
 def test_file_configured_adds_file_handler(tmp_path):
     log_directory = tmp_path / "sub"
-    app, cfg = _cfg(
-        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_FILENAME="custom.log"
-    )
+    app, cfg = _cfg(NACOS_LOG_PATH=str(log_directory), NACOS_LOG_FILENAME="custom.log")
     nlog.configure_logger(app, cfg)
     files = _file_handlers(_flask_logger())
     assert len(files) == 1
@@ -406,6 +400,7 @@ def test_non_fail_fast_file_failure_keeps_requested_console_logging(monkeypatch)
 
 # 17: rotating file ----------------------------------------------------------
 
+
 def test_max_bytes_uses_rotating_file_handler(tmp_path):
     log_directory = tmp_path / "rotating"
     app, cfg = _cfg(
@@ -421,9 +416,7 @@ def test_max_bytes_uses_rotating_file_handler(tmp_path):
 
 def test_no_max_bytes_uses_plain_file_handler(tmp_path):
     log_directory = tmp_path / "plain"
-    app, cfg = _cfg(
-        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_MAX_BYTES=None
-    )
+    app, cfg = _cfg(NACOS_LOG_PATH=str(log_directory), NACOS_LOG_MAX_BYTES=None)
     nlog.configure_logger(app, cfg)
     handler = _file_handlers(_flask_logger())[0]
     assert isinstance(handler, logging.FileHandler)
@@ -431,6 +424,7 @@ def test_no_max_bytes_uses_plain_file_handler(tmp_path):
 
 
 # 18: file handler dedup -----------------------------------------------------
+
 
 def test_repeated_configuration_does_not_duplicate_file_handler(tmp_path):
     log_directory = tmp_path / "dedup"
@@ -459,6 +453,7 @@ def test_last_configuration_replaces_and_then_removes_file_handler(tmp_path):
 
 # 19-20: propagation ---------------------------------------------------------
 
+
 def test_propagate_false_applies_to_all_managed_loggers():
     app, cfg = _cfg(NACOS_LOG_PROPAGATE=False)
     nlog.configure_logger(app, cfg)
@@ -475,6 +470,7 @@ def test_propagate_true_never_enables_sdk_propagation():
 
 
 # 21: Flask logger remains independent --------------------------------------
+
 
 def test_flask_app_logger_handlers_are_not_reused_or_modified():
     app = Flask(__name__)
@@ -495,6 +491,7 @@ def test_flask_app_logger_handlers_are_not_reused_or_modified():
 
 
 # 22: remove SDK default file handler ----------------------------------------
+
 
 def test_sdk_default_file_handler_is_removed(tmp_path, monkeypatch):
     default_path = tmp_path / "logs" / "nacos" / "nacos-client-python.log"
@@ -553,9 +550,7 @@ def test_configured_file_contains_only_safe_wrapper_records(tmp_path):
     )
     log_directory = tmp_path / "logs"
     log_file = log_directory / "flask-nacos.log"
-    app, cfg = _cfg(
-        NACOS_LOG_PATH=str(log_directory), NACOS_LOG_LEVEL="DEBUG"
-    )
+    app, cfg = _cfg(NACOS_LOG_PATH=str(log_directory), NACOS_LOG_LEVEL="DEBUG")
     nlog.configure_logger(app, cfg)
 
     for secret in secrets:
@@ -570,6 +565,7 @@ def test_configured_file_contains_only_safe_wrapper_records(tmp_path):
 
 
 # 23-24: do not touch app.logger / root handlers -----------------------------
+
 
 def test_does_not_modify_flask_app_logger_handlers():
     app = Flask(__name__)
@@ -592,6 +588,7 @@ def test_does_not_modify_root_logger_handlers():
 
 # 25: no secrets in logs -----------------------------------------------------
 
+
 def test_logs_do_not_contain_secrets(monkeypatch):
     from flask_nacos import extension as extension_module
 
@@ -601,9 +598,7 @@ def test_logs_do_not_contain_secrets(monkeypatch):
     pre._flask_nacos_handler_type = "console"
     _flask_logger().addHandler(pre)
 
-    monkeypatch.setattr(
-        extension_module, "create_client", lambda cfg: object()
-    )
+    monkeypatch.setattr(extension_module, "create_client", lambda cfg: object())
     app = Flask(__name__)
     app.config.update(
         NACOS_ENABLED=True,
@@ -624,18 +619,18 @@ def test_logs_do_not_contain_secrets(monkeypatch):
 
 # 26: never create a log file at an unexpected path --------------------------
 
+
 def test_no_file_created_outside_configured_path(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    app, cfg = _cfg(
-        NACOS_LOG_CONSOLE_ENABLED=True, NACOS_LOG_FILE_ENABLED=False
-    )
+    app, cfg = _cfg(NACOS_LOG_CONSOLE_ENABLED=True, NACOS_LOG_FILE_ENABLED=False)
     nlog.configure_logger(app, cfg)
     # Only console logging requested: nothing on disk anywhere under HOME.
     assert list(tmp_path.rglob("*.log")) == []
 
 
 # get_config() still returns raw content (regression guard) ------------------
+
 
 def test_get_config_still_returns_raw_string(monkeypatch):
     from flask_nacos import extension as extension_module
@@ -644,9 +639,7 @@ def test_get_config_still_returns_raw_string(monkeypatch):
         def get_config(self, data_id, group, **kwargs):
             return "raw-content-string"
 
-    monkeypatch.setattr(
-        extension_module, "create_client", lambda cfg: _FakeClient()
-    )
+    monkeypatch.setattr(extension_module, "create_client", lambda cfg: _FakeClient())
     app = Flask(__name__)
     app.config.update(
         NACOS_ENABLED=True,

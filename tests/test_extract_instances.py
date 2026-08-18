@@ -7,6 +7,11 @@ from flask_nacos.discovery import extract_instances
 from flask_nacos.exceptions import NacosDiscoveryError
 
 
+def _call(app, operation, *args, **kwargs):
+    with app.app_context():
+        return operation(*args, **kwargs)
+
+
 class _ObjInstance:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -65,9 +70,7 @@ def test_extract_unrecognized_shape_raises():
         extract_instances("not-a-valid-response")
 
 
-def test_list_instances_handles_data_hosts(
-    make_app, patched_create_client, fake_client
-):
+def test_list_instances_handles_data_hosts(make_app, patched_create_client, fake_client):
     fake_client.list_naming_instance.return_value = {
         "data": {
             "hosts": [
@@ -79,7 +82,7 @@ def test_list_instances_handles_data_hosts(
     app = make_app()
     nacos = FlaskNacos(app)
 
-    result = nacos.list_instances("user-service")
+    result = _call(app, nacos.list_instances, "user-service")
     assert {r["port"] for r in result} == {8000, 8001}
 
 
@@ -90,7 +93,7 @@ def test_list_instances_unrecognized_shape_default_empty(
     app = make_app()
     nacos = FlaskNacos(app)
 
-    assert nacos.list_instances("user-service") == []
+    assert _call(app, nacos.list_instances, "user-service") == []
 
 
 def test_list_instances_unrecognized_shape_fail_fast_raises(
@@ -101,4 +104,4 @@ def test_list_instances_unrecognized_shape_fail_fast_raises(
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosDiscoveryError):
-        nacos.list_instances("user-service")
+        _call(app, nacos.list_instances, "user-service")

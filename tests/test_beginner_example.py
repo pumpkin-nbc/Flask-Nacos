@@ -5,12 +5,16 @@ import runpy
 from pathlib import Path
 
 import flask_nacos.extension as extension_module
+from tests.helpers import wait_registered, wait_until
 
 EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "beginner_app.py"
 PUBLIC_STATUS_FIELDS = {
-    "nacos_enabled",
-    "client_initialized",
+    "enabled",
+    "client_created",
+    "target_registered",
     "registered",
+    "operation_running",
+    "last_error",
     "service_name",
     "service_port",
 }
@@ -18,6 +22,16 @@ PUBLIC_STATUS_FIELDS = {
 
 def _load_example():
     return runpy.run_path(str(EXAMPLE), run_name="flask_nacos_beginner_example")
+
+
+def _stop_registration(module):
+    nacos = module["nacos"]
+    app = module["app"]
+    assert nacos.deregister_instance(app) is True
+    wait_until(lambda: not nacos.get_status(app)["operation_running"])
+    status = nacos.get_status(app)
+    assert status["target_registered"] is False
+    assert status["registered"] is False
 
 
 def test_beginner_example_runs_without_nacos(monkeypatch):
@@ -33,12 +47,12 @@ def test_beginner_example_runs_without_nacos(monkeypatch):
 
     home = client.get("/")
     assert home.status_code == 200
-    assert home.get_json()["nacos_enabled"] is False
+    assert home.get_json()["enabled"] is False
 
     status = client.get("/nacos/status")
     assert status.status_code == 200
     assert set(status.get_json()) == PUBLIC_STATUS_FIELDS
-    assert status.get_json()["client_initialized"] is False
+    assert status.get_json()["client_created"] is False
 
     health = client.get("/health/nacos")
     assert health.status_code == 200
@@ -66,6 +80,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
     fake_client.get_config.return_value = "greeting=hello-from-nacos"
     module = _load_example()
     app = module["app"]
+    wait_registered(module["nacos"], app)
     client = app.test_client()
 
     cfg = app.extensions["nacos"]["config"]
@@ -87,7 +102,7 @@ def test_beginner_example_covers_registration_config_and_discovery(
 
     status = client.get("/nacos/status").get_json()
     assert set(status) == PUBLIC_STATUS_FIELDS
-    assert status["client_initialized"] is True
+    assert status["client_created"] is True
     assert status["registered"] is True
 
     health = client.get("/health/nacos")
@@ -130,31 +145,32 @@ def test_beginner_example_hides_client_failure_details(monkeypatch, caplog, tmp_
     with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
         module = _load_example()
         client = module["app"].test_client()
+    try:
+        status = client.get("/nacos/status")
+        assert status.status_code == 200
+        assert status.get_json()["client_created"] is False
 
-    status = client.get("/nacos/status")
-    assert status.status_code == 200
-    assert status.get_json()["client_initialized"] is False
-
-    responses = [client.get("/nacos/config"), client.get("/nacos/instances")]
-    assert all(response.status_code == 503 for response in responses)
-    combined = "".join(response.get_data(as_text=True) for response in responses)
-    assert "hidden-example-token" not in combined
-    assert "private-example-user" not in combined
-    assert "private-example-password" not in combined
-    log_output = "\n".join(record.getMessage() for record in caplog.records)
-    assert "hidden-example-token" not in log_output
-    assert "private-example-user" not in log_output
-    assert "private-example-password" not in log_output
+        responses = [client.get("/nacos/config"), client.get("/nacos/instances")]
+        assert all(response.status_code == 503 for response in responses)
+        combined = "".join(response.get_data(as_text=True) for response in responses)
+        assert "hidden-example-token" not in combined
+        assert "private-example-user" not in combined
+        assert "private-example-password" not in combined
+        log_output = "\n".join(record.getMessage() for record in caplog.records)
+        assert "hidden-example-token" not in log_output
+        assert "private-example-user" not in log_output
+        assert "private-example-password" not in log_output
+    finally:
+        _stop_registration(module)
 
 
-def test_beginner_example_supports_access_key_authentication(
-    monkeypatch, patched_create_client
-):
+def test_beginner_example_supports_access_key_authentication(monkeypatch, patched_create_client):
     monkeypatch.setenv("NACOS_ENABLED", "true")
     monkeypatch.setenv("NACOS_ACCESS_KEY", "example-access-key")
     monkeypatch.setenv("NACOS_SECRET_KEY", "example-secret-key")
 
     module = _load_example()
+    wait_registered(module["nacos"], module["app"])
     cfg = module["app"].extensions["nacos"]["config"]
 
     assert cfg["NACOS_USERNAME"] is None

@@ -2,6 +2,7 @@
 
 from flask_nacos import FlaskNacos
 from flask_nacos.health import HEALTH_ENDPOINT
+from tests.helpers import wait_registered
 
 
 def test_health_route_registered_when_enabled(make_app, patched_create_client):
@@ -21,9 +22,7 @@ def test_health_route_not_registered_when_disabled(make_app, patched_create_clie
 
 
 def test_health_custom_path(make_app, patched_create_client):
-    app = make_app(
-        {"NACOS_HEALTH_CHECK_ENABLED": True, "NACOS_HEALTH_CHECK_PATH": "/healthz"}
-    )
+    app = make_app({"NACOS_HEALTH_CHECK_ENABLED": True, "NACOS_HEALTH_CHECK_PATH": "/healthz"})
     FlaskNacos(app)
 
     paths = {rule.rule for rule in app.url_map.iter_rules()}
@@ -39,17 +38,26 @@ def test_health_endpoint_returns_ok(make_app, patched_create_client):
             "NACOS_SERVICE_PORT": 5000,
         }
     )
-    FlaskNacos(app)
+    nacos = FlaskNacos(app)
+    wait_registered(nacos, app)
 
     resp = app.test_client().get("/health/nacos")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["status"] == "ok"
-    assert data["nacos_enabled"] is True
-    assert data["client_initialized"] is True
+    assert set(data) == {
+        "status",
+        "enabled",
+        "client_created",
+        "target_registered",
+        "registered",
+        "operation_running",
+        "last_error",
+    }
+    assert data["enabled"] is True
+    assert data["client_created"] is True
+    assert data["target_registered"] is True
     assert data["registered"] is True
-    assert data["service_name"] == "fund-service"
-    assert data["service_port"] == 5000
 
 
 def test_health_endpoint_disabled_status(make_app, patched_create_client):
@@ -59,25 +67,29 @@ def test_health_endpoint_disabled_status(make_app, patched_create_client):
     resp = app.test_client().get("/health/nacos")
     data = resp.get_json()
     assert data["status"] == "disabled"
-    assert data["nacos_enabled"] is False
-    assert data["client_initialized"] is False
+    assert data["enabled"] is False
+    assert data["client_created"] is False
+    assert data["target_registered"] is False
 
 
-def test_health_endpoint_error_status(make_app, monkeypatch):
-    import flask_nacos.extension as extension_module
-
-    def _failing_factory(config):
-        raise RuntimeError("cannot connect")
-
-    monkeypatch.setattr(extension_module, "create_client", _failing_factory)
-    app = make_app({"NACOS_HEALTH_CHECK_ENABLED": True, "NACOS_FAIL_FAST": False})
+def test_health_endpoint_error_status(make_app, patched_create_client):
+    app = make_app(
+        {
+            "NACOS_HEALTH_CHECK_ENABLED": True,
+            "NACOS_SERVICE_NAME": None,
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_FAIL_FAST": False,
+        }
+    )
     FlaskNacos(app)
 
     resp = app.test_client().get("/health/nacos")
     data = resp.get_json()
     assert data["status"] == "error"
-    assert data["nacos_enabled"] is True
-    assert data["client_initialized"] is False
+    assert data["enabled"] is True
+    assert data["client_created"] is False
+    assert data["target_registered"] is True
+    assert data["last_error"] == "NacosValidationError"
 
 
 def test_repeated_init_app_does_not_double_register(make_app, patched_create_client):

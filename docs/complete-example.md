@@ -85,6 +85,12 @@ same code target another Nacos deployment without hardcoding credentials.
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | Default config data ID. |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | Config group. |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | Config-read timeout in seconds. |
+| `NACOS_AUTO_DEREGISTER` | `true` | Allow this process to deregister its confirmed instance during shutdown. |
+| `NACOS_LOG_ENABLED` | `false` | Enable sanitized Flask-Nacos logging. |
+| `NACOS_LOG_CONSOLE_ENABLED` | `true` | Write logs to the console when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `true` | Write a rotating file when logging is enabled. |
+| `NACOS_LOG_PATH` | `./logs` | Log file directory. |
+| `NACOS_LOG_FILENAME` | `flask-nacos.log` | Log filename inside the configured directory. |
 | `FLASK_HOST` | `127.0.0.1` | Local development bind address. |
 
 `NACOS_SERVER_ADDR` is where this Flask process finds Nacos.
@@ -177,9 +183,12 @@ def nacos_status():
     status = nacos.get_status()
     return jsonify(
         {
-            "nacos_enabled": status.get("nacos_enabled", False),
-            "client_initialized": status.get("client_initialized", False),
+            "enabled": status.get("enabled", False),
+            "client_created": status.get("client_created", False),
+            "target_registered": status.get("target_registered", False),
             "registered": status.get("registered", False),
+            "operation_running": status.get("operation_running", False),
+            "last_error": status.get("last_error"),
             "service_name": status.get("service_name"),
             "service_port": status.get("service_port"),
         }
@@ -204,12 +213,12 @@ def read_config_in_background(app):
 
 The status route uses a field allowlist. Do not return the complete
 `get_status()` mapping from a public API because it contains deployment details
-such as the Nacos address, namespace, service IP, and process identifiers.
+such as the service IP and process identifier.
 
 Celery tasks, worker threads, and standalone scripts need the corresponding
 `app.app_context()` unless their integration already supplies one. The
-`app.extensions["nacos"]` entry is an internal state mapping containing
-`config` and `client`; it is not the `FlaskNacos` object. Application code should
+`app.extensions["nacos"]` entry is an internal state mapping; it is not the
+`FlaskNacos` object. Application code should
 import `nacos` from `app.extensions` as shown above.
 
 Keep Nacos values in the Flask configuration class or environment variables,
@@ -229,10 +238,13 @@ NACOS_AUTO_REGISTER = False
 python examples/complete_factory_app.py
 ```
 
-During `create_app()` Flask-Nacos creates the SDK client, registers the service,
-and installs `/health/nacos`. Registration is idempotent in the current process.
-The exit handler deregisters only an instance successfully registered by this
-application when the process exits normally.
+During `create_app()` Flask-Nacos schedules background registration and installs
+`/health/nacos` without creating the SDK Client in the initialization thread;
+the factory does not wait for Nacos network I/O. Registration is single-flight
+in the current process. The status
+endpoint may therefore report `registered=false` briefly. The exit handler waits
+for an in-flight registration and deregisters only an instance successfully
+registered by this application when the process exits normally.
 
 The example deliberately uses `NACOS_FAIL_FAST=False`: a temporary Nacos outage
 does not prevent Flask from starting. Nacos-dependent example endpoints return
@@ -258,8 +270,8 @@ Health route installed by Flask-Nacos:
 curl http://127.0.0.1:5000/health/nacos
 ```
 
-The health route reports client initialization state; it is not a remote Nacos
-server probe.
+The health route reports local lifecycle state; it is not a remote Nacos server
+probe and does not create a Client.
 
 Read the default config data ID. The route calls `nacos.get_config()` without a
 data ID so `NACOS_CONFIG_DATA_ID` is used:
@@ -292,15 +304,15 @@ docker compose -f examples/docker-compose-nacos.yml down
 Run the factory with Gunicorn on platforms where Gunicorn is supported:
 
 ```bash
-export NACOS_DEREGISTER_ON_EXIT="false"
+export NACOS_AUTO_DEREGISTER="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
-Each worker executes `create_app()`. `NACOS_REGISTER_ONCE_PER_PROCESS=True`
-prevents repeated SDK registration in one worker, and the process-aware lock is
-recreated after a fork. Workers sharing one IP and port advertise the same Nacos
+Each worker executes `create_app()`. Registration is always per-app,
+per-process, single-flight, and inherited locks/state are recreated after a
+fork. Workers sharing one IP and port advertise the same Nacos
 instance identity, not one instance per worker. Set
-`NACOS_DEREGISTER_ON_EXIT=False` for that shared endpoint, or use one external
+`NACOS_AUTO_DEREGISTER=False` for that shared endpoint, or use one external
 coordinator to own registration and deregistration.
 
 Native SDK logging is always silent because it may include sensitive request or

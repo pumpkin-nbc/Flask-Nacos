@@ -64,8 +64,7 @@ def get_log_level(level_name: Any, fail_fast: bool = False) -> int:
     if name in _VALID_LEVELS:
         return int(getattr(logging, name))
     _warn_or_raise(
-        f"Invalid NACOS_LOG_LEVEL {level_name!r}; expected one of "
-        f"{sorted(_VALID_LEVELS)}",
+        f"Invalid NACOS_LOG_LEVEL {level_name!r}; expected one of {sorted(_VALID_LEVELS)}",
         fail_fast,
     )
     return logging.INFO
@@ -84,9 +83,7 @@ def _make_formatter(fmt: Any, fail_fast: bool) -> logging.Formatter:
     except Exception as exc:
         if fail_fast:
             raise NacosLoggingError(f"Invalid NACOS_LOG_FORMAT {fmt!r}: {exc}") from exc
-        _internal_logger.warning(
-            "Invalid NACOS_LOG_FORMAT %r; using the default format", fmt
-        )
+        _internal_logger.warning("Invalid NACOS_LOG_FORMAT %r; using the default format", fmt)
         return logging.Formatter(DEFAULT_LOG_FORMAT)
 
 
@@ -275,11 +272,7 @@ def add_file_handler_once(
             handler.setFormatter(formatter)
             return True
     try:
-        logger.addHandler(
-            _create_file_handler(
-                resolved, formatter, level, max_bytes, backup_count
-            )
-        )
+        logger.addHandler(_create_file_handler(resolved, formatter, level, max_bytes, backup_count))
     except Exception as exc:
         if fail_fast:
             raise NacosLoggingError(
@@ -298,9 +291,7 @@ def _points_to_default_sdk_log(handler: logging.Handler) -> bool:
     return bool(base and os.path.abspath(base) == DEFAULT_SDK_LOG_PATH)
 
 
-def remove_nacos_default_file_handlers(
-    logger: logging.Logger, fail_fast: bool = False
-) -> None:
+def remove_nacos_default_file_handlers(logger: logging.Logger, fail_fast: bool = False) -> None:
     """Remove only the SDK's exact default log handler."""
     for handler in list(logger.handlers):
         if _is_owned(handler) or not _points_to_default_sdk_log(handler):

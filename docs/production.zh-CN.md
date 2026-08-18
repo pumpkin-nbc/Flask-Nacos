@@ -2,95 +2,96 @@
 
 [English](production.md) | 简体中文
 
-在生产环境中运行 flask-nacos 的建议。
+## 普通 WSGI 启动
 
-另请参阅：[配置项](configuration.zh-CN.md) -
-[服务注册](service-registration.zh-CN.md) - [错误排查](troubleshooting.zh-CN.md)。
+使用默认的 `NACOS_AUTO_REGISTER=True` 时，普通非预加载应用工厂会在
+`init_app(app)` 执行时调度注册。Client 创建与 Naming I/O 由一个 daemon收敛 Worker完成。
 
-## Gunicorn
+启动时遇到已确认的瞬时网络故障，Worker会先使用配置的有限重试预算，随后保持为低频、
+可中断的生命周期自恢复 owner；注册收敛、目标改变、shutdown开始或后续失败不再属于瞬时
+故障时结束。自恢复不依赖 HTTP 请求、readiness或其他业务触发。
 
-```bash
-gunicorn "app:create_app()" -w 4 -b 0.0.0.0:5000
+请显式配置消费者可访问的 `NACOS_SERVICE_IP` 与 `NACOS_SERVICE_PORT`；Flask 能在本机
+localhost 访问，不代表其他机器可以访问注册到 Nacos 的地址。
+
+## Gunicorn `--preload`
+
+预加载模式会在 worker fork 前由 master导入并初始化 Flask 应用。在此时启动 SDK Runtime
+或注册既有 fork 风险，也可能让 master注册。推荐配置：
+
+```python
+# application configuration
+NACOS_AUTO_REGISTER = False
 ```
 
-每个 worker 都是独立进程并各自执行 `init_app`，因此本地注册状态按进程区分。但公布相同
-service/group/cluster/IP/port 的 worker 在 Nacos 中仍对应同一个共享实例。
+然后在 Gunicorn 的 worker hook 中，于 fork 完成后调用现有生命周期命令：
 
-## uWSGI
+```python
+def post_fork(server, worker):
+    from myservice import app, nacos
 
-uWSGI 的行为与 Gunicorn 类似：每个 worker 都会初始化扩展，但公布相同 IP 和端口的 worker
-指向同一个 Nacos 实例。共享端点应关闭 worker 退出注销，或交给单一外部协调者管理生命周期。
+    nacos.register_instance(app)
+```
 
-## 多 worker 注册
+Flask-Nacos 不猜测服务器类型或 worker数量，也不增加 Gunicorn 专用公开 API。PID Runtime
+重建能阻止 worker复用父进程 Client、锁、Event 或注册事实，但无法撤销 preload master
+已经启动的工作。
 
-在多 worker 服务器下，主进程 fork 出多个 worker，flask-nacos 会按进程记录注册状态：
+## 多 worker 与共享端点
 
-- `NACOS_REGISTER_ONCE_PER_PROCESS=True`：同一进程内，`register_instance()` 首次
-  成功后重复调用会被跳过；fork 出的新 worker（新 pid）可注册自己的实例。
-- 退出时，某个进程只会尝试注销它注册时使用的实例标识。
+多个 worker使用相同服务身份与 IP:port（即相同 service/group/cluster/IP/port）时，在
+Nacos 中是同一个实例；虽然每个进程拥有独立本地 Runtime 和 Client，但一个 worker退出时
+不应删除其他 worker仍在提供服务的共享实例：
 
-进程状态相互独立不代表 Nacos 实例相互独立。多个 worker 共享同一个注册地址时，某个 worker
-退出可能在其他 worker 仍提供服务时删除共享实例。请设置 `NACOS_DEREGISTER_ON_EXIT=False`，
-或由单一外部协调者负责注册与注销。
+```python
+NACOS_AUTO_DEREGISTER = False
+```
 
-## Docker
+也可以由单一外部协调者负责注册与注销。每个 worker拥有不同 IP 或端口时，默认的
+`NACOS_AUTO_DEREGISTER=True` 才可能合适。
 
-- 将 `NACOS_SERVER_ADDR` 设为容器网络中可达的 Nacos 地址。
-- 显式设置 `NACOS_SERVICE_IP` 与 `NACOS_SERVICE_PORT`，以便其他服务能访问到该实例；
-  在容器内不要依赖自动识别。
-- 通过环境变量注入凭据，不要打进镜像。
+`NACOS_REGISTER_ENABLED=False` 会阻止新注册，但不会阻止清理当前 Runtime 已经注册的实例。
 
-本地测试用的 Nacos 见
-[`examples/docker-compose-nacos.yml`](../examples/docker-compose-nacos.yml)
-（仅限本地使用）。
+## 退出行为
 
-## 显式配置服务 IP 与端口
+退出回调会把当前 PID Runtime 标记为 shutting down 并唤醒重试等待。此后普通生命周期路径
+不能再启动 Naming RPC。
 
-生产环境请始终显式配置 `NACOS_SERVICE_NAME`、`NACOS_SERVICE_IP`、
-`NACOS_SERVICE_PORT`。
+- `NACOS_AUTO_DEREGISTER=False` 时立即返回，不等待，也不修改用户注册目标。
+- 设为 `True` 时，只可能等待已经在执行的那一笔 Naming RPC，使用其剩余超时加少量调度
+  余量，并设置五秒等待上限；随后最多执行一次基于准确缓存身份的退出注销。
 
-## 自动注销注意事项
+退出注销不重试、不调度后续注册，也不会猜测缺失身份。
 
-基于 `atexit` 的注销是“尽力而为”：在硬杀（`SIGKILL`）或崩溃时可能不会执行。Nacos
-最终会剔除不健康的临时实例，但为实现优雅下线，请确保进程能够干净退出。
+## 容器部署
 
-## `NACOS_AUTO_REGISTER_ON_INIT`
+优雅停止时间应覆盖 SDK 请求超时。显式设置注册 IP/端口，并优先使用控制台日志：
 
-当你希望精确控制注册时机（例如在 post-fork 钩子或管理命令中）而不是在 `init_app`
-阶段隐式注册时，将其设为 `False`。
+```python
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = True
+NACOS_LOG_FILE_ENABLED = False
+```
 
-## `NACOS_DEREGISTER_ON_EXIT`
+## 日志与密钥
 
-控制是否安装 `atexit` 注销处理器（仅当 `NACOS_AUTO_DEREGISTER` 也为 `True` 时）。
+SDK 原生日志被隔离，Flask-Nacos 不创建 `~/logs/nacos`。扩展安全日志默认关闭。启用文件
+日志时，`NACOS_LOG_PATH` 默认 `./logs`，`NACOS_LOG_FILENAME` 默认
+`flask-nacos.log`。
 
-## 生产环境日志
+Nacos 用户名/密码或 AK/SK 应放入环境变量或密钥管理器。不要通过无鉴权接口返回完整应用
+配置或内部状态。
 
-`NACOS_LOG_*` 只控制 Flask-Nacos 生成的脱敏安全日志。SDK 原生日志（来自
-`nacos-sdk-python`）可能包含敏感请求或响应数据，因此始终静默。建议：
+## HTTPS 限制
 
-1. 如需文件日志，设置 `NACOS_LOG_ENABLED=True` 并配置 `NACOS_LOG_PATH` 与
-   `NACOS_LOG_FILENAME`（如需轮转再配置相关参数）。
-2. 容器环境优先输出到 stdout：设置 `NACOS_LOG_ENABLED=True`、
-   `NACOS_LOG_CONSOLE_ENABLED=True` 和 `NACOS_LOG_FILE_ENABLED=False`。
-3. 若项目已有统一日志系统，设置 `NACOS_LOG_PROPAGATE=True` 和 `NACOS_LOG_FILE_ENABLED=False`，
-   让现有 handler 负责格式化与路由。
-4. 若连 Flask-Nacos 安全日志也不希望产生，设置 `NACOS_LOG_ENABLED=False`。
-5. 生产环境不要依赖 nacos-sdk-python 的默认日志路径。
-6. 日志默认关闭，因此不创建用户配置的目录或 `~/logs/nacos`；启用后默认写入
-   `./logs/flask-nacos.log`。
+当前支持的同步 Nacos SDK 2.x 在 HTTPS 服务端证书校验方面存在限制。应将其视为部署风险：
+使用可信私有网络、具备适当控制的终止代理，或其他经过验证的传输边界，直到上游 SDK能力
+满足安全策略。
 
-## 日志安全
+## 健康与观测
 
-敏感信息（`NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、`NACOS_SECRET_KEY`）不会写入日志。
-也请保持你自己的应用日志中不含凭据。
+`/health/nacos` 与 `get_status()` 只反映本地生命周期，不查询 Nacos，也不读取 SDK 心跳
+成功状态。就绪策略要求当前 Nacos 可达时，请增加独立远端探针。
 
-## HTTPS 证书校验
-
-同步 `nacos-sdk-python` 2.x 没有提供可靠的 HTTPS 证书校验控制。请使用受信网络，或通过
-能够验证 Nacos 服务端证书的 TLS 代理 / sidecar 终止 TLS。不要认为地址使用 `https://`
-就已经验证了服务端身份。
-
-## 敏感信息不要进入代码仓库
-
-切勿提交真实凭据、内部 Nacos 地址或内部 IP。建议通过环境变量或密钥管理服务注入
-配置。
+瞬时启动故障自恢复期间可能持续看到 `operation_running=True` 与 `registered=False`；它表示
+本地仍在收敛，不是远端健康结果。读取 status 或 health 既不会加速，也不会触发重试。

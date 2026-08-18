@@ -109,7 +109,6 @@ def test_new_030_config_defaults():
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is False
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/health/nacos"
     assert cfg["NACOS_STATUS_ENABLED"] is True
-    assert cfg["NACOS_AUTO_REGISTER_ON_INIT"] is True
 
 
 def test_new_030_config_overrides():
@@ -121,7 +120,6 @@ def test_new_030_config_overrides():
         NACOS_REQUEST_TIMEOUT="10",
         NACOS_HEALTH_CHECK_ENABLED="true",
         NACOS_HEALTH_CHECK_PATH="/healthz",
-        NACOS_AUTO_REGISTER_ON_INIT="false",
     )
     cfg = load_config(app)
 
@@ -131,7 +129,6 @@ def test_new_030_config_overrides():
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 10.0
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is True
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/healthz"
-    assert cfg["NACOS_AUTO_REGISTER_ON_INIT"] is False
 
 
 @pytest.mark.parametrize(
@@ -167,19 +164,17 @@ def test_new_040_config_defaults():
     app = Flask(__name__)
     cfg = load_config(app)
 
-    assert cfg["NACOS_REGISTER_ONCE_PER_PROCESS"] is True
-    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
+    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "first"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] is None
     assert cfg["NACOS_DISCOVERY_METADATA"] == {}
     assert cfg["NACOS_INSTANCE_NORMALIZE"] is True
+    assert "NACOS_REGISTER_ONCE_PER_PROCESS" not in cfg
 
 
 def test_new_040_config_overrides():
     app = Flask(__name__)
     app.config.update(
-        NACOS_REGISTER_ONCE_PER_PROCESS="false",
-        NACOS_DEREGISTER_ON_EXIT="false",
         NACOS_DISCOVERY_STRATEGY="weight",
         NACOS_DISCOVERY_CLUSTER="CANARY",
         NACOS_DISCOVERY_METADATA={"version": "v1"},
@@ -187,12 +182,20 @@ def test_new_040_config_overrides():
     )
     cfg = load_config(app)
 
-    assert cfg["NACOS_REGISTER_ONCE_PER_PROCESS"] is False
-    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is False
+    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "weight"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] == "CANARY"
     assert cfg["NACOS_DISCOVERY_METADATA"] == {"version": "v1"}
     assert cfg["NACOS_INSTANCE_NORMALIZE"] is False
+
+
+def test_removed_register_once_setting_is_not_read():
+    app = Flask(__name__)
+    app.config["NACOS_REGISTER_ONCE_PER_PROCESS"] = False
+
+    cfg = load_config(app)
+
+    assert "NACOS_REGISTER_ONCE_PER_PROCESS" not in cfg
 
 
 def test_mutable_metadata_is_isolated_between_apps():

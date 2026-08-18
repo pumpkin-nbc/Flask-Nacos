@@ -12,7 +12,7 @@ from .exceptions import (
 )
 from .extension import FlaskNacos
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 
 __all__ = [
     "FlaskNacos",

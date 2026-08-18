@@ -83,9 +83,7 @@ def to_int(value: Any, default: Optional[int] = None) -> Optional[int]:
         return default
     if isinstance(value, bool):
         return default
-    if isinstance(value, float) and (
-        not math.isfinite(value) or not value.is_integer()
-    ):
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
         return default
     try:
         return int(value)
@@ -114,22 +112,14 @@ def validate_port(value: Any) -> int:
     """Validate that ``value`` is a legal TCP port (1-65535)."""
     if isinstance(value, bool):
         raise NacosValidationError("NACOS_SERVICE_PORT must be an integer, got bool")
-    if isinstance(value, float) and (
-        not math.isfinite(value) or not value.is_integer()
-    ):
-        raise NacosValidationError(
-            f"NACOS_SERVICE_PORT must be an integer, got {value!r}"
-        )
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise NacosValidationError(f"NACOS_SERVICE_PORT must be an integer, got {value!r}")
     try:
         port = int(value)
     except (TypeError, ValueError, OverflowError):
-        raise NacosValidationError(
-            f"NACOS_SERVICE_PORT must be an integer, got {value!r}"
-        )
+        raise NacosValidationError(f"NACOS_SERVICE_PORT must be an integer, got {value!r}")
     if not (1 <= port <= 65535):
-        raise NacosValidationError(
-            f"NACOS_SERVICE_PORT must be in range 1-65535, got {port}"
-        )
+        raise NacosValidationError(f"NACOS_SERVICE_PORT must be in range 1-65535, got {port}")
     return port
 
 
@@ -140,9 +130,7 @@ def validate_weight(value: Any) -> float:
     try:
         weight = float(value)
     except (TypeError, ValueError, OverflowError):
-        raise NacosValidationError(
-            f"NACOS_SERVICE_WEIGHT must be a number, got {value!r}"
-        )
+        raise NacosValidationError(f"NACOS_SERVICE_WEIGHT must be a number, got {value!r}")
     if not math.isfinite(weight) or weight <= 0:
         raise NacosValidationError(
             f"NACOS_SERVICE_WEIGHT must be finite and greater than 0, got {weight}"
@@ -153,20 +141,16 @@ def validate_weight(value: Any) -> float:
 def validate_heartbeat_interval(value: Any) -> float:
     """Validate the positive finite heartbeat interval used by the Nacos SDK."""
     if isinstance(value, bool):
-        raise NacosValidationError(
-            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, got bool"
-        )
+        raise NacosValidationError("NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, got bool")
     try:
         interval = float(value)
     except (TypeError, ValueError, OverflowError):
         raise NacosValidationError(
-            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, "
-            f"got {value!r}"
+            f"NACOS_SERVICE_HEARTBEAT_INTERVAL must be a number, got {value!r}"
         )
     if not math.isfinite(interval) or interval <= 0:
         raise NacosValidationError(
-            "NACOS_SERVICE_HEARTBEAT_INTERVAL must be finite and greater "
-            f"than 0, got {interval}"
+            f"NACOS_SERVICE_HEARTBEAT_INTERVAL must be finite and greater than 0, got {interval}"
         )
     return interval
 
@@ -175,18 +159,12 @@ def validate_retry_times(value: Any) -> int:
     """Validate the number of attempts used by the retry helper."""
     if isinstance(value, bool):
         raise NacosValidationError("NACOS_RETRY_TIMES must be an integer, got bool")
-    if isinstance(value, float) and (
-        not math.isfinite(value) or not value.is_integer()
-    ):
-        raise NacosValidationError(
-            f"NACOS_RETRY_TIMES must be an integer, got {value!r}"
-        )
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise NacosValidationError(f"NACOS_RETRY_TIMES must be an integer, got {value!r}")
     try:
         attempts = int(value)
     except (TypeError, ValueError, OverflowError):
-        raise NacosValidationError(
-            f"NACOS_RETRY_TIMES must be an integer, got {value!r}"
-        )
+        raise NacosValidationError(f"NACOS_RETRY_TIMES must be an integer, got {value!r}")
     if attempts < 1:
         raise NacosValidationError(
             f"NACOS_RETRY_TIMES must be greater than or equal to 1, got {attempts}"
@@ -201,13 +179,10 @@ def validate_retry_interval(value: Any) -> float:
     try:
         interval = float(value)
     except (TypeError, ValueError, OverflowError):
-        raise NacosValidationError(
-            f"NACOS_RETRY_INTERVAL must be a number, got {value!r}"
-        )
+        raise NacosValidationError(f"NACOS_RETRY_INTERVAL must be a number, got {value!r}")
     if not math.isfinite(interval) or interval < 0:
         raise NacosValidationError(
-            "NACOS_RETRY_INTERVAL must be finite and greater than or equal "
-            f"to 0, got {interval}"
+            f"NACOS_RETRY_INTERVAL must be finite and greater than or equal to 0, got {interval}"
         )
     return interval
 
@@ -219,9 +194,7 @@ def validate_request_timeout(value: Any) -> float:
     try:
         timeout = float(value)
     except (TypeError, ValueError, OverflowError):
-        raise NacosValidationError(
-            f"NACOS_REQUEST_TIMEOUT must be a number, got {value!r}"
-        )
+        raise NacosValidationError(f"NACOS_REQUEST_TIMEOUT must be a number, got {value!r}")
     if not math.isfinite(timeout) or timeout <= 0:
         raise NacosValidationError(
             f"NACOS_REQUEST_TIMEOUT must be finite and greater than 0, got {timeout}"

@@ -4,11 +4,13 @@ import pytest
 
 from flask_nacos import FlaskNacos
 from flask_nacos.exceptions import NacosConfigError
+from tests.helpers import wait_registered
 
 
 def test_auto_register(make_app, patched_create_client, fake_client):
     app = make_app({"NACOS_AUTO_REGISTER": True})
-    FlaskNacos(app)
+    nacos = FlaskNacos(app)
+    wait_registered(nacos, app)
 
     fake_client.add_naming_instance.assert_called_once()
     args, kwargs = fake_client.add_naming_instance.call_args
@@ -24,7 +26,8 @@ def test_manual_register(make_app, patched_create_client, fake_client):
     nacos = FlaskNacos(app)
 
     fake_client.add_naming_instance.assert_not_called()
-    assert nacos.register_instance() is True
+    assert nacos.register_instance(app) is None
+    wait_registered(nacos, app)
     fake_client.add_naming_instance.assert_called_once()
 
 
@@ -39,7 +42,8 @@ def test_register_uses_configured_values(make_app, patched_create_client, fake_c
         }
     )
     nacos = FlaskNacos(app)
-    nacos.register_instance()
+    nacos.register_instance(app)
+    wait_registered(nacos, app)
 
     _, kwargs = fake_client.add_naming_instance.call_args
     assert kwargs["weight"] == 3.0
@@ -52,12 +56,11 @@ def test_register_uses_configured_values(make_app, patched_create_client, fake_c
 def test_persistent_instance_does_not_send_heartbeat_interval(
     make_app, patched_create_client, fake_client
 ):
-    app = make_app(
-        {"NACOS_AUTO_REGISTER": False, "NACOS_SERVICE_EPHEMERAL": False}
-    )
+    app = make_app({"NACOS_AUTO_REGISTER": False, "NACOS_SERVICE_EPHEMERAL": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance(app) is None
+    wait_registered(nacos, app)
     _, kwargs = fake_client.add_naming_instance.call_args
     assert kwargs["ephemeral"] is False
     assert "heartbeat_interval" not in kwargs
@@ -76,7 +79,8 @@ def test_persistent_instance_ignores_invalid_heartbeat_interval(
     )
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True
+    assert nacos.register_instance(app) is None
+    wait_registered(nacos, app)
     _, kwargs = fake_client.add_naming_instance.call_args
     assert "heartbeat_interval" not in kwargs
 
@@ -91,8 +95,9 @@ def test_deregister_reuses_the_exact_registered_identity(
     app = make_app({"NACOS_SERVICE_IP": None, "NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
-    assert nacos.register_instance() is True
-    assert nacos.deregister_instance() is True
+    assert nacos.register_instance(app) is None
+    wait_registered(nacos, app)
+    assert nacos.deregister_instance(app) is True
 
     register_args, register_kwargs = fake_client.add_naming_instance.call_args
     deregister_args, deregister_kwargs = fake_client.remove_naming_instance.call_args
@@ -109,40 +114,49 @@ def test_missing_port_fails_fast(make_app, patched_create_client):
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosConfigError):
-        nacos.register_instance()
+        nacos.register_instance(app)
 
 
 def test_auto_detect_ip_when_unset(make_app, patched_create_client, fake_client, monkeypatch):
     import flask_nacos.naming as naming_module
 
     monkeypatch.setattr(naming_module, "get_local_ip", lambda: "192.168.1.50")
-    app = make_app({"NACOS_SERVICE_IP": None})
+    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
-    nacos.register_instance()
+    nacos.register_instance(app)
+    wait_registered(nacos, app)
 
     args, _ = fake_client.add_naming_instance.call_args
     assert args[1] == "192.168.1.50"
 
 
-def test_no_auto_register_when_auto_register_false(
-    make_app, patched_create_client, fake_client
-):
-    app = make_app({"NACOS_AUTO_REGISTER": False, "NACOS_AUTO_REGISTER_ON_INIT": True})
+def test_no_auto_register_when_auto_register_false(make_app, patched_create_client, fake_client):
+    app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
     fake_client.add_naming_instance.assert_not_called()
     # Manual registration still works.
-    assert nacos.register_instance() is True
+    assert nacos.register_instance(app) is None
+    wait_registered(nacos, app)
     fake_client.add_naming_instance.assert_called_once()
 
 
-def test_no_auto_register_when_on_init_false(
-    make_app, patched_create_client, fake_client
-):
-    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_AUTO_REGISTER_ON_INIT": False})
+def test_auto_register_is_enabled_by_default(make_app, patched_create_client, fake_client):
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
 
-    fake_client.add_naming_instance.assert_not_called()
-    # Manual registration still works.
-    assert nacos.register_instance() is True
+    with app.app_context():
+        assert nacos.config["NACOS_AUTO_REGISTER"] is True
+    wait_registered(nacos, app)
+    fake_client.add_naming_instance.assert_called_once()
+
+
+def test_removed_secondary_switch_is_ignored(make_app, patched_create_client, fake_client):
+    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+    app = make_app({"NACOS_AUTO_REGISTER": True, removed_key: False})
+    nacos = FlaskNacos(app)
+
+    with app.app_context():
+        assert removed_key not in nacos.config
+    wait_registered(nacos, app)
     fake_client.add_naming_instance.assert_called_once()

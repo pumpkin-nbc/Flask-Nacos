@@ -1,5 +1,6 @@
 """Documentation consistency tests."""
 
+import ast
 import importlib
 import re
 import sys
@@ -31,6 +32,13 @@ EXPECTED_DOCS = [
 ]
 
 FORBIDDEN = ("get_config_as_dict", "load_config_to_flask")
+
+
+def _parse_as_python_38(code, filename):
+    try:
+        return ast.parse(code, filename=filename, feature_version=(3, 8))
+    except TypeError:  # Python 3.8 accepts the minor version as an integer.
+        return ast.parse(code, filename=filename, feature_version=8)
 
 
 def test_expected_docs_exist():
@@ -68,6 +76,82 @@ def test_readme_references_docs():
     assert "docs/configuration.md" in readme
     assert "docs/api-reference.md" in readme
     assert "docs/complete-example.md" in readme
+    assert "docs/service-registration.md" in readme
+
+
+def test_service_registration_guides_include_lifecycle_flowcharts():
+    english = (DOCS_DIR / "service-registration.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "service-registration.zh-CN.md").read_text(encoding="utf-8")
+    shared_markers = (
+        "register_instance(app)",
+        "NACOS_AUTO_REGISTER",
+        "NACOS_FAIL_FAST",
+        "target_registered",
+        "operation_running",
+        "last_error",
+        "NACOS_AUTO_DEREGISTER=False",
+        "SUCCEEDED",
+        "FAILED",
+        "SKIPPED",
+        "daemon",
+        "single-flight",
+        "flowchart TD",
+    )
+    for marker in shared_markers:
+        assert marker in english
+        assert marker in chinese
+    assert english.count("```mermaid") == 2
+    assert chinese.count("```mermaid") == 2
+
+    english_code = re.findall(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_code = re.findall(r"```python\n(.*?)```", chinese, re.DOTALL)
+    assert english_code == chinese_code
+    for index, code in enumerate(english_code):
+        _parse_as_python_38(code, f"service-registration-{index}.py")
+
+
+def test_auto_register_default_is_documented_as_true():
+    english = {
+        ROOT / "README.md": "`NACOS_AUTO_REGISTER` (default `True`)",
+        DOCS_DIR / "configuration.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
+        DOCS_DIR / "production.md": "`NACOS_AUTO_REGISTER=True`",
+        DOCS_DIR / "service-registration.md": "Both registration switches default to `True`",
+    }
+    chinese = {
+        ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER`（默认 `True`）",
+        DOCS_DIR / "configuration.zh-CN.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
+        DOCS_DIR / "production.zh-CN.md": "`NACOS_AUTO_REGISTER=True`",
+        DOCS_DIR / "service-registration.zh-CN.md": "两个注册开关的默认值均为 `True`",
+    }
+
+    for path, marker in {**english, **chinese}.items():
+        assert marker in path.read_text(encoding="utf-8")
+
+
+def test_api_reference_snippets_are_bilingual_and_python_38_compatible():
+    english = (DOCS_DIR / "api-reference.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "api-reference.zh-CN.md").read_text(encoding="utf-8")
+    english_code = re.findall(r"```python\n(.*?)```", english, re.DOTALL)
+    chinese_code = re.findall(r"```python\n(.*?)```", chinese, re.DOTALL)
+
+    assert len(english_code) == len(chinese_code)
+    for language, blocks in (("en", english_code), ("zh-CN", chinese_code)):
+        for index, code in enumerate(blocks):
+            _parse_as_python_38(code, f"api-reference-{language}-{index}.py")
+
+
+def test_bilingual_compatibility_docs_match_ci_support_matrix():
+    english = (DOCS_DIR / "compatibility.md").read_text(encoding="utf-8")
+    chinese = (DOCS_DIR / "compatibility.zh-CN.md").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    for marker in ("3.14", "Flask `>=1.0`", "Flask 1.0.4", "Flask 3.0.x"):
+        assert marker in english
+        assert marker in chinese
+    assert 'python-version: "3.14"' in workflow
+    assert 'flask: "Flask==1.0.4 ' in workflow
+    assert 'flask: "Flask==1.1.4 ' in workflow
+    assert 'flask: "Flask>=3.0,<3.1"' in workflow
 
 
 def test_pypi_readme_uses_absolute_repository_links():
@@ -93,7 +177,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.0.2",
+        "v1.1.0",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
@@ -107,6 +191,7 @@ def test_bilingual_release_guides_document_oidc_gates():
 def test_complete_example_guides_share_commands_and_defaults():
     english = (DOCS_DIR / "complete-example.md").read_text(encoding="utf-8")
     chinese = (DOCS_DIR / "complete-example.zh-CN.md").read_text(encoding="utf-8")
+    example_source = (ROOT / "examples" / "complete_factory_app.py").read_text(encoding="utf-8")
     shared_markers = (
         "examples/complete_factory_app.py",
         "examples/docker-compose-nacos.yml up -d",
@@ -117,12 +202,23 @@ def test_complete_example_guides_share_commands_and_defaults():
         "/api/nacos/config",
         "/api/nacos/instances",
         "/health/nacos",
+        "NACOS_AUTO_DEREGISTER",
+        "NACOS_LOG_CONSOLE_ENABLED",
+        "NACOS_LOG_FILE_ENABLED",
+        "NACOS_LOG_PATH",
+        "NACOS_LOG_FILENAME",
         'gunicorn "examples.complete_factory_app:create_app()"',
     )
 
     for marker in shared_markers:
         assert marker in english
         assert marker in chinese
+
+    environment_keys = set(re.findall(r'os\.environ\.get\(\s*"([A-Z0-9_]+)"', example_source))
+    assert environment_keys
+    for key in environment_keys:
+        assert key in english
+        assert key in chinese
 
 
 def test_complete_guides_document_centralized_extension_initialization():
@@ -156,12 +252,8 @@ def test_complete_guides_document_centralized_extension_initialization():
         compile(code, f"complete-example-{index}.py", "exec")
 
     app_code = next(code for code in english_blocks if code.startswith("# app/app.py"))
-    assert app_code.index("app.config.from_object") < app_code.index(
-        "extension_config(app)"
-    )
-    assert app_code.index("extension_config(app)") < app_code.index(
-        "app.register_blueprint"
-    )
+    assert app_code.index("app.config.from_object") < app_code.index("extension_config(app)")
+    assert app_code.index("extension_config(app)") < app_code.index("app.register_blueprint")
 
 
 def test_beginner_quickstarts_are_copyable_and_consistent():
@@ -199,6 +291,8 @@ def test_beginner_quickstarts_are_copyable_and_consistent():
     assert english_code is not None
     assert chinese_code is not None
     assert english_code.group(1) == chinese_code.group(1)
+    beginner_source = (ROOT / "examples" / "beginner_app.py").read_text(encoding="utf-8")
+    assert english_code.group(1).rstrip() == beginner_source.rstrip()
     compile(english_code.group(1), "quickstart-app.py", "exec")
 
 
@@ -259,7 +353,7 @@ def test_bilingual_docs_describe_auto_registration_preflight():
     )
     shared_markers = (
         "NACOS_SERVICE_NAME",
-        "NACOS_AUTO_REGISTER_ON_INIT",
+        "NACOS_AUTO_REGISTER",
         "NACOS_FAIL_FAST",
         "init_app(app)",
         "preload",
@@ -269,6 +363,68 @@ def test_bilingual_docs_describe_auto_registration_preflight():
         text = path.read_text(encoding="utf-8")
         for marker in shared_markers:
             assert marker in text
+
+
+def test_removed_auto_registration_key_is_absent_from_current_tree():
+    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+    text_roots = (
+        ROOT / "flask_nacos",
+        ROOT / "examples",
+        ROOT / "docs",
+        ROOT / "scripts",
+        ROOT / "tests",
+    )
+    paths = [
+        ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "CHANGELOG.md",
+        ROOT / "CHANGELOG.zh-CN.md",
+        ROOT / "pyproject.toml",
+    ]
+    for text_root in text_roots:
+        paths.extend(
+            path
+            for path in text_root.rglob("*")
+            if path.is_file() and path.suffix in {".md", ".py", ".toml", ".yml", ".yaml"}
+        )
+
+    for path in paths:
+        assert removed_key not in path.read_text(encoding="utf-8"), path
+
+
+def test_bilingual_docs_describe_transient_lifecycle_recovery_without_remote_monitoring():
+    english_files = (
+        ROOT / "README.md",
+        DOCS_DIR / "configuration.md",
+        DOCS_DIR / "service-registration.md",
+        DOCS_DIR / "production.md",
+        DOCS_DIR / "troubleshooting.md",
+        DOCS_DIR / "compatibility.md",
+    )
+    chinese_files = (
+        ROOT / "README.zh-CN.md",
+        DOCS_DIR / "configuration.zh-CN.md",
+        DOCS_DIR / "service-registration.zh-CN.md",
+        DOCS_DIR / "production.zh-CN.md",
+        DOCS_DIR / "troubleshooting.zh-CN.md",
+        DOCS_DIR / "compatibility.zh-CN.md",
+    )
+
+    for path in english_files:
+        text = path.read_text(encoding="utf-8")
+        assert "transient" in text.lower(), path
+        assert "recovery" in text.lower(), path
+    for path in chinese_files:
+        text = path.read_text(encoding="utf-8")
+        assert "瞬时" in text, path
+        assert "自恢复" in text, path
+
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in english_files + chinese_files
+    ).lower()
+    assert "forever retry" not in combined
+    assert "infinite retry" not in combined
+    assert "无限重试" not in combined
 
 
 def test_bilingual_docs_describe_safe_logging_and_multi_worker_identity():

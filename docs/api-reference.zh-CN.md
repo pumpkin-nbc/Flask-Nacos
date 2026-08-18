@@ -2,185 +2,147 @@
 
 [English](api-reference.md) | 简体中文
 
-`FlaskNacos` 扩展的公开 API。所有错误行为都由 `NACOS_FAIL_FAST` 控制（见
-[配置项](configuration.zh-CN.md)）：为 `False`（默认）时失败会被记录并返回安全默认
-值；为 `True` 时抛出异常。
+Flask-Nacos 1.1.0 将生命周期命令保持精炼并严格绑定 Flask 上下文。显式传入
+`app` 时操作指定应用；未传入时必须存在当前 app/request context，不再回退到最近初始化的
+应用。
 
-另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md) -
-[1.0.0 验收清单](1.0-checklist.zh-CN.md)。
-
-## 稳定 API（1.0 系列）
-
-自 `1.0.0` 起，以下公开 API 保持稳定。在没有废弃流程的情况下不会修改方法名称、已有参数
-含义与返回值约定；新增参数一律带默认值，不破坏已有调用。稳定的 API 如下：
-
-```python
-FlaskNacos(app=None)
-init_app(app)
-get_client()
-register_instance()
-deregister_instance()
-list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
-get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
-get_config(data_id=None, group=None)
-get_status()
-normalize_instance(instance)
-```
-
-`get_config()` 只返回 Nacos 配置的原始内容。
-
-- 不提供 `get_config_as_dict()`。
-- 不提供 `load_config_to_flask()`。
-
-该快照由 `scripts/check_api_snapshot.py` 强制校验。
-
-## `FlaskNacos(app=None)`
-
-构造扩展。提供 `app` 时会立即调用 `init_app(app)`（Flask 普通模式）；省略时可稍后
-调用 `init_app(app)`（工厂模式）。
+## API 快照（1.1 系列）
 
 ```python
 from flask_nacos import FlaskNacos
 
-nacos = FlaskNacos(app)          # 普通模式
-nacos = FlaskNacos()             # 工厂模式；稍后调用 init_app
+nacos = FlaskNacos()
+nacos.init_app(app)
+
+nacos.register_instance(app)       # 立即返回 None
+removed = nacos.deregister_instance(app)
+status = nacos.get_status(app)
+client = nacos.get_client(app)
 ```
 
-## `init_app(app)`
+生命周期签名固定为：
 
-针对 Flask `app` 初始化扩展：加载配置、惰性创建 Nacos client、注册健康检查路由
-（若启用）、自动注册服务（若启用）。会将包含 `config` 与 `client` 的状态映射保存到
-`app.extensions["nacos"]`。
+```text
+register_instance(app=None) -> None
+deregister_instance(app=None) -> bool
+get_status(app=None) -> Dict[str, Any]
+get_client(app=None) -> Any
+```
 
-- 参数：`app` —— Flask 应用。
-- 返回：`None`。
-- 异常：client / 注册错误遵循 `NACOS_FAIL_FAST`。
+## `FlaskNacos(app=None)` 与 `init_app(app)`
 
-## `get_client()`
+`FlaskNacos(app)` 立即初始化一个应用；`FlaskNacos()` 配合 `init_app(app)` 适用于应用工厂。
+初始化会校验确定性配置并安装本地钩子，但不会创建 Nacos Client。
 
-返回底层 Nacos SDK client，首次使用时创建。
+启用自动注册时，`init_app()` 调用与业务代码相同的公开 `register_instance(app)` 命令，
+网络请求由一个 daemon收敛 Worker执行；收敛后退出，不会成为第二套心跳监控。
 
-- 返回：SDK client 对象；当 Nacos 被禁用，或 client 创建失败且 `NACOS_FAIL_FAST`
-  为 `False` 时返回 `None`。
-- 异常：client 创建失败时遵循 `NACOS_FAIL_FAST`。
+## 应用选择
 
-## `register_instance()`
-
-注册当前服务实例。
-
-- 返回：`bool` —— 成功为 `True`；`NACOS_FAIL_FAST` 为 `False` 时失败返回 `False`。
-- 异常：`NACOS_FAIL_FAST` 为 `True` 时抛出 `NacosValidationError` /
-  `NacosRegistrationError`。
-- 说明：幂等；当 `NACOS_REGISTER_ONCE_PER_PROCESS=True` 时，同一进程内重复调用为
-  no-op。
+生命周期和状态 API 都接受可选 Flask 应用；不传时请使用应用或请求上下文：
 
 ```python
-nacos.register_instance()
+with app.app_context():
+    nacos.register_instance()
+    status = nacos.get_status()
 ```
 
-## `deregister_instance()`
+无上下文、应用未初始化，或应用属于另一个 `FlaskNacos` 对象时抛出
+`FlaskNacosError`。
 
-注销当前服务实例。
+`.app`、`.config` 和 `.client` 属性遵循相同的当前上下文规则，从而保证多应用隔离。
 
-- 返回：`bool` —— 成功为 `True`，否则为 `False`（`NACOS_FAIL_FAST` 为 `False`
-  时）。幂等，注销后再次调用不会报错。
-- 异常：`NACOS_FAIL_FAST` 为 `True` 时抛出 `NacosDeregistrationError`。
+## `register_instance(app=None)`
+
+将本地目标设为已注册，最多调度一个生命周期 Worker，并在 Client 创建或网络 I/O 之前
+返回 `None`。
+
+- 注册进行中或已经完成时重复调用是幂等的。
+- UNKNOWN/确定性失败且当前空闲时，再次调用会启动新的有限尝试；已确认瞬时故障会保留现有
+  Worker进行低频生命周期自恢复。
+- `NACOS_REGISTER_ENABLED=False` 时该命令无副作用。
+- `NACOS_ENABLED=False` 时该命令完全禁用且无副作用。
+- `NACOS_FAIL_FAST=True` 时，缓存的确定性注册配置错误可以同步抛出；Thread、Client、
+  SDK、超时与连接失败只安全写入本地状态，不由该命令抛出。
+
+临时实例注册成功后，心跳由 SDK接管，Flask-Nacos Worker随即退出，并不是永久心跳线程。
+
+每次失败都会立即分类：确定性失败停止，UNKNOWN在现有有限预算后停止，只有已确认瞬时传输
+故障会继续进行可中断、有界退避的自恢复。`NACOS_RETRY_ENABLED=False` 时只执行当前一次
+尝试。自恢复不增加远端轮询，也不改变该方法固定返回 `None` 的契约。
+
+## `deregister_instance(app=None)`
+
+将目标设为未注册。返回语义：
+
+- 已注销、活动 Worker接受了新目标、SDK注销成功，或更新的注册命令使本次注销不再需要时
+  返回 `True`。
+- 仍然需要注销但无法完成时返回 `False`。
+
+空闲且已注册时同步注销；Register Worker活动时由该 Worker收敛到最新目标。
+`NACOS_REGISTER_ENABLED=False` 只禁止新注册，不会阻止清理已有注册实例。
+
+所有注销都使用最近一次成功注册缓存的准确身份，不重新猜测 IP 或实例身份。
+
+## `get_client(app=None)` 与 `.client`
+
+`get_client()` 显式请求所选 app 与当前 PID 可用的 Client。只有扩展禁用时返回 `None`；
+创建失败时抛出安全的 `FlaskNacosError`，并通过异常链保留原始 cause。
+
+读取 `.client` 永远不会创建 Client，只返回当前上下文应用已经缓存的 Client 或 `None`；
+无上下文时抛出 `FlaskNacosError`。
+
+Client 创建本身不修改注册目标、注册事实、生命周期 generation 或生命周期错误。
+
+## `get_status(app=None)`
+
+固定返回以下 12 个本地字段：
 
 ```python
-nacos.deregister_instance()
+{
+    "enabled": True,
+    "pid": 12345,
+    "client_created": True,
+    "service_name": "demo-service",
+    "group_name": "DEFAULT_GROUP",
+    "cluster_name": "DEFAULT",
+    "service_ip": "203.0.113.20",
+    "service_port": 3000,
+    "target_registered": True,
+    "registered": True,
+    "operation_running": False,
+    "last_error": None,
+}
 ```
 
-## `list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)`
+`registered` 是最近一次 Naming 注册/注销成功确认的本地事实，不是实时服务端查询。
+`operation_running` 同时覆盖后台注册生命周期与同步注销生命周期。`last_error` 只包含安全的
+异常类型或内部错误码。
 
-列出服务实例。
+注册前身份来自配置快照，不探测 IP；已注册时优先返回实际缓存的注册身份。
 
-- 参数：
-  - `service_name`（必填）—— 为空时遵循 `NACOS_FAIL_FAST`。
-  - `group` —— 回退到 `NACOS_GROUP_NAME`。
-  - `healthy_only` —— 默认 `True`。
-  - `cluster` —— 回退到 `NACOS_DISCOVERY_CLUSTER`。
-  - `metadata` —— 为 `None` 时回退到 `NACOS_DISCOVERY_METADATA`；`{}` 会显式禁用
-    配置过滤；匹配包含全部给定键值对的实例。
-- 返回：实例 `list`（当 `NACOS_INSTANCE_NORMALIZE` 为 `True` 时为标准化 dict）。
-  结果为空时返回空列表。
-- 异常：`NACOS_FAIL_FAST` 为 `True` 时抛出 `NacosDiscoveryError`。
+该方法不会创建 Client、调用 SDK、探测 Nacos、探测 IP、启动线程或消费 fork 后待恢复注册。
 
-```python
-instances = nacos.list_instances("user-service", cluster="CANARY")
-```
+## 服务发现与配置中心
 
-## `get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)`
+- `list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)`
+  返回标准化实例列表。
+- `get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)`
+  选择一个标准化健康实例。
+- `get_config(data_id=None, group=None)` 返回原始文本；省略 `data_id` 时使用
+  `NACOS_CONFIG_DATA_ID`。
+- `normalize_instance(instance)` 返回标准化字典或 `None`。
 
-选择单个健康实例。
-
-- 参数：`strategy` 回退到 `NACOS_DISCOVERY_STRATEGY`（`first`、`random`、
-  `weight`）；其余参数同 `list_instances`。
-- 返回：单个实例；没有健康实例时返回 `None`。
-- 异常：不支持的策略遵循 `NACOS_FAIL_FAST`；`NACOS_FAIL_FAST` 为 `True` 时发现错误
-  抛出 `NacosDiscoveryError`。
-
-```python
-instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
-```
-
-## `get_config(data_id=None, group=None)`
-
-从 Nacos 读取配置内容。
-
-- 参数：`data_id` 未传时回退到 `NACOS_CONFIG_DATA_ID`；`group` 回退到
-  `NACOS_CONFIG_GROUP` 再回退到 `NACOS_GROUP_NAME`。
-- 返回：配置的原始内容 `str`；`NACOS_FAIL_FAST` 为 `False` 时失败返回 `None`。
-  `NACOS_CONFIG_ENABLED=False` 时不调用 SDK，直接返回 `None`。
-- 异常：两个 data ID 都为空且 fail-fast 开启时抛出 `NacosValidationError`；其他配置
-  失败抛出 `NacosConfigError`。
-- 超时：`NACOS_REQUEST_TIMEOUT` 会传给 SDK 2.x 的读取调用。
-
-`get_config()` 只返回 Nacos 配置的原始字符串，不做 YAML、JSON、dict 解析，也不会
-写入 Flask `app.config`。
-
-```python
-content = nacos.get_config("application.yaml")
-```
-
-## `get_status()`
-
-返回扩展的内部状态与非敏感配置。
-
-- 返回：`dict`。不会请求 Nacos，也不会包含 `NACOS_PASSWORD`、`NACOS_ACCESS_KEY`、
-  `NACOS_SECRET_KEY`。
-
-```python
-status = nacos.get_status()
-```
-
-## `normalize_instance(instance)`
-
-将原始 SDK 实例（dict 或对象属性形式）标准化为标准 dict。
-
-- 返回：标准 dict；对无法标准化的单个实例返回 `None`（记录日志，单个坏实例不会
-  抛错）。
-
-```python
-normalized = nacos.normalize_instance(raw_sdk_instance)
-```
+这些操作使用当前 Flask 上下文，并在需要时惰性创建 app/PID Client。Flask-Nacos 不解析
+YAML 或 JSON 配置内容。
 
 ## 异常类型
 
-```python
-from flask_nacos import (
-    FlaskNacosError,
-    NacosConfigError,
-    NacosClientError,
-    NacosValidationError,
-    NacosRegistrationError,
-    NacosDeregistrationError,
-    NacosDiscoveryError,
-)
-```
+- `FlaskNacosError`：应用选择、初始化 owner 或显式 Client 创建失败。
+- `NacosConfigError`：确定性扩展配置非法。
+- `NacosValidationError`：注册或发现输入非法。
+- `NacosRegistrationError` / `NacosDeregistrationError`：Naming SDK 未明确成功。
+- `NacosDiscoveryError`：发现 SDK 操作失败。
+- `NacosLoggingError`：日志配置非法。
 
-- `FlaskNacosError` —— 基类。
-- `NacosConfigError` —— 配置无效或配置读取失败。
-- `NacosClientError` —— Nacos client 创建 / 使用失败。
-- `NacosValidationError` —— 确定性输入或数值配置校验失败（`NacosConfigError` 的子类）。
-- `NacosRegistrationError` / `NacosDeregistrationError` / `NacosDiscoveryError`
-  —— 注册、注销与服务发现失败。
+运行期生命周期错误通过安全状态与日志观测，不从 `register_instance()` 抛出。

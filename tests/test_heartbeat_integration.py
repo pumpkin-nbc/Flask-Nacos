@@ -8,6 +8,7 @@ import pytest
 from flask import Flask
 
 from flask_nacos import FlaskNacos
+from tests.helpers import wait_registered
 
 
 @pytest.mark.integration
@@ -20,9 +21,7 @@ def test_temporary_instance_stays_healthy_after_deletion_window():
     if not server_addr:
         pytest.skip("missing FLASK_NACOS_TEST_SERVER_ADDR")
 
-    wait_seconds = float(
-        os.environ.get("FLASK_NACOS_TEST_HEARTBEAT_WAIT_SECONDS", "35")
-    )
+    wait_seconds = float(os.environ.get("FLASK_NACOS_TEST_HEARTBEAT_WAIT_SECONDS", "35"))
     service_name = f"flask-nacos-heartbeat-test-{uuid.uuid4().hex}"
     service_port = 20000 + (uuid.uuid4().int % 30000)
     group = "FLASK_NACOS_HEARTBEAT_TEST"
@@ -49,12 +48,11 @@ def test_temporary_instance_stays_healthy_after_deletion_window():
     registered = False
 
     try:
-        assert extension.register_instance() is True
+        assert extension.register_instance() is None
+        wait_registered(extension, timeout=10.0)
         registered = True
         time.sleep(wait_seconds)
-        instances = extension.list_instances(
-            service_name, group=group, healthy_only=True
-        )
+        instances = extension.list_instances(service_name, group=group, healthy_only=True)
         assert any(
             instance["ip"] == "127.0.0.1" and instance["port"] == service_port
             for instance in instances

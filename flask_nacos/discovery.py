@@ -113,9 +113,7 @@ def normalize_instance(instance: Any) -> Dict[str, Any]:
         except (TypeError, ValueError, OverflowError):
             raise NacosDiscoveryError("Discovered instance port must be an integer")
         if not 1 <= port <= 65535:
-            raise NacosDiscoveryError(
-                "Discovered instance port must be in range 1-65535"
-            )
+            raise NacosDiscoveryError("Discovered instance port must be in range 1-65535")
 
         metadata = _get_field(instance, ("metadata",), {}) or {}
         if not isinstance(metadata, dict):
@@ -134,12 +132,8 @@ def normalize_instance(instance: Any) -> Dict[str, Any]:
         return {
             "ip": ip,
             "port": port,
-            "service_name": _get_field(
-                instance, ("service_name", "serviceName"), None
-            ),
-            "cluster_name": _get_field(
-                instance, ("cluster_name", "clusterName"), "DEFAULT"
-            ),
+            "service_name": _get_field(instance, ("service_name", "serviceName"), None),
+            "cluster_name": _get_field(instance, ("cluster_name", "clusterName"), "DEFAULT"),
             "weight": weight,
             "healthy": to_bool(_get_field(instance, ("healthy",), True), True),
             "enabled": to_bool(_get_field(instance, ("enabled",), True), True),
@@ -156,9 +150,7 @@ def _matches_filters(
     instance: Any, cluster: Optional[str], metadata: Optional[Dict[str, Any]]
 ) -> bool:
     if cluster:
-        inst_cluster = _get_field(
-            instance, ("cluster_name", "clusterName"), "DEFAULT"
-        )
+        inst_cluster = _get_field(instance, ("cluster_name", "clusterName"), "DEFAULT")
         if inst_cluster != cluster:
             return False
 

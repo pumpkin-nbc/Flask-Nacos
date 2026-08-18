@@ -61,16 +61,16 @@ app.config.update(
 Use the namespace ID rather than its display name. Prefer username/password or
 AK/SK according to the server's authentication mode; do not hardcode either.
 Each credential pair must be complete, and the two authentication methods are
-mutually exclusive. Invalid authentication follows `NACOS_FAIL_FAST` during
-client initialization.
+mutually exclusive. Authentication shape is validated during `init_app()`;
+`NACOS_FAIL_FAST` controls whether that deterministic error prevents commit.
 
 ## 2. Service registration
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Enable init-time automatic registration; manual registration is unaffected. |
+| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Permit new registration. It does not prevent cleanup of an already registered instance. |
 | `NACOS_AUTO_REGISTER` | bool | `True` | no | Master switch for auto-registration. |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Deregister automatically on exit. |
+| `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Allow the shutdown callback to deregister this process's confirmed instance. |
 | `NACOS_SERVICE_NAME` | str | `None` | yes (to register) | Service name. |
 | `NACOS_SERVICE_IP` | str | `None` | recommended | Service IP; auto-detected if unset. |
 | `NACOS_SERVICE_PORT` | int | `None` | yes (to register) | Service port, `1-65535`. |
@@ -166,6 +166,16 @@ Infinity, and out-of-range values are rejected without retrying. Retry values
 are ignored when retries are disabled; request timeout is ignored when the
 configuration center is disabled.
 
+For configuration-center and discovery calls these settings retain their
+ordinary finite meaning. The Register Worker also uses the same finite attempt
+budget. Only after that budget is exhausted may a failure with explicit
+transient transport evidence enter low-frequency lifecycle recovery. Unknown
+failures stop at the finite limit and deterministic failures stop immediately.
+`NACOS_RETRY_ENABLED=False` permits only the current registration attempt and
+disables recovery. Recovery uses an internal bounded backoff with jitter; it
+adds no public retry setting and never waits less than
+`max(NACOS_RETRY_INTERVAL, 1 second)`.
+
 ## 6. Runtime status
 
 | Key | Type | Default | Required | Description |
@@ -174,17 +184,18 @@ configuration center is disabled.
 
 ## 7. Lifecycle
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_AUTO_REGISTER_ON_INIT` | bool | `True` | no | Whether `init_app(app)` performs auto-registration. |
-| `NACOS_REGISTER_ONCE_PER_PROCESS` | bool | `True` | no | Register only once per process; a forked worker (new pid) may re-register. |
-| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | no | Register an `atexit` handler to deregister on process exit. |
-
-Example (explicit registration under Gunicorn):
+`NACOS_AUTO_REGISTER` is the single automatic-registration switch. Disable it
+when registration must start from an explicit Gunicorn worker hook:
 
 ```python
-app.config["NACOS_AUTO_REGISTER_ON_INIT"] = False
+app.config["NACOS_AUTO_REGISTER"] = False
+nacos.register_instance(app)
 ```
+
+`register_instance()` returns `None` before Client creation or network I/O.
+Registration is single-flight per app and process; use `get_status()` to observe
+`target_registered`, `registered`, `operation_running`, and `last_error`.
+`NACOS_AUTO_DEREGISTER` is the only exit deregistration switch.
 
 ## 8. Logging
 

@@ -2,196 +2,174 @@
 
 English | [简体中文](api-reference.zh-CN.md)
 
-Public API of the `FlaskNacos` extension. All error behavior is governed by
-`NACOS_FAIL_FAST` (see [Configuration](configuration.md)): when `False` (default)
-failures are logged and a safe default is returned; when `True` an exception is
-raised.
+Flask-Nacos 1.1.0 keeps lifecycle commands small and context-safe. An explicit
+`app` always selects that application. Without `app`, an active Flask app or
+request context is required; there is no fallback to a previously initialized
+application.
 
-See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
-[1.0.0 Checklist](1.0-checklist.md).
-
-## Stable API (1.0 series)
-
-As of `1.0.0`, the public API below is stable. Method names, existing
-parameters, and return contracts will not change without a deprecation cycle;
-any new parameters will be added with defaults so existing calls keep working.
-The stable surface is:
-
-```python
-FlaskNacos(app=None)
-init_app(app)
-get_client()
-register_instance()
-deregister_instance()
-list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)
-get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)
-get_config(data_id=None, group=None)
-get_status()
-normalize_instance(instance)
-```
-
-`get_config()` returns the raw Nacos config content only.
-
-- This package does not provide `get_config_as_dict()`.
-- This package does not provide `load_config_to_flask()`.
-
-The snapshot is enforced by `scripts/check_api_snapshot.py`.
-
-## `FlaskNacos(app=None)`
-
-Construct the extension. When `app` is provided, `init_app(app)` is called
-immediately (Flask standard mode). When omitted, call `init_app(app)` later
-(factory mode).
+## API snapshot (1.1 series)
 
 ```python
 from flask_nacos import FlaskNacos
 
-nacos = FlaskNacos(app)          # standard mode
-nacos = FlaskNacos()             # factory mode; call init_app later
+nacos = FlaskNacos()
+nacos.init_app(app)
+
+nacos.register_instance(app)       # returns None immediately
+removed = nacos.deregister_instance(app)
+status = nacos.get_status(app)
+client = nacos.get_client(app)
 ```
 
-## `init_app(app)`
+The lifecycle signatures are:
 
-Initialize the extension against a Flask `app`: load configuration, create the
-Nacos client lazily, register the health route (if enabled), and auto-register
-the service (if enabled). Stores a state mapping containing `config` and
-`client` at `app.extensions["nacos"]`.
+```text
+register_instance(app=None) -> None
+deregister_instance(app=None) -> bool
+get_status(app=None) -> Dict[str, Any]
+get_client(app=None) -> Any
+```
 
-- Parameters: `app` - the Flask application.
-- Returns: `None`.
-- Exceptions: follows `NACOS_FAIL_FAST` for client/registration errors.
+## `FlaskNacos(app=None)` and `init_app(app)`
 
-## `get_client()`
+`FlaskNacos(app)` initializes one application immediately. `FlaskNacos()` plus
+`init_app(app)` supports application factories. Initialization validates
+deterministic configuration and installs local hooks, but never constructs a
+Nacos Client.
 
-Return the underlying Nacos SDK client, creating it on first use.
+When automatic registration is enabled, `init_app()` calls the same public
+`register_instance(app)` command used by application code. The network request
+runs in one daemon convergence Worker, which exits after convergence and never
+becomes a second heartbeat monitor.
 
-- Returns: the SDK client object, or `None` when Nacos is disabled or client
-  creation failed and `NACOS_FAIL_FAST` is `False`.
-- Exceptions: follows `NACOS_FAIL_FAST` on client creation failure.
+## Application selection
 
-## `register_instance()`
-
-Register the current service instance.
-
-- Returns: `bool` - `True` on success, `False` on failure when
-  `NACOS_FAIL_FAST` is `False`.
-- Exceptions: raises `NacosValidationError` / `NacosRegistrationError` when
-  `NACOS_FAIL_FAST` is `True`.
-- Notes: idempotent; with `NACOS_REGISTER_ONCE_PER_PROCESS=True` repeated calls
-  in the same process are no-ops.
+Lifecycle and state APIs accept an optional Flask application. Without it, use
+an app/request context:
 
 ```python
-nacos.register_instance()
+with app.app_context():
+    nacos.register_instance()
+    status = nacos.get_status()
 ```
 
-## `deregister_instance()`
+No context, an uninitialized app, or an app owned by a different `FlaskNacos`
+object raises `FlaskNacosError`.
 
-Deregister the current service instance.
+The `.app`, `.config`, and `.client` properties use the same current-context
+rule. This keeps multiple Flask applications isolated.
 
-- Returns: `bool` - `True` on success, `False` otherwise (when
-  `NACOS_FAIL_FAST` is `False`). Idempotent and never raises once already
-  deregistered.
-- Exceptions: raises `NacosDeregistrationError` when `NACOS_FAIL_FAST` is `True`.
+## `register_instance(app=None)`
+
+Sets the local target to registered, schedules at most one lifecycle Worker,
+and returns `None` without waiting for Client creation or network I/O.
+
+- Repeated calls are idempotent while registration is running or complete.
+- A call after an unknown/deterministic failed idle attempt starts a new finite
+  attempt. Verified transient failures retain the existing Worker for
+  low-frequency lifecycle recovery.
+- `NACOS_REGISTER_ENABLED=False` makes this command a no-op.
+- `NACOS_ENABLED=False` makes this command a side-effect-free no-op.
+- With `NACOS_FAIL_FAST=True`, a cached deterministic registration error may be
+  raised synchronously. Thread, Client, SDK, timeout, and connection failures
+  are recorded safely in local status and are not raised by this command.
+
+Registration success starts the SDK's heartbeat for ephemeral instances. The
+Flask-Nacos Worker then exits; it is not a permanent heartbeat thread.
+
+Failures are classified immediately. Deterministic failures stop, unknown
+failures stop after the existing finite budget, and only verified transient
+transport failures continue with interruptible bounded-backoff recovery.
+`NACOS_RETRY_ENABLED=False` allows only the current attempt. Recovery does not
+add remote polling and does not change the method's `None` return contract.
+
+## `deregister_instance(app=None)`
+
+Sets the target to unregistered. The return value is:
+
+- `True` when already unregistered, when an active Worker accepted the new
+  target, when the SDK deregistration succeeded, or when a newer register
+  command made the pending deregistration unnecessary.
+- `False` when deregistration is still required but cannot be completed.
+
+An idle registered instance is deregistered synchronously. During an active
+Register Worker, the target change is handled by that Worker. Disabling new
+registration with `NACOS_REGISTER_ENABLED=False` does not prevent cleanup of an
+already registered instance.
+
+All deregistration paths use the exact identity cached by the last successful
+registration. They never guess a new IP or identity.
+
+## `get_client(app=None)` and `.client`
+
+`get_client()` explicitly requests a usable Client for the selected app and
+current PID. It returns `None` only when Flask-Nacos is disabled. Creation
+failure raises a safe `FlaskNacosError` and preserves the original exception as
+its cause.
+
+Reading `.client` never creates a Client. It returns the current-context app's
+cached Client or `None` and raises `FlaskNacosError` without a context.
+
+Client creation itself does not change the registration target, registration
+fact, lifecycle generation, or lifecycle error.
+
+## `get_status(app=None)`
+
+Returns exactly these 12 local-only fields:
 
 ```python
-nacos.deregister_instance()
+{
+    "enabled": True,
+    "pid": 12345,
+    "client_created": True,
+    "service_name": "demo-service",
+    "group_name": "DEFAULT_GROUP",
+    "cluster_name": "DEFAULT",
+    "service_ip": "203.0.113.20",
+    "service_port": 3000,
+    "target_registered": True,
+    "registered": True,
+    "operation_running": False,
+    "last_error": None,
+}
 ```
 
-## `list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)`
+`registered` is the most recent local fact confirmed by a successful Naming
+register/deregister call. It is not a live server query. `operation_running` is
+true for either a background registration lifecycle or a synchronous
+deregistration lifecycle. `last_error` contains only a safe exception type or
+internal error code.
 
-List service instances.
+Before registration, identity values come from the configuration snapshot and
+no IP detection occurs. While registered, the actual cached registration
+identity is returned.
 
-- Parameters:
-  - `service_name` (required) - empty value follows `NACOS_FAIL_FAST`.
-  - `group` - falls back to `NACOS_GROUP_NAME`.
-  - `healthy_only` - default `True`.
-  - `cluster` - falls back to `NACOS_DISCOVERY_CLUSTER`.
-  - `metadata` - falls back to `NACOS_DISCOVERY_METADATA` when `None`; `{}`
-    explicitly disables the configured filter. Matches instances that contain
-    all given key/value pairs.
-- Returns: `list` of instances (normalized dicts when `NACOS_INSTANCE_NORMALIZE`
-  is `True`). Empty result is an empty list.
-- Exceptions: raises `NacosDiscoveryError` when `NACOS_FAIL_FAST` is `True`.
+This method never creates a Client, calls the SDK, probes Nacos, detects an IP,
+starts a thread, or resumes pending post-fork registration.
 
-```python
-instances = nacos.list_instances("user-service", cluster="CANARY")
-```
+## Discovery and configuration
 
-## `get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)`
+- `list_instances(service_name, group=None, healthy_only=True, cluster=None, metadata=None)`
+  returns normalized instances.
+- `get_one_healthy_instance(service_name, group=None, strategy=None, cluster=None, metadata=None)`
+  selects one normalized healthy instance.
+- `get_config(data_id=None, group=None)` returns raw text and uses
+  `NACOS_CONFIG_DATA_ID` when `data_id` is omitted.
+- `normalize_instance(instance)` returns a normalized dict or `None`.
 
-Select a single healthy instance.
-
-- Parameters: `strategy` falls back to `NACOS_DISCOVERY_STRATEGY` (`first`,
-  `random`, `weight`); other parameters as in `list_instances`.
-- Returns: a single instance, or `None` when there are no healthy instances.
-- Exceptions: an unsupported strategy follows `NACOS_FAIL_FAST`; discovery errors
-  raise `NacosDiscoveryError` when `NACOS_FAIL_FAST` is `True`.
-
-```python
-instance = nacos.get_one_healthy_instance("user-service", strategy="weight")
-```
-
-## `get_config(data_id=None, group=None)`
-
-Read configuration content from Nacos.
-
-- Parameters: `data_id` falls back to `NACOS_CONFIG_DATA_ID`; `group` falls back
-  to `NACOS_CONFIG_GROUP` then `NACOS_GROUP_NAME`.
-- Returns: the raw configuration content `str`, or `None` on failure when
-  `NACOS_FAIL_FAST` is `False`. Returns `None` without an SDK call when
-  `NACOS_CONFIG_ENABLED` is `False`.
-- Exceptions: raises `NacosValidationError` when both data IDs are empty and
-  fail-fast is enabled; other config failures raise `NacosConfigError`.
-- Timeout: `NACOS_REQUEST_TIMEOUT` is passed to the SDK 2.x read call.
-
-`get_config()` returns the raw Nacos configuration string only. It does not
-perform YAML, JSON, or dict parsing, and it does not write into Flask
-`app.config`.
-
-```python
-content = nacos.get_config("application.yaml")
-```
-
-## `get_status()`
-
-Return the extension's internal state and non-sensitive configuration.
-
-- Returns: `dict`. Never calls Nacos and never includes `NACOS_PASSWORD`,
-  `NACOS_ACCESS_KEY`, or `NACOS_SECRET_KEY`.
-
-```python
-status = nacos.get_status()
-```
-
-## `normalize_instance(instance)`
-
-Normalize a raw SDK instance (dict or attribute-style) into a standard dict.
-
-- Returns: a standard dict, or `None` for a single instance that cannot be
-  normalized (logged, never raises for one bad instance).
-
-```python
-normalized = nacos.normalize_instance(raw_sdk_instance)
-```
+These operations use the current Flask context and lazily create the app/PID
+Client when needed. Flask-Nacos does not parse YAML or JSON configuration text.
 
 ## Exceptions
 
-```python
-from flask_nacos import (
-    FlaskNacosError,
-    NacosConfigError,
-    NacosClientError,
-    NacosValidationError,
-    NacosRegistrationError,
-    NacosDeregistrationError,
-    NacosDiscoveryError,
-)
-```
+- `FlaskNacosError`: invalid application selection, initialization ownership,
+  or explicit Client creation failure.
+- `NacosConfigError`: deterministic extension configuration is invalid.
+- `NacosValidationError`: registration or discovery input is invalid.
+- `NacosRegistrationError` / `NacosDeregistrationError`: Naming SDK operation
+  did not explicitly succeed.
+- `NacosDiscoveryError`: discovery SDK operation failed.
+- `NacosLoggingError`: logging configuration is invalid.
 
-- `FlaskNacosError` - base class.
-- `NacosConfigError` - invalid config or config-read failures.
-- `NacosClientError` - Nacos client creation/usage failures.
-- `NacosValidationError` - deterministic input or numeric configuration validation (subclass of
-  `NacosConfigError`).
-- `NacosRegistrationError` / `NacosDeregistrationError` / `NacosDiscoveryError` -
-  registration, deregistration, and discovery failures.
+Runtime lifecycle errors are exposed through safe status and logs rather than
+through `register_instance()`.

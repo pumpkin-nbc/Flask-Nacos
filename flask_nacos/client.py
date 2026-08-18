@@ -29,22 +29,17 @@ def _install_heartbeat_logging(client: Any) -> None:
         return
 
     def logged_send_heartbeat(*args: Any, **kwargs: Any) -> Any:
-        service_name = _heartbeat_argument(
-            args, kwargs, 0, "service_name", "<unknown>"
-        )
+        service_name = _heartbeat_argument(args, kwargs, 0, "service_name", "<unknown>")
         ip = _heartbeat_argument(args, kwargs, 1, "ip", "<unknown>")
         port = _heartbeat_argument(args, kwargs, 2, "port", "<unknown>")
-        group_name = _heartbeat_argument(
-            args, kwargs, 7, "group_name", "DEFAULT_GROUP"
-        )
+        group_name = _heartbeat_argument(args, kwargs, 7, "group_name", "DEFAULT_GROUP")
         try:
             result = send_heartbeat(*args, **kwargs)
         except Exception as exc:
             # Do not include the exception message: SDK/network exceptions can
             # contain request parameters, tokens, signatures, or response data.
             logger.error(
-                "Nacos heartbeat failed "
-                "(service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
+                "Nacos heartbeat failed (service=%s, ip=%s, port=%s, group=%s, error_type=%s)",
                 service_name,
                 ip,
                 port,
@@ -68,9 +63,7 @@ def _install_heartbeat_logging(client: Any) -> None:
     except (AttributeError, TypeError):
         # Defensive compatibility for an SDK client implementation that
         # disallows instance attributes. Client creation must remain usable.
-        logger.warning(
-            "Nacos heartbeat status logging is unavailable for this SDK client"
-        )
+        logger.warning("Nacos heartbeat status logging is unavailable for this SDK client")
 
 
 def create_client(config: Dict[str, Any]) -> Any:
@@ -101,17 +94,13 @@ def create_client(config: Dict[str, Any]) -> Any:
     if (
         config.get("NACOS_LOG_ENABLED", False)
         and config.get("NACOS_LOG_FILE_ENABLED", True)
-        and
-        isinstance(configured_log_directory, str)
+        and isinstance(configured_log_directory, str)
         and configured_log_directory.strip()
     ):
-        candidate_log_dir = os.path.abspath(
-            os.path.expanduser(configured_log_directory.strip())
-        )
+        candidate_log_dir = os.path.abspath(os.path.expanduser(configured_log_directory.strip()))
         sdk_log_dir = (
             candidate_log_dir
-            if not os.path.exists(candidate_log_dir)
-            or os.path.isdir(candidate_log_dir)
+            if not os.path.exists(candidate_log_dir) or os.path.isdir(candidate_log_dir)
             else tempfile.gettempdir()
         )
     else:

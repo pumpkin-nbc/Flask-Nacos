@@ -2,10 +2,6 @@
 
 [English](health-check.md) | 简体中文
 
-一个可选的 Flask 路由，用于反映扩展的内部状态。
-
-另请参阅：[配置项](configuration.zh-CN.md) - [生产部署](production.zh-CN.md)。
-
 ## 启用路由
 
 ```python
@@ -15,30 +11,48 @@ app.config.update(
 )
 ```
 
-当 `NACOS_HEALTH_CHECK_ENABLED=True` 时，路由会在 `init_app(app)` 期间注册。注册是
-幂等的：路由或路径已存在时不会导致 Flask 报错。
-
-## 路径配置
-
-`NACOS_HEALTH_CHECK_PATH` 控制路由路径（默认 `/health/nacos`）。
-
-## 返回内容
+路由在 `init_app(app)` 期间安装，固定返回七个字段：
 
 ```json
 {
   "status": "ok",
-  "nacos_enabled": true,
-  "client_initialized": true,
-  "registered": true
+  "enabled": true,
+  "client_created": true,
+  "target_registered": true,
+  "registered": true,
+  "operation_running": false,
+  "last_error": null
 }
 ```
 
-当 Nacos 被禁用时 `status` 为 `"disabled"`；当 client 初始化失败时为 `"error"`。
-已知时会包含服务标识字段（`service_name`、`service_ip`、`service_port`）。
+状态规则：
 
-## 适用范围
+```text
+扩展禁用                                      -> disabled
+registered 等于 target_registered             -> ok
+operation 正在运行且没有生命周期错误           -> ok
+其他尚未收敛状态                               -> error
+```
 
-- 该路由只反映扩展的内部状态。
-- 它不会请求 Nacos 服务端，因此接口很快，不受 Nacos 延迟影响。
-- 它适合用于观察本地服务状态，但不是完整的 Nacos 连通性探测，因此返回 `ok` 本身
-  并不保证 Nacos 服务端可达。
+`registered` 是最近一次成功 Naming 注册/注销 RPC确认的本地事实。`status=ok` 表示本地
+生命周期已经收敛，或正在无记录错误地收敛；两者都不代表 Nacos 当前一定可达，也不保证远端
+实例此刻仍存在。
+
+健康路由不会创建 Client、执行 SDK/Nacos I/O、探测 IP、启动线程或恢复 fork 后待执行的
+自动注册。因此完全惰性的启用状态（`client_created=false`，目标与事实均为 false）仍然健康。
+
+`NACOS_ENABLED=False` 时固定为：
+
+```json
+{
+  "status": "disabled",
+  "enabled": false,
+  "client_created": false,
+  "target_registered": false,
+  "registered": false,
+  "operation_running": false,
+  "last_error": null
+}
+```
+
+需要确认远端 Nacos 可达时，请使用外部监控或单独的应用探针。
