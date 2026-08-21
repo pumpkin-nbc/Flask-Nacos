@@ -42,6 +42,13 @@ def post_fork(server, worker):
     nacos.register_instance(app)
 ```
 
+Do not rely on the first business request to recover registration. Ordinary
+requests, health/status reads, and the cache-only `.client` property do not
+consume post-fork pending intent. An explicit `register_instance()` or a real
+Client, Discovery, or Config SDK operation may consume it non-blockingly; the
+triggering synchronous SDK operation then continues under its own contract
+without waiting for registration convergence.
+
 Flask-Nacos does not guess the server type or worker count and provides no
 Gunicorn-specific public API. PID Runtime rebuilding prevents workers from
 using a parent Client, lock, Event, or registration fact; it cannot undo work

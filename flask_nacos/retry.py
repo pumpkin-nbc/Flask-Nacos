@@ -29,8 +29,7 @@ def run_with_retry(
     - When enabled, the operation is attempted at most ``NACOS_RETRY_TIMES``
       times, sleeping ``NACOS_RETRY_INTERVAL`` seconds between attempts.
     - Each failed attempt is logged at ``warning`` level.
-    - After exhausting attempts the last exception is re-raised; fail-fast
-      handling is left to the caller.
+    - After exhausting attempts the last exception is re-raised.
     """
     enabled = config.get("NACOS_RETRY_ENABLED", True)
     if not enabled:

@@ -24,8 +24,8 @@
 
 - 可能原因：1.1 的注册始终是后台生命周期命令。
 - 解决建议：通过 `get_status()` 与日志查看 Nacos 超时、有限重试与瞬时故障生命周期自恢复。
-  `NACOS_FAIL_FAST=True` 只同步抛出缓存的确定性注册错误。Thread 创建/启动、Client、
-  SDK、超时与连接错误都安全写入状态，不会从 `register_instance()` 抛出。
+  纯本地确定性注册错误会在提交目标前同步抛出；Thread 创建/启动、Client、SDK、超时与
+  连接错误都安全写入状态，不会从 `register_instance()` 抛出。
 
 ## 为什么有限重试后 `operation_running=True` 仍持续存在？
 
@@ -61,11 +61,11 @@
 ## 5. Nacos Client 创建失败
 
 - 现象：`client_created` 一直为 `False`、注册以安全 `last_error` 结束，或显式
-  `get_client()` 抛出 `FlaskNacosError`。
+  `get_client()` 抛出 `NacosConfigError`/`NacosClientError`。
 - 可能原因：`NACOS_SERVER_ADDR` 错误、网络问题或认证失败。
 - 排查方法：核对服务地址与连通性；查看日志。
-- 解决建议：修正地址/凭据。认证结构属于确定性配置，可用 `NACOS_FAIL_FAST=True` 在启动
-  阶段暴露；运行期连接错误仍是后台生命周期错误。SDK `2.0.11` 在认证 Client构造期间遇到
+- 解决建议：修正地址/凭据。启用自动注册时，本地认证结构错误会在启动阶段直接暴露；
+  运行期连接错误仍是后台生命周期错误。SDK `2.0.11` 在认证 Client构造期间遇到
   经过验证的节点暂不可用错误时，会在有限预算后继续生命周期 Recovery；HTTP 401/403 会立即停止。
 
 ## 6. 用户名 / 密码错误
@@ -79,7 +79,8 @@
 
 - 可能原因：`NACOS_USERNAME`/`NACOS_PASSWORD` 或
   `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` 缺少一项、同时配置两种认证，或凭据不是字符串。
-- 解决建议：只配置一组完整凭据；可临时启用 `NACOS_FAIL_FAST=True` 查看安全的配置错误。
+- 解决建议：只配置一组完整凭据。启用自动注册时会在启动阶段报告安全错误；否则首次
+  `get_client()` 或显式注册时抛出。
 
 ## 7. namespace 配置错误
 
@@ -141,17 +142,16 @@
 - 解决建议：共享端点设置 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册
   与注销。详见[生产部署](production.zh-CN.md)。
 
-## 12. `NACOS_FAIL_FAST=True` 导致启动失败
+## 12. 本地注册配置导致启动失败
 
-- 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间崩溃，或采用延迟加载的 WSGI
-  服务器直到第一次请求才显示异常。
-- 可能原因：`NACOS_FAIL_FAST=True` 会把确定性配置错误变成异常。启用自动注册时，会在
-  创建 Client 前校验缺失或非法的注册配置。
+- 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间抛出异常。
+- 可能原因：启用自动注册时，会在创建 Client 与提交扩展状态前校验缺失或非法的本地
+  注册配置。
 - 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
   是非空且不能只包含空白字符的字符串。
-- 解决建议：修正非法配置，或使用 `NACOS_FAIL_FAST=False`（默认），让安全错误保持可见
-  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER=False`，并在 fork
-  后的 worker hook 中注册。
+- 解决建议：修正非法配置；如果当前进程只使用 Discovery 或 Config，可设置
+  `NACOS_AUTO_REGISTER=False`，之后显式注册仍会按需校验并抛出。Gunicorn `--preload`
+  应在 fork 后的 worker hook 中注册。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict
 

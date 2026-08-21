@@ -1,6 +1,4 @@
-"""Tests for deterministic registration validation and fail-fast boundaries."""
-
-import logging
+"""Tests for deterministic registration validation and source boundaries."""
 
 import pytest
 
@@ -39,10 +37,10 @@ INVALID_REGISTRATION_SETTINGS = [
 
 
 @pytest.mark.parametrize("overrides", INVALID_REGISTRATION_SETTINGS)
-def test_manual_register_caches_validation_without_committing_fail_fast_state(
+def test_manual_register_caches_validation_without_committing_lifecycle_state(
     make_app, patched_create_client, fake_client, overrides
 ):
-    app = make_app({**overrides, "NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": True})
+    app = make_app({**overrides, "NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosValidationError):
@@ -57,36 +55,15 @@ def test_manual_register_caches_validation_without_committing_fail_fast_state(
     assert patched_create_client["count"] == 0
     fake_client.add_naming_instance.assert_not_called()
 
-
-@pytest.mark.parametrize("overrides", INVALID_REGISTRATION_SETTINGS)
-def test_non_fail_fast_invalid_register_has_stable_error_without_worker(
-    make_app, patched_create_client, fake_client, overrides
-):
-    app = make_app({**overrides, "NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": False})
-    nacos = FlaskNacos(app)
-    runtime = app.extensions[EXTENSION_KEY]["_runtime"]
-
-    nacos.register_instance(app)
-    generation = runtime.operation_generation
-    nacos.register_instance(app)
-
-    assert runtime.operation_generation == generation
-    assert nacos.get_status(app)["last_error"] == "NacosValidationError"
-    assert nacos.get_status(app)["operation_running"] is False
-    assert patched_create_client["count"] == 0
-    fake_client.add_naming_instance.assert_not_called()
-
-
 @pytest.mark.parametrize("mode", ["direct", "factory"])
 @pytest.mark.parametrize("service_name", [None, "", "   ", 123, True])
-def test_auto_registration_fail_fast_is_transactional(
+def test_auto_registration_local_validation_is_transactional(
     make_app, patched_create_client, fake_client, mode, service_name
 ):
     app = make_app(
         {
             "NACOS_SERVICE_NAME": service_name,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": True,
         }
     )
 
@@ -101,36 +78,6 @@ def test_auto_registration_fail_fast_is_transactional(
     assert EXTENSION_KEY not in app.extensions
     assert patched_create_client["count"] == 0
     fake_client.add_naming_instance.assert_not_called()
-
-
-def test_invalid_auto_registration_non_fail_fast_keeps_usable_extension(
-    make_app, patched_create_client, fake_client, caplog
-):
-    app = make_app(
-        {
-            "NACOS_SERVICE_NAME": None,
-            "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": False,
-            "NACOS_LOG_ENABLED": True,
-            "NACOS_LOG_FILE_ENABLED": False,
-        }
-    )
-
-    with caplog.at_level(logging.ERROR, logger="flask_nacos"):
-        nacos = FlaskNacos(app)
-
-    status = nacos.get_status(app)
-    assert status["target_registered"] is True
-    assert status["registered"] is False
-    assert status["operation_running"] is False
-    assert status["last_error"] == "NacosValidationError"
-    assert patched_create_client["count"] == 0
-    with app.app_context():
-        assert nacos.get_config("application.yaml") == "server:\n  port: 8000\n"
-    assert patched_create_client["count"] == 1
-    fake_client.add_naming_instance.assert_not_called()
-    assert "NACOS_SERVICE_NAME" in caplog.text
-
 
 @pytest.mark.parametrize(
     "invalid_retry",
@@ -148,7 +95,6 @@ def test_auto_registration_retry_config_is_deterministic(
     app = make_app(
         {
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": True,
             **invalid_retry,
         }
     )
@@ -199,7 +145,6 @@ def test_missing_service_name_allowed_at_init_but_explicit_register_fails(
         {
             "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": False,
-            "NACOS_FAIL_FAST": True,
         }
     )
     nacos = FlaskNacos(app)
@@ -207,9 +152,8 @@ def test_missing_service_name_allowed_at_init_but_explicit_register_fails(
         nacos.register_instance(app)
 
 
-@pytest.mark.parametrize("fail_fast", [False, True])
 def test_ip_auto_detect_failure_is_background_runtime_error(
-    make_app, patched_create_client, fake_client, monkeypatch, fail_fast
+    make_app, patched_create_client, fake_client, monkeypatch
 ):
     import flask_nacos.naming as naming_module
 
@@ -217,7 +161,6 @@ def test_ip_auto_detect_failure_is_background_runtime_error(
     app = make_app(
         {
             "NACOS_SERVICE_IP": None,
-            "NACOS_FAIL_FAST": fail_fast,
             "NACOS_RETRY_ENABLED": False,
         }
     )

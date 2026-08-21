@@ -111,11 +111,9 @@ accepts both `dict` and attribute-style objects and both camelCase
 (`serviceName`, `clusterName`) and snake_case (`service_name`, `cluster_name`)
 field names, filling missing fields with sensible defaults.
 
-A minor difference in the SDK response does not fail discovery as a whole. When
-the response shape is fundamentally unrecognized, behavior follows
-`NACOS_FAIL_FAST`: with `NACOS_FAIL_FAST=False` (default) an empty list is
-returned and the issue is logged; with `NACOS_FAIL_FAST=True` an exception is
-raised.
+A minor difference in the SDK response does not fail discovery as a whole. A
+fundamentally unrecognized response shape raises `NacosDiscoveryError`; only a
+legitimate empty response returns `[]`.
 
 ## Gunicorn / uWSGI multi-worker notes
 

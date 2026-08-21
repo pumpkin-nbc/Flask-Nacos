@@ -14,7 +14,6 @@ def test_defaults_loaded():
     assert cfg["NACOS_SERVER_ADDR"] == "127.0.0.1:8848"
     assert cfg["NACOS_GROUP_NAME"] == "DEFAULT_GROUP"
     assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
-    assert cfg["NACOS_FAIL_FAST"] is False
     assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
     assert cfg["NACOS_LOG_ENABLED"] is False
     assert cfg["NACOS_LOG_CONSOLE_ENABLED"] is True
@@ -63,6 +62,17 @@ def test_removed_registration_switch_is_ignored():
     assert removed_key not in cfg
 
 
+def test_removed_error_strategy_switch_is_ignored():
+    app = Flask(__name__)
+    removed_key = "NACOS_FAIL_" + "FAST"
+    app.config[removed_key] = True
+
+    cfg = load_config(app)
+
+    assert removed_key not in DEFAULTS
+    assert removed_key not in cfg
+
+
 def test_removed_exit_setting_is_ignored_without_aliasing():
     app = Flask(__name__)
     removed_key = "NACOS_AUTO_" + "DEREGISTER"
@@ -88,13 +98,11 @@ def test_bool_coercion_from_string():
     app = Flask(__name__)
     app.config.update(
         NACOS_ENABLED="false",
-        NACOS_FAIL_FAST="true",
         NACOS_DEREGISTER_ON_EXIT="false",
     )
     cfg = load_config(app)
 
     assert cfg["NACOS_ENABLED"] is False
-    assert cfg["NACOS_FAIL_FAST"] is True
     assert cfg["NACOS_DEREGISTER_ON_EXIT"] is False
 
 

@@ -12,7 +12,6 @@ app.config.update(
     NACOS_SERVICE_PORT=5000,
     NACOS_AUTO_REGISTER=True,
     NACOS_DEREGISTER_ON_EXIT=True,
-    NACOS_FAIL_FAST=False,
 )
 
 nacos = FlaskNacos(app)

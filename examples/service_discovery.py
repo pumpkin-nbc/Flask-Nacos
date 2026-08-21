@@ -17,7 +17,6 @@ app.config.update(
     NACOS_PASSWORD=os.environ.get("NACOS_PASSWORD"),
     # This app only consumes discovery; it does not register itself.
     NACOS_AUTO_REGISTER=False,
-    NACOS_FAIL_FAST=False,
 )
 
 nacos = FlaskNacos(app)

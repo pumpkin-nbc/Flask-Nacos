@@ -74,17 +74,10 @@ def test_list_instances_empty_result_returns_empty_list(
     assert _call(app, nacos.list_instances, "user-service") == []
 
 
-def test_list_instances_empty_service_name_returns_empty_when_not_fail_fast(
+def test_list_instances_empty_service_name_raises_validation_error(
     make_app, patched_create_client
 ):
-    app = make_app({"NACOS_FAIL_FAST": False})
-    nacos = FlaskNacos(app)
-
-    assert _call(app, nacos.list_instances, "") == []
-
-
-def test_list_instances_empty_service_name_raises_when_fail_fast(make_app, patched_create_client):
-    app = make_app({"NACOS_FAIL_FAST": True})
+    app = make_app()
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosValidationError):
@@ -148,10 +141,11 @@ def test_list_instances_filter_by_cluster(make_app, patched_create_client, fake_
 def test_invalid_discovery_parameters_never_call_sdk(
     make_app, patched_create_client, fake_client, arguments
 ):
-    app = make_app({"NACOS_FAIL_FAST": False})
+    app = make_app()
     nacos = FlaskNacos(app)
 
-    assert _call(app, nacos.list_instances, **arguments) == []
+    with pytest.raises(NacosValidationError):
+        _call(app, nacos.list_instances, **arguments)
     fake_client.list_naming_instance.assert_not_called()
 
 

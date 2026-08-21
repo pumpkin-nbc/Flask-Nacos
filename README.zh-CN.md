@@ -144,11 +144,9 @@ metadata、ephemeral/心跳、认证与重试配置。
 `register_instance(app)` 时才执行并缓存纯本地确定性校验；该过程不创建 Client，也不执行
 网络 I/O。
 
-- `NACOS_FAIL_FAST=True`：确定性自动注册错误在提交 `app.extensions["nacos"]` 前抛出。
-- `NACOS_FAIL_FAST=False`：保留可用扩展状态与安全错误，不启动无效 Worker。
-
-`NACOS_FAIL_FAST` 不会把生命周期运行时失败变成同步注册异常。Thread 创建/启动、Client
-创建、超时、连接与 SDK失败只以安全类型/错误码写入 `last_error`。
+启用自动注册时，纯本地确定性错误会在提交 `app.extensions["nacos"]` 前抛出；显式注册
+遇到同类错误也会同步抛出，且不改变生命周期目标。Thread 创建/启动、Client构造、超时、
+连接与 SDK失败仍由生命周期 Worker处理，只以安全类型/错误码写入 `last_error`。
 
 注册生命周期失败会立即、保守地分类：
 
@@ -210,7 +208,8 @@ metadata、ephemeral/心跳、认证与重试配置。
 
 状态读取不创建 Client、不访问 Nacos、不探测 IP、不启动线程，也不恢复 fork 后注册。
 
-`get_client(app)` 显式创建或返回 app/PID Client，失败时抛出安全 `FlaskNacosError`。
+`get_client(app)` 显式创建或返回 app/PID Client，准备失败时抛出安全的
+`NacosConfigError` 或 `NacosClientError`。
 `.client` 属性只读缓存，并要求当前 Flask context。
 
 ## 健康检查
@@ -271,8 +270,9 @@ ANSI 颜色。日志总开关关闭时，即使配置路径也不会创建目录
 
 ## Fork、Gunicorn 与退出
 
-Runtime资源绑定 Flask app 与 PID。fork 后父 Runtime整体作废；普通业务请求或显式 SDK
-操作可以恢复自动注册，但状态、健康和 `.client` 读取不会。
+Runtime资源绑定 Flask app 与 PID。fork 后父 Runtime整体作废；显式注册或真实的 Client、
+Discovery、Config SDK操作可以非阻塞恢复自动注册，但普通业务请求、状态、健康和 `.client`
+读取不会消费 pending。
 
 Gunicorn `--preload` 推荐设置 `NACOS_AUTO_REGISTER=False`，并在 post-fork/
 worker-init hook中调用 `nacos.register_instance(app)`，避免 preload master启动 SDK Runtime。

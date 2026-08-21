@@ -23,16 +23,16 @@ When `NACOS_AUTO_REGISTER` and `NACOS_ENABLED` are true, `init_app(app)` validat
 registration snapshot and calls public `register_instance(app)`. That command
 returns immediately; the Worker creates the Client and performs the Naming RPC.
 
-With `NACOS_FAIL_FAST=True`, invalid deterministic registration configuration
-raises during `init_app(app)` before extension state is committed. With false,
-initialization completes with `target_registered=True`, `registered=False`, and
-a safe `last_error`, without starting an invalid Worker.
+Invalid deterministic local registration configuration raises during
+`init_app(app)` before extension state is committed. Client construction,
+authentication I/O, and Naming RPCs are never performed by the initialization
+thread.
 
 When automatic registration is off, initialization does not validate
 registration-only settings. The first explicit registration performs the local
 deterministic validation, caches the app-state result, and then enters the same
-lifecycle transition. In fail-fast mode an invalid explicit command raises
-without changing the target, generation, error, operation, or Client state.
+lifecycle transition. An invalid explicit command raises without changing the
+target, generation, error, operation, or Client state.
 
 ## Explicit registration
 
@@ -65,10 +65,8 @@ flowchart TD
     B --> G{"Automatic registration enabled?"}
     G -- "no" --> H["Initialization complete; registration validation deferred"]
     G -- "yes" --> C{"Deterministic registration error?"}
-    C -- "yes, fail-fast" --> D["Raise before committing app state"]
-    C -- "yes, safe mode" --> E["Commit Runtime; public command records target and safe error"]
+    C -- "yes" --> D["Raise before committing app state"]
     C -- "no" --> F["Commit PID Runtime with client=None"]
-    E --> H
     F --> I["Call register_instance(app)"]
     I --> J["Publish one daemon Worker"]
     J --> H
@@ -215,8 +213,10 @@ or Worker state.
 
 Client, Worker, locks, events, and registration facts are PID-bound. After a
 fork, the parent Runtime is discarded and exactly one current-PID Runtime is
-published. Ordinary business requests and SDK operations may resume pending
-automatic registration. `get_status()`, `/health/nacos`, and `.client` do not.
+published. Explicit registration and real Client, Discovery, or Config SDK
+operations may resume pending automatic registration without waiting for it to
+converge. Ordinary business requests, `get_status()`, `/health/nacos`, and
+`.client` do not.
 
 Gunicorn `--preload` initializes the app in the master before workers fork. The
 recommended configuration is `NACOS_AUTO_REGISTER=False`, followed by

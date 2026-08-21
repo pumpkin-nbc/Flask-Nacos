@@ -34,7 +34,7 @@ def test_registration_sources_and_call_local_values_are_minimal_and_frozen():
     ]
 
     context = extension_module._RegisterContext(source=source_type.EXPLICIT_REGISTER)
-    policy = FlaskNacos._registration_policy(context, {"NACOS_FAIL_FAST": True})
+    policy = FlaskNacos._registration_policy(context)
 
     assert [item.name for item in fields(context)] == ["source"]
     assert [item.name for item in fields(policy)] == [
@@ -68,8 +68,7 @@ def test_registration_policy_is_pure_and_contains_no_lifecycle_plan(
     policy = nacos._registration_policy(
         extension_module._RegisterContext(
             source=extension_module._RegistrationSource.PENDING_RECOVERY
-        ),
-        app.extensions["nacos"]["config"],
+        )
     )
 
     assert runtime.__dict__ == before
@@ -170,7 +169,6 @@ def test_auto_register_off_defers_registration_validation_until_explicit_intent(
         {
             "NACOS_AUTO_REGISTER": False,
             "NACOS_SERVICE_NAME": None,
-            "NACOS_FAIL_FAST": True,
         }
     )
     nacos = FlaskNacos(app)
@@ -189,10 +187,41 @@ def test_auto_register_off_defers_registration_validation_until_explicit_intent(
     assert patched_create_client["count"] == 0
 
 
+def test_pending_recovery_keeps_local_config_error_as_async_lifecycle_state(
+    make_app, patched_create_client
+):
+    app = make_app(
+        {
+            "NACOS_AUTO_REGISTER": False,
+            "NACOS_SERVICE_NAME": None,
+        }
+    )
+    nacos = FlaskNacos(app)
+    state = app.extensions["nacos"]
+    runtime = state["_runtime"]
+    runtime.auto_register_pending = True
+
+    nacos._prepare_registration(
+        app,
+        extension_module._RegisterContext(
+            source=extension_module._RegistrationSource.PENDING_RECOVERY
+        ),
+        new_command=True,
+    )
+
+    status = nacos.get_status(app)
+    assert runtime.auto_register_pending is False
+    assert status["target_registered"] is True
+    assert status["registered"] is False
+    assert status["operation_running"] is False
+    assert status["last_error"] == "NacosValidationError"
+    assert patched_create_client["count"] == 0
+
+
 def test_validation_cache_compare_and_set_is_immutable(
     make_app, patched_create_client, monkeypatch
 ):
-    app = make_app({"NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": False})
+    app = make_app({"NACOS_AUTO_REGISTER": False})
     nacos = FlaskNacos(app)
     state = app.extensions["nacos"]
     barrier = threading.Barrier(2)
@@ -210,19 +239,29 @@ def test_validation_cache_compare_and_set_is_immutable(
 
     def _register(name):
         threading.current_thread().name = name
-        nacos.register_instance(app)
+        try:
+            nacos.register_instance(app)
+        except NacosValidationError as exc:
+            return exc
+        return None
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [
             executor.submit(_register, "candidate-a"),
             executor.submit(_register, "candidate-b"),
         ]
-        for future in futures:
-            future.result(timeout=3)
+        results = [future.result(timeout=3) for future in futures]
 
     committed = state[extension_module._REGISTRATION_ERROR_KEY]
     assert committed is candidates["candidate-a"] or committed is candidates["candidate-b"]
-    nacos.register_instance(app)
+    if committed is None:
+        assert results == [None, None]
+        nacos.register_instance(app)
+    else:
+        assert all(result is committed for result in results)
+        with pytest.raises(NacosValidationError) as raised:
+            nacos.register_instance(app)
+        assert raised.value is committed
     assert state[extension_module._REGISTRATION_ERROR_KEY] is committed
     assert patched_create_client["count"] == 0
 
@@ -386,14 +425,14 @@ def test_registration_validation_cache_is_isolated_per_application(
         {
             "NACOS_AUTO_REGISTER": False,
             "NACOS_SERVICE_NAME": None,
-            "NACOS_FAIL_FAST": False,
         }
     )
     valid_nacos = FlaskNacos(valid_app)
     invalid_nacos = FlaskNacos(invalid_app)
 
     valid_nacos.register_instance(valid_app)
-    invalid_nacos.register_instance(invalid_app)
+    with pytest.raises(NacosValidationError):
+        invalid_nacos.register_instance(invalid_app)
 
     valid_cache = valid_app.extensions["nacos"][extension_module._REGISTRATION_ERROR_KEY]
     invalid_cache = invalid_app.extensions["nacos"][extension_module._REGISTRATION_ERROR_KEY]

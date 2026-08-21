@@ -27,7 +27,6 @@ app.config.update(
     # Register the health-check route at the given path.
     NACOS_HEALTH_CHECK_ENABLED=True,
     NACOS_HEALTH_CHECK_PATH="/health/nacos",
-    NACOS_FAIL_FAST=False,
 )
 
 nacos = FlaskNacos(app)

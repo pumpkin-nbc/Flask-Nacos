@@ -245,9 +245,10 @@ endpoint may therefore report `registered=false` briefly. The exit handler waits
 for an in-flight registration and deregisters only an instance successfully
 registered by this application when the process exits normally.
 
-The example deliberately uses `NACOS_FAIL_FAST=False`: a temporary Nacos outage
-does not prevent Flask from starting. Nacos-dependent example endpoints return
-a safe response instead of exposing credentials or an SDK traceback.
+Client construction and Nacos network work run outside the initialization
+thread, so a temporary outage does not block the application factory. The
+Nacos-dependent routes catch safe domain exceptions and return a controlled 503
+instead of exposing credentials or an SDK traceback.
 
 ## 6. Verify every integration point
 
@@ -286,10 +287,9 @@ curl http://127.0.0.1:5000/api/nacos/instances
 curl "http://127.0.0.1:5000/api/nacos/instances?service=user-service&cluster=CANARY"
 ```
 
-An empty instance list is a valid discovery result. With fail-fast disabled,
-SDK discovery failures also use the library's safe `[]` fallback; use logs and
-external monitoring when distinguishing an outage from an empty service is
-operationally important.
+An empty instance list is a valid discovery result. SDK or response-shape
+failures raise `NacosDiscoveryError`, which this example translates to a safe
+503 response, so an outage is not confused with an empty service.
 
 Stop the development server with `Ctrl+C`. On graceful interpreter shutdown the
 registered instance is deregistered. You can then stop local Nacos:
@@ -333,7 +333,7 @@ For production:
 
 - advertise an IP or DNS endpoint reachable by consumers, not `127.0.0.1`;
 - store credentials in a secret manager and enable Nacos authentication;
-- choose fail-fast and retry settings according to application startup policy;
+- choose retry settings according to the application's resilience policy;
 - use readiness/monitoring that checks actual Nacos-dependent operations when
   remote availability matters;
 - do not use the bundled standalone Compose configuration.

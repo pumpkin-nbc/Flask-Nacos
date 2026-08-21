@@ -57,8 +57,9 @@ app.config.update(
 ```
 
 请填写 namespace ID，而不是控制台显示名称。根据服务端认证方式选择用户名/密码或
-AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥；认证结构在
-`init_app()` 阶段校验，`NACOS_FAIL_FAST` 决定确定性错误是否阻止状态提交。
+AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥。启用自动注册时，
+本地认证结构错误会在提交扩展状态前使 `init_app()` 失败；否则由首次 Client使用或显式注册
+抛出缓存的本地错误。
 
 ## 2. 服务注册
 
@@ -208,7 +209,7 @@ single-flight；通过 `get_status()` 观察 `target_registered`、`registered`�
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | 否 | Flask-Nacos 安全日志总开关；无论取值如何，SDK 原生日志始终静默。 |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。日志启用时非法值抛出 `NacosLoggingError`。 |
 | `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | 否 | 日志启用时，向控制台输出正常日志和异常日志。 |
 | `NACOS_LOG_FILE_ENABLED` | bool | `True` | 否 | 日志启用时，写入轮转日志文件。 |
 | `NACOS_LOG_PATH` | str | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志和文件输出均启用时创建。 |
@@ -255,13 +256,12 @@ nacos-sdk-python 的默认日志路径。
 `NACOS_SERVER_ADDR` 使用 `https://` 就认为传输已经安全。生产环境请仅通过受信网络连接，
 或使用能够验证 Nacos 服务端证书的 TLS 代理 / sidecar。
 
-## 9. 行为控制
+## 9. 错误行为
 
-| 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
-| --- | --- | --- | --- | --- |
-| `NACOS_FAIL_FAST` | bool | `False` | 否 | 为 `True` 时 Nacos 错误抛出异常；为 `False` 时记录日志并返回安全默认值。 |
-
-`NACOS_FAIL_FAST` 对各方法的影响详见 [API 参考](api-reference.zh-CN.md)。
+项目不再提供错误模式开关。启用自动注册时，纯本地配置错误会使初始化事务失败；非法显式
+注册会在改变生命周期状态前抛出。生命周期运行期失败留在本地状态中，同步 Client、
+Discovery 与 Config 操作则抛出各自最具体的安全领域异常。详见
+[API 参考](api-reference.zh-CN.md)。
 
 ## 配置中心
 

@@ -34,6 +34,11 @@ def post_fork(server, worker):
     nacos.register_instance(app)
 ```
 
+不要依赖第一笔业务请求恢复注册。普通请求、health/status读取和只读缓存的 `.client` 属性
+都不会消费 fork 后的 pending意图。显式 `register_instance()` 或真实 Client、Discovery、
+Config SDK操作可以非阻塞消费 pending；触发它的同步 SDK操作随后仍按自身契约继续执行，
+不会等待注册收敛。
+
 Flask-Nacos 不猜测服务器类型或 worker数量，也不增加 Gunicorn 专用公开 API。PID Runtime
 重建能阻止 worker复用父进程 Client、锁、Event 或注册事实，但无法撤销 preload master
 已经启动的工作。

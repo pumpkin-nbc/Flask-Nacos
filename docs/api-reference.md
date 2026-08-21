@@ -71,10 +71,10 @@ and returns `None` without waiting for Client creation or network I/O.
   attempt. Verified transient failures retain the existing Worker for
   low-frequency lifecycle recovery.
 - `NACOS_ENABLED=False` makes this command a side-effect-free no-op.
-- With `NACOS_FAIL_FAST=True`, a cached deterministic registration error may be
-  raised synchronously without committing a new lifecycle target. Thread,
-  Client, SDK, timeout, and connection failures
-  are recorded safely in local status and are not raised by this command.
+- A cached deterministic local registration error is raised synchronously
+  without committing a new lifecycle target. Thread, Client, SDK, timeout, and
+  connection failures are recorded safely in local status and are not raised
+  by this command.
 
 Registration success starts the SDK's heartbeat for ephemeral instances. The
 Flask-Nacos Worker then exits; it is not a permanent heartbeat thread.
@@ -103,8 +103,9 @@ registration. They never guess a new IP or identity.
 ## `get_client(app=None)` and `.client`
 
 `get_client()` explicitly requests a usable Client for the selected app and
-current PID. It returns `None` only when Flask-Nacos is disabled. Creation
-failure raises a safe `FlaskNacosError` and preserves the original exception as
+current PID. It returns `None` only when Flask-Nacos is disabled. Invalid local
+configuration raises `NacosConfigError`/`NacosValidationError`; Client
+construction raises `NacosClientError` and preserves the original exception as
 its cause.
 
 Reading `.client` never creates a Client. It returns the current-context app's
@@ -177,13 +178,16 @@ starts a thread, or resumes pending post-fork registration.
 - `normalize_instance(instance)` returns a normalized dict or `None`.
 
 These operations use the current Flask context and lazily create the app/PID
-Client when needed. Flask-Nacos does not parse YAML or JSON configuration text.
+Client when needed. A legitimate empty discovery/config result remains `[]` or
+`None`; validation, Client, Discovery, and Config failures raise their most
+specific existing domain exception after the configured finite retry budget.
+Flask-Nacos does not parse YAML or JSON configuration text.
 
 ## Exceptions
 
-- `FlaskNacosError`: invalid application selection, initialization ownership,
-  or explicit Client creation failure.
+- `FlaskNacosError`: invalid application selection or initialization ownership.
 - `NacosConfigError`: deterministic extension configuration is invalid.
+- `NacosClientError`: the SDK Client cannot be constructed or used.
 - `NacosValidationError`: registration or discovery input is invalid.
 - `NacosRegistrationError` / `NacosDeregistrationError`: Naming SDK operation
   did not explicitly succeed.

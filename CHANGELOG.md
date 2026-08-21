@@ -32,6 +32,22 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
+- Removed the configuration-driven error-mode switch without an alias or
+  migration branch. Active automatic registration now rejects purely local
+  deterministic configuration errors transactionally; explicit registration
+  rejects them before changing lifecycle state, while runtime failures remain
+  asynchronous Worker state.
+- Synchronous Client, Discovery, and Config operations now preserve their most
+  specific safe domain exception and cause instead of converting true failures
+  to empty results. Legitimate empty results and disabled-feature contracts are
+  unchanged.
+- Removed ordinary-request-driven post-fork recovery. Pending automatic
+  registration is consumed non-blockingly only by explicit registration or a
+  real Client, Discovery, or Config SDK operation, all sharing the existing
+  app/PID Client acquisition path.
+- Logging-disabled and file-output-disabled configurations ignore settings for
+  those unused capabilities; invalid enabled logging configuration or Handler
+  construction now raises `NacosLoggingError`.
 - Clarified process-exit cleanup with the sole
   `NACOS_DEREGISTER_ON_EXIT` setting. Disabling it installs no remote cleanup
   callback and never blocks an explicit `deregister_instance()`.
@@ -109,7 +125,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ### Compatibility
 
 - Lifecycle runtime failures are reported through safe local status and logs;
-  fail-fast remains limited to deterministic configuration failures.
+  purely local deterministic registration failures are raised before lifecycle
+  state is committed.
 - The runtime requirement remains Python `>=3.8`; Flask is now declared as
   `>=1.0` without an artificial upper bound.
 - Development type checking stays on mypy `<1.15`, the last line that can run
@@ -151,8 +168,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Fixed library and SDK logging side effects, duplicate handlers, unexpected
   log files, and potential leakage of credentials, request data, or config
   content through application, root, console, or file handlers.
-- Fixed fail-fast initialization leaving partial app or extension state.
-- Fixed non-fail-fast operations raising when the initialized client is
+- Fixed strict initialization errors leaving partial app or extension state.
+- Fixed tolerant operations raising when the initialized client is
   unavailable; these operations now return their documented safe defaults.
 - Fixed deregistration resolving a new identity instead of using the exact
   identity registered with Nacos.
@@ -168,7 +185,7 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ### Fixed
 
 - Preflighted active automatic-registration settings during `init_app()`, so
-  fail-fast validation errors occur before client creation or partial extension
+  deterministic validation errors occur before client creation or partial extension
   state is installed, while disabled auto-registration still supports
   config-center and discovery-only applications without a service name.
 
@@ -224,7 +241,7 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Treated SDK `False` registration and deregistration results as retryable
   failures without corrupting lifecycle state.
 - Rejected incomplete or mixed authentication credentials and invalid retry or
-  request-timeout numbers through the existing fail-fast behavior.
+  request-timeout numbers through the existing strict error behavior.
 - Skipped discovered instances with malformed endpoints, parsed string boolean
   fields correctly, and sanitized invalid weights.
 - Kept ephemeral service instances healthy by passing the heartbeat interval to
@@ -450,7 +467,7 @@ The following APIs are considered stable in the 1.0 series:
 - Added idempotent handling for service registration.
 - Added idempotent handling for service deregistration.
 - Added improved service discovery behavior.
-- Added clearer fail-fast behavior for registration, deregistration, and discovery.
+- Added clearer error behavior for registration, deregistration, and discovery.
 - Added additional tests for service registration and discovery.
 
 ### Changed
@@ -477,7 +494,7 @@ The following APIs are considered stable in the 1.0 series:
   (`deregister_instance`).
 - Service discovery: `list_instances` and `get_one_healthy_instance`.
 - Configuration center read support: `get_config`.
-- `NACOS_FAIL_FAST` behavior control and a custom exception hierarchy.
+- Configurable error behavior and a custom exception hierarchy.
 - Standard `logging` integration that never emits secrets.
 - pytest test suite with a fully mocked Nacos SDK.
 - PyPI packaging via hatchling.

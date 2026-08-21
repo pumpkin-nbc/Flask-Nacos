@@ -98,6 +98,6 @@ instance = nacos.get_one_healthy_instance(
 按实例 `weight` 加权随机选择（缺失权重默认 `1.0`；权重 `<= 0` 的实例被忽略；若所有
 权重都 `<= 0`，退化为 `first` 策略）。
 
-没有健康实例时返回 `None`。不支持的策略遵循 `NACOS_FAIL_FAST`。
+没有健康实例时返回 `None`；不支持的策略抛出 `NacosDiscoveryError`。
 
 > 本版本仅提供简单的客户端选择策略，不提供完整的服务治理能力。

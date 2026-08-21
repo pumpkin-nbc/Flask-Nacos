@@ -162,14 +162,11 @@ validation. The first explicit `register_instance(app)` performs that local,
 deterministic validation and caches its result without creating a Client or
 performing network I/O.
 
-- `NACOS_FAIL_FAST=True`: deterministic automatic-registration errors raise
-  before `app.extensions["nacos"]` is committed.
-- `NACOS_FAIL_FAST=False`: initialization succeeds with a safe local error and
-  no invalid Worker.
-
-`NACOS_FAIL_FAST` does not turn lifecycle runtime failures into synchronous
-registration exceptions. Thread creation/start, Client creation, timeout,
-connection, and SDK failures are recorded by safe type/code in `last_error`.
+Deterministic local errors for active automatic registration raise before
+`app.extensions["nacos"]` is committed. An invalid explicit registration also
+raises synchronously without changing the lifecycle target. Thread
+creation/start, Client construction, timeout, connection, and SDK failures stay
+inside the lifecycle Worker and are recorded by safe type/code in `last_error`.
 
 Registration lifecycle failures are classified immediately and conservatively:
 
@@ -247,7 +244,7 @@ Status does not create a Client, contact Nacos, detect an IP, start a thread,
 or resume post-fork registration.
 
 `get_client(app)` explicitly creates or returns the app/PID Client and raises a
-safe `FlaskNacosError` if creation fails. The `.client` property is cache-only
+safe `NacosConfigError` or `NacosClientError` if preparation fails. The `.client` property is cache-only
 and requires a current Flask context.
 
 ## Health route
@@ -316,8 +313,9 @@ configured paths are not created.
 ## Fork, Gunicorn, and shutdown
 
 Runtime resources are bound to one Flask app and PID. After fork, the entire
-parent Runtime is discarded; ordinary business requests or explicit SDK
-operations may resume automatic registration, while status, health, and
+parent Runtime is discarded. Explicit registration or a real Client,
+Discovery, or Config SDK operation may resume automatic registration without
+waiting for convergence; ordinary business requests, status, health, and
 `.client` reads do not.
 
 For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER=False` and call

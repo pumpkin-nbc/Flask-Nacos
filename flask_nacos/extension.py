@@ -14,7 +14,7 @@ from numbers import Real
 from threading import Event, Lock, RLock, Thread, current_thread
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import current_app, has_app_context, request
+from flask import current_app, has_app_context
 
 from . import config as config_module
 from . import config_center, discovery, lifecycle, naming
@@ -26,8 +26,8 @@ from ._recovery import (
     _synthetic_lifecycle_failure,
 )
 from .client import _HeartbeatIdentity, _set_heartbeat_observer, create_client
-from .exceptions import FlaskNacosError, NacosConfigError
-from .health import HEALTH_ENDPOINT, register_health_route
+from .exceptions import FlaskNacosError, NacosClientError, NacosConfigError
+from .health import register_health_route
 from .logging import (
     cleanup_sdk_default_handlers,
     configure_logger,
@@ -49,7 +49,6 @@ _RUNTIME_REBUILD_LOCK_KEY = "_runtime_rebuild_lock"
 _RUNTIME_REBUILD_PID_KEY = "_runtime_rebuild_pid"
 _ATEXIT_REGISTERED_KEY = "_atexit_registered"
 _FORK_HOOK_REGISTERED_KEY = "_fork_hook_registered"
-_REQUEST_HOOK_REGISTERED_KEY = "_request_hook_registered"
 _APP_REF_KEY = "_app_ref"
 
 _INIT_LOCK = RLock()
@@ -230,23 +229,10 @@ class FlaskNacos:
             else None
         )
 
-        if connection_error is not None and cfg.get("NACOS_FAIL_FAST", False):
-            raise connection_error
-        if (
-            auto_register_enabled
-            and registration_error is not None
-            and cfg.get("NACOS_FAIL_FAST", False)
-        ):
+        if auto_register_enabled and registration_error is not None:
             raise registration_error
 
         configure_logger(app, cfg)
-
-        if auto_register_enabled and registration_error is not None:
-            logger.error(
-                "Automatic Nacos registration is unavailable (error_type=%s, field=%s)",
-                type(registration_error).__name__,
-                self._registration_error_field(registration_error),
-            )
 
         runtime = self._create_runtime(
             cfg,
@@ -267,7 +253,6 @@ class FlaskNacos:
             _RUNTIME_REBUILD_PID_KEY: current_pid,
             _ATEXIT_REGISTERED_KEY: False,
             _FORK_HOOK_REGISTERED_KEY: False,
-            _REQUEST_HOOK_REGISTERED_KEY: False,
         }
         if auto_register_enabled:
             # Key presence is the private three-state cache: absent means not
@@ -280,7 +265,6 @@ class FlaskNacos:
             if cfg.get("NACOS_HEALTH_CHECK_ENABLED"):
                 register_health_route(app, self)
 
-            self._register_request_recovery_hook(app, state)
             self._register_fork_hook(app, state)
             self._register_atexit(app, state)
 
@@ -344,29 +328,6 @@ class FlaskNacos:
             return exc
         return None
 
-    @staticmethod
-    def _registration_error_field(error: BaseException) -> str:
-        """Return a safe configuration field label for diagnostics."""
-        message = str(error)
-        for field_name in (
-            "NACOS_SERVICE_NAME",
-            "NACOS_SERVICE_PORT",
-            "NACOS_SERVICE_WEIGHT",
-            "NACOS_SERVICE_METADATA",
-            "NACOS_SERVICE_EPHEMERAL",
-            "NACOS_SERVICE_HEARTBEAT_INTERVAL",
-            "NACOS_RETRY_TIMES",
-            "NACOS_RETRY_INTERVAL",
-            "NACOS_SERVER_ADDR",
-            "NACOS_USERNAME",
-            "NACOS_PASSWORD",
-            "NACOS_ACCESS_KEY",
-            "NACOS_SECRET_KEY",
-        ):
-            if field_name in message:
-                return field_name
-        return "registration_config"
-
     def _create_runtime(
         self,
         cfg: Dict[str, Any],
@@ -397,11 +358,14 @@ class FlaskNacos:
             return None
 
         self._resume_auto_register_if_pending(app, state, runtime)
+        app, state, runtime = self._require_state(app)
         try:
             return self._get_or_create_client(state, runtime)
+        except (NacosConfigError, NacosClientError):
+            raise
         except Exception as exc:
             logger.error("Failed to create Nacos client (error_type=%s)", type(exc).__name__)
-            raise FlaskNacosError("Failed to create Nacos client") from exc
+            raise NacosClientError("Failed to create Nacos client") from exc
 
     def _get_or_create_client(self, state: Dict[str, Any], runtime: _AppRuntimeState) -> Any:
         """Create and cache one client without consuming auto-register pending."""
@@ -647,18 +611,20 @@ class FlaskNacos:
         runtime.heartbeat_cycle_started_monotonic = cycle_started
         runtime.last_heartbeat_observed_monotonic = None
 
-    def _client_for_operation(self, app, state: Dict[str, Any], runtime: _AppRuntimeState) -> Any:
+    def _client_for_operation(self, app) -> Tuple[Dict[str, Any], _AppRuntimeState, Any]:
+        _, state, runtime = self._require_state(app)
         cfg = state["config"]
         if not cfg.get("NACOS_ENABLED", True):
-            return None
+            return state, runtime, None
         self._resume_auto_register_if_pending(app, state, runtime)
+        _, state, runtime = self._require_state(app)
         try:
-            return self._get_or_create_client(state, runtime)
+            return state, runtime, self._get_or_create_client(state, runtime)
+        except (NacosConfigError, NacosClientError):
+            raise
         except Exception as exc:
             logger.error("Nacos client is unavailable (error_type=%s)", type(exc).__name__)
-            if cfg.get("NACOS_FAIL_FAST", False):
-                raise FlaskNacosError("Failed to create Nacos client") from exc
-            return None
+            raise NacosClientError("Failed to create Nacos client") from exc
 
     # -- Registration lifecycle ------------------------------------------
 
@@ -730,7 +696,7 @@ class FlaskNacos:
                 if restart:
                     continue
 
-            policy = self._registration_policy(context, cfg)
+            policy = self._registration_policy(context)
             current_app, current_state, current_runtime = self._require_state(target_app)
             if (
                 current_state is not state
@@ -787,15 +753,11 @@ class FlaskNacos:
     @staticmethod
     def _registration_policy(
         context: _RegisterContext,
-        cfg: Dict[str, Any],
     ) -> _RegistrationPolicy:
         """Return immutable entry behavior without touching lifecycle state."""
         source = context.source
         return _RegistrationPolicy(
-            propagate_config_error=bool(
-                cfg.get("NACOS_FAIL_FAST", False)
-                and source is not _RegistrationSource.PENDING_RECOVERY
-            ),
+            propagate_config_error=source is not _RegistrationSource.PENDING_RECOVERY,
             consume_pending=source is _RegistrationSource.PENDING_RECOVERY,
             log_label=source.value,
         )
@@ -1698,16 +1660,16 @@ class FlaskNacos:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Return instances for ``service_name`` using the current app."""
-        app, state, runtime = self._require_state()
+        app, state, _ = self._require_state()
+        state, _, client = self._client_for_operation(app)
         cfg = state["config"]
-        client = self._client_for_operation(app, state, runtime)
         if client is None:
             return []
         if cluster is None:
             cluster = cfg.get("NACOS_DISCOVERY_CLUSTER")
         if metadata is None:
             metadata = cfg.get("NACOS_DISCOVERY_METADATA") or {}
-        result = self._safe(
+        result = self._run_sync_operation(
             lambda: naming.list_instances(
                 client,
                 cfg,
@@ -1719,7 +1681,6 @@ class FlaskNacos:
             ),
             cfg,
             "Service discovery failed",
-            default=[],
         )
         return result if result is not None else []
 
@@ -1742,11 +1703,10 @@ class FlaskNacos:
             metadata=metadata,
         )
         strategy_name = strategy or cfg.get("NACOS_DISCOVERY_STRATEGY", "first")
-        return self._safe(
+        return self._run_sync_operation(
             lambda: discovery.select_instance(instances, strategy_name),
             cfg,
             "Failed to select a healthy instance",
-            default=None,
             retry=False,
         )
 
@@ -1762,20 +1722,20 @@ class FlaskNacos:
         self, data_id: Optional[str] = None, group: Optional[str] = None
     ) -> Optional[str]:
         """Fetch raw configuration content for the current application."""
-        app, state, runtime = self._require_state()
+        app, state, _ = self._require_state()
         cfg = state["config"]
         if not cfg.get("NACOS_CONFIG_ENABLED", True):
             logger.info("Nacos config center is disabled (NACOS_CONFIG_ENABLED=False)")
             return None
-        client = self._client_for_operation(app, state, runtime)
+        state, _, client = self._client_for_operation(app)
+        cfg = state["config"]
         if client is None:
             return None
         effective_data_id = data_id or cfg.get("NACOS_CONFIG_DATA_ID")
-        return self._safe(
+        return self._run_sync_operation(
             lambda: config_center.get_config(client, cfg, effective_data_id, group=group),
             cfg,
             "Failed to get config from Nacos",
-            default=None,
         )
 
     # -- Local status and health support ----------------------------------
@@ -1907,28 +1867,6 @@ class FlaskNacos:
             _RegisterContext(source=_RegistrationSource.PENDING_RECOVERY),
             new_command=True,
         )
-
-    def _register_request_recovery_hook(self, app, state: Dict[str, Any]) -> None:
-        if state.get(_REQUEST_HOOK_REGISTERED_KEY):
-            return
-        extension_ref = weakref.ref(self)
-
-        def _resume_after_fork_request():
-            extension = extension_ref()
-            if extension is None:
-                return None
-            target_app = current_app._get_current_object()
-            target_state = target_app.extensions.get(EXTENSION_KEY)
-            if not extension._is_owned_state(target_state):
-                return None
-            runtime = extension._ensure_current_runtime(target_state)
-            if request.endpoint == HEALTH_ENDPOINT:
-                return None
-            extension._resume_auto_register_if_pending(target_app, target_state, runtime)
-            return None
-
-        app.before_request(_resume_after_fork_request)
-        state[_REQUEST_HOOK_REGISTERED_KEY] = True
 
     # -- Process exit ------------------------------------------------------
 
@@ -2066,24 +2004,21 @@ class FlaskNacos:
     def _current_pid() -> int:
         return lifecycle.current_pid()
 
-    def _safe(
+    def _run_sync_operation(
         self,
         func,
         cfg: Dict[str, Any],
         message: str,
-        default: Any = None,
         retry: bool = True,
     ) -> Any:
-        """Run non-lifecycle SDK work with the existing fail-fast contract."""
+        """Run synchronous SDK work and preserve its domain exception."""
         try:
             if retry:
                 return run_with_retry(func, message, cfg)
             return func()
         except Exception as exc:
             logger.error("%s (error_type=%s)", message, type(exc).__name__)
-            if cfg.get("NACOS_FAIL_FAST", False):
-                raise
-            return default
+            raise
 
 
 __all__ = ["FlaskNacos", "EXTENSION_KEY"]

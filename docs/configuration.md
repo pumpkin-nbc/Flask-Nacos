@@ -61,8 +61,9 @@ app.config.update(
 Use the namespace ID rather than its display name. Prefer username/password or
 AK/SK according to the server's authentication mode; do not hardcode either.
 Each credential pair must be complete, and the two authentication methods are
-mutually exclusive. Authentication shape is validated during `init_app()`;
-`NACOS_FAIL_FAST` controls whether that deterministic error prevents commit.
+mutually exclusive. With automatic registration enabled, an invalid local auth
+shape fails `init_app()` before extension state is committed. Otherwise the
+cached local error is raised by the first Client or explicit registration use.
 
 ## 2. Service registration
 
@@ -232,7 +233,7 @@ use the configured plain formatter and contain no ANSI color sequences.
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | no | Master switch for Flask-Nacos safety logs. SDK-native logging remains silent in either state. |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values raise `NacosLoggingError` when logging is enabled. |
 | `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | no | Print both normal and error records to the console when logging is enabled. |
 | `NACOS_LOG_FILE_ENABLED` | bool | `True` | no | Write a rotating log file when logging is enabled. |
 | `NACOS_LOG_PATH` | str | `"./logs"` | no | Directory for Flask-Nacos safety logs. It is created only when both logging and file output are enabled. |
@@ -283,14 +284,14 @@ alone as sufficient transport security. In production, connect only through a
 trusted network or a TLS proxy/sidecar that validates the Nacos server
 certificate.
 
-## 9. Behavior control
+## 9. Error behavior
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_FAIL_FAST` | bool | `False` | no | When `True`, Nacos errors raise; when `False`, they are logged and safe defaults are returned. |
-
-See [API Reference](api-reference.md) for how `NACOS_FAIL_FAST` affects each
-method.
+There is no error-mode switch. Purely local configuration errors for active
+automatic registration fail transactionally during initialization; invalid
+explicit registration fails before changing lifecycle state. Runtime lifecycle
+failures stay in local status, while synchronous Client, Discovery, and Config
+operations raise their specific safe domain exceptions. See
+[API Reference](api-reference.md).
 
 ## Configuration center
 

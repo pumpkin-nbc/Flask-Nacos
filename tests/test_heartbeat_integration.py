@@ -46,7 +46,6 @@ def test_temporary_instance_registration_discovery_and_heartbeat_recovery():
         NACOS_SERVICE_EPHEMERAL=True,
         NACOS_SERVICE_HEARTBEAT_INTERVAL=heartbeat_interval,
         NACOS_RETRY_ENABLED=False,
-        NACOS_FAIL_FAST=True,
     )
     extension = FlaskNacos(app)
     external_client = create_external_sdk_client(environment)

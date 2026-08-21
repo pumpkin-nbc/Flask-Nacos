@@ -62,9 +62,8 @@ with app.app_context():
 - UNKNOWN/确定性失败且当前空闲时，再次调用会启动新的有限尝试；已确认瞬时故障会保留现有
   Worker进行低频生命周期自恢复。
 - `NACOS_ENABLED=False` 时该命令完全禁用且无副作用。
-- `NACOS_FAIL_FAST=True` 时，缓存的确定性注册配置错误可以同步抛出且不提交新的生命周期
-  目标；Thread、Client、
-  SDK、超时与连接失败只安全写入本地状态，不由该命令抛出。
+- 缓存的纯本地确定性注册错误会同步抛出且不提交新的生命周期目标；Thread、Client、SDK、
+  超时与连接失败只安全写入本地状态，不由该命令抛出。
 
 临时实例注册成功后，心跳由 SDK接管，Flask-Nacos Worker随即退出，并不是永久心跳线程。
 
@@ -87,7 +86,8 @@ with app.app_context():
 ## `get_client(app=None)` 与 `.client`
 
 `get_client()` 显式请求所选 app 与当前 PID 可用的 Client。只有扩展禁用时返回 `None`；
-创建失败时抛出安全的 `FlaskNacosError`，并通过异常链保留原始 cause。
+本地配置非法时抛出 `NacosConfigError`/`NacosValidationError`，Client构造失败时抛出
+`NacosClientError`，并通过异常链保留原始 cause。
 
 读取 `.client` 永远不会创建 Client，只返回当前上下文应用已经缓存的 Client 或 `None`；
 无上下文时抛出 `FlaskNacosError`。
@@ -148,13 +148,15 @@ Client 创建本身不修改注册目标、注册事实、生命周期 generatio
   `NACOS_CONFIG_DATA_ID`。
 - `normalize_instance(instance)` 返回标准化字典或 `None`。
 
-这些操作使用当前 Flask 上下文，并在需要时惰性创建 app/PID Client。Flask-Nacos 不解析
-YAML 或 JSON 配置内容。
+这些操作使用当前 Flask 上下文，并在需要时惰性创建 app/PID Client。合法空结果仍为
+`[]`/`None`；校验、Client、Discovery或Config真实失败会在既有有限重试预算后抛出最具体的
+现有领域异常。Flask-Nacos 不解析 YAML 或 JSON 配置内容。
 
 ## 异常类型
 
-- `FlaskNacosError`：应用选择、初始化 owner 或显式 Client 创建失败。
+- `FlaskNacosError`：应用选择或初始化 owner 非法。
 - `NacosConfigError`：确定性扩展配置非法。
+- `NacosClientError`：SDK Client无法构造或使用。
 - `NacosValidationError`：注册或发现输入非法。
 - `NacosRegistrationError` / `NacosDeregistrationError`：Naming SDK 未明确成功。
 - `NacosDiscoveryError`：发现 SDK 操作失败。

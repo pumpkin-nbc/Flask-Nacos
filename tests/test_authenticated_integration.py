@@ -33,7 +33,6 @@ def test_authenticated_config_round_trip():
         NACOS_CONFIG_ENABLED=True,
         NACOS_REQUEST_TIMEOUT=5.0,
         NACOS_RETRY_ENABLED=False,
-        NACOS_FAIL_FAST=True,
     )
     extension = FlaskNacos(app)
     client = extension.get_client()
@@ -66,7 +65,6 @@ def test_invalid_credentials_fail_deterministically():
         NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_CONFIG_ENABLED=False,
         NACOS_RETRY_ENABLED=False,
-        NACOS_FAIL_FAST=True,
     )
     extension = FlaskNacos(app)
 
@@ -115,7 +113,6 @@ def test_authenticated_client_create_recovers_through_tcp_gate(monkeypatch):
             NACOS_RETRY_ENABLED=True,
             NACOS_RETRY_TIMES=1,
             NACOS_RETRY_INTERVAL=0.0,
-            NACOS_FAIL_FAST=True,
         )
         extension = FlaskNacos(app)
         try:

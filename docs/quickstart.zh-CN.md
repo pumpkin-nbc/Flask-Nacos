@@ -124,8 +124,6 @@ app.config.update(
     NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
     NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
     NACOS_LOG_FILENAME=os.environ.get("NACOS_LOG_FILENAME", "flask-nacos.log"),
-    # Temporarily set NACOS_FAIL_FAST=true when an exact startup error is needed.
-    NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
 
 nacos = FlaskNacos(app)
@@ -470,8 +468,8 @@ Test-NetConnection 203.0.113.20 -Port 3000
 macOS/Linux 可以使用 `nc -vz nacos.example.com 8848` 和
 `nc -vz 203.0.113.20 3000`。请将所有文档示例地址替换为自己的测试环境。
 
-如果 client 仍未初始化，可以临时设置 `NACOS_FAIL_FAST=true` 并重启 Flask，从异常中
-读取准确原因；完成排查后，根据应用启动策略删除或恢复该设置。
+如果 Client仍未初始化，可在受控诊断路径中调用 `get_client()`，查看安全的
+`NacosConfigError`/`NacosClientError` 及其 cause；不要公开暴露该诊断入口。
 
 ## 常见问题速查
 

@@ -87,7 +87,6 @@ def test_service_registration_guides_include_lifecycle_flowcharts():
     shared_markers = (
         "register_instance(app)",
         "NACOS_AUTO_REGISTER",
-        "NACOS_FAIL_FAST",
         "target_registered",
         "operation_running",
         "last_error",
@@ -332,7 +331,6 @@ def test_bilingual_docs_describe_strict_runtime_validation():
         "NACOS_REQUEST_TIMEOUT",
         "NACOS_USERNAME",
         "NACOS_ACCESS_KEY",
-        "NACOS_FAIL_FAST",
     )
 
     for path in english_files + chinese_files:
@@ -355,7 +353,6 @@ def test_bilingual_docs_describe_auto_registration_preflight():
     shared_markers = (
         "NACOS_SERVICE_NAME",
         "NACOS_AUTO_REGISTER",
-        "NACOS_FAIL_FAST",
         "init_app(app)",
         "preload",
     )
@@ -371,6 +368,7 @@ def test_bilingual_docs_describe_auto_registration_preflight():
     (
         "NACOS_AUTO_REGISTER_" + "ON_INIT",
         "NACOS_REGISTER_" + "ENABLED",
+        "NACOS_FAIL_" + "FAST",
     ),
 )
 def test_removed_registration_keys_are_absent_from_current_tree(removed_key):

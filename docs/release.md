@@ -88,8 +88,9 @@ The script runs Ruff, mypy, pytest, version, sensitive-information,
 documentation, compatibility, API and example checks; removes old build
 artifacts from the `dist/` root while preserving versioned archives such as
 `dist/1.1.0/`; builds wheel and sdist; runs `twine check --strict`; verifies
-metadata, contents and source freshness; then installs both artifacts in
-separate temporary environments.
+metadata, contents, source freshness, and the absence of removed configuration
+keys; then installs both artifacts in separate temporary environments and
+checks the fixed public status schema and disabled/lazy lifecycle smoke.
 
 Confirm that `git status` contains no unintended tracked or untracked release
 input. Local notes outside Hatch's explicit sdist include list do not enter the

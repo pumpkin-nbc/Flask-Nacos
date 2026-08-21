@@ -211,11 +211,10 @@ def test_register_then_deregister_compensates_after_register_success(
     fake_client.remove_naming_instance.assert_called_once()
 
 
-@pytest.mark.parametrize("fail_fast", [False, True])
 def test_thread_start_runtime_error_is_suppressed_and_retryable(
-    make_app, patched_create_client, fake_client, monkeypatch, fail_fast
+    make_app, patched_create_client, fake_client, monkeypatch
 ):
-    app = make_app({"NACOS_FAIL_FAST": fail_fast})
+    app = make_app()
     nacos = FlaskNacos(app)
     real_thread = extension_module.Thread
 
@@ -444,12 +443,13 @@ def test_naming_rpc_snapshots_actual_client_timeout_not_config_timeout(
     assert runtime.naming_rpc_timeout is None
 
 
-def test_cached_deterministic_error_obeys_fail_fast(make_app, patched_create_client):
+def test_cached_deterministic_error_is_raised_by_explicit_register(
+    make_app, patched_create_client
+):
     app = make_app(
         {
             "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": False,
-            "NACOS_FAIL_FAST": True,
         }
     )
     nacos = FlaskNacos(app)

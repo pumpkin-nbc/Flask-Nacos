@@ -117,8 +117,6 @@ app.config.update(
     NACOS_LOG_FILE_ENABLED=os.environ.get("NACOS_LOG_FILE_ENABLED", "true"),
     NACOS_LOG_PATH=os.environ.get("NACOS_LOG_PATH", "./logs"),
     NACOS_LOG_FILENAME=os.environ.get("NACOS_LOG_FILENAME", "flask-nacos.log"),
-    # Temporarily set NACOS_FAIL_FAST=true when an exact startup error is needed.
-    NACOS_FAIL_FAST=os.environ.get("NACOS_FAIL_FAST", "false"),
 )
 
 nacos = FlaskNacos(app)
@@ -461,9 +459,9 @@ On macOS/Linux, use `nc -vz nacos.example.com 8848` and
 `nc -vz 203.0.113.20 3000`. Replace all documentation addresses with your real
 test environment.
 
-If the client still does not initialize, temporarily set
-`NACOS_FAIL_FAST=true`, restart Flask, and read the exact exception. Remove or
-reset it after diagnosis according to your application's startup policy.
+If the client still does not initialize, call `get_client()` from a controlled
+diagnostic path and inspect its safe `NacosConfigError` or `NacosClientError`
+and cause. Do not expose that diagnostic path publicly.
 
 ## Quick troubleshooting
 

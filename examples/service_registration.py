@@ -22,7 +22,6 @@ app.config.update(
     # Auto-register during trusted application initialization.
     NACOS_AUTO_REGISTER=True,
     NACOS_DEREGISTER_ON_EXIT=True,
-    NACOS_FAIL_FAST=False,
 )
 
 nacos = FlaskNacos(app)

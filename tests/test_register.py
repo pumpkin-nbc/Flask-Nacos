@@ -74,7 +74,6 @@ def test_persistent_instance_ignores_invalid_heartbeat_interval(
             "NACOS_AUTO_REGISTER": False,
             "NACOS_SERVICE_EPHEMERAL": False,
             "NACOS_SERVICE_HEARTBEAT_INTERVAL": "not-used",
-            "NACOS_FAIL_FAST": True,
         }
     )
     nacos = FlaskNacos(app)
@@ -107,9 +106,9 @@ def test_deregister_reuses_the_exact_registered_identity(
     assert deregister_kwargs["cluster_name"] == register_kwargs["cluster_name"]
 
 
-def test_missing_port_fails_fast(make_app, patched_create_client):
+def test_missing_port_raises_validation_error(make_app, patched_create_client):
     app = make_app(
-        {"NACOS_SERVICE_PORT": None, "NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": True}
+        {"NACOS_SERVICE_PORT": None, "NACOS_AUTO_REGISTER": False}
     )
     nacos = FlaskNacos(app)
 

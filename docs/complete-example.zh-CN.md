@@ -231,8 +231,8 @@ python examples/complete_factory_app.py
 因此状态接口最初可能短暂返回 `registered=false`。进程正常退出时，退出处理器会等待
 进行中的注册，并且只注销由当前应用成功注册的实例。
 
-示例特意设置 `NACOS_FAIL_FAST=False`：Nacos 暂时不可用时不会阻止 Flask 启动；依赖
-Nacos 的示例接口会返回安全响应，不会暴露凭据或 SDK traceback。
+Client构造与 Nacos网络操作不在初始化线程执行，因此暂时故障不会阻塞应用工厂；依赖
+Nacos 的示例接口会捕获安全领域异常并返回受控的 503，不暴露凭据或 SDK traceback。
 
 ## 6. 验证全部接入点
 
@@ -270,8 +270,8 @@ curl http://127.0.0.1:5000/api/nacos/instances
 curl "http://127.0.0.1:5000/api/nacos/instances?service=user-service&cluster=CANARY"
 ```
 
-空实例列表是合法的发现结果。关闭 fail-fast 时，SDK 发现失败也会使用库的安全返回值
-`[]`；如果运维上必须区分“服务为空”和“Nacos 故障”，应同时查看日志与外部监控。
+空实例列表是合法发现结果；SDK或响应结构失败会抛出 `NacosDiscoveryError`，由示例转换为
+安全的 503，因此不会把“Nacos故障”误判为“服务为空”。
 
 按 `Ctrl+C` 停止开发服务器。解释器正常退出时会注销已注册实例。随后可以停止本地
 Nacos：
@@ -310,7 +310,7 @@ SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`
 
 - 发布消费者能够访问的 IP 或 DNS 地址，不要使用 `127.0.0.1`；
 - 使用密钥管理服务保存凭据，并开启 Nacos 认证；
-- 根据应用启动策略选择 fail-fast 和重试配置；
+- 根据应用韧性策略选择重试配置；
 - 需要判断远端可用性时，使用真正执行 Nacos 操作的 readiness/监控；
 - 不要使用仓库自带的单机 Compose 配置。
 

@@ -692,7 +692,7 @@ def test_heartbeat_instrumentation_install_failure_keeps_sdk_client_usable(
 def test_invalid_authentication_fails_before_client_creation(
     make_app, patched_create_client, auth_config
 ):
-    app = make_app({**auth_config, "NACOS_FAIL_FAST": True})
+    app = make_app({**auth_config, "NACOS_AUTO_REGISTER": True})
 
     with pytest.raises(NacosConfigError):
         FlaskNacos(app)
@@ -701,14 +701,15 @@ def test_invalid_authentication_fails_before_client_creation(
     assert "nacos" not in app.extensions
 
 
-def test_invalid_authentication_is_safe_when_not_fail_fast(make_app, patched_create_client):
+def test_invalid_authentication_is_deferred_when_auto_registration_is_disabled(
+    make_app, patched_create_client
+):
     app = make_app(
         {
             "NACOS_USERNAME": "user",
             "NACOS_PASSWORD": "password",
             "NACOS_ACCESS_KEY": "access",
             "NACOS_SECRET_KEY": "secret",
-            "NACOS_FAIL_FAST": False,
         }
     )
 
@@ -716,6 +717,8 @@ def test_invalid_authentication_is_safe_when_not_fail_fast(make_app, patched_cre
 
     with app.app_context():
         assert extension.client is None
+        with pytest.raises(NacosConfigError):
+            extension.get_client()
     assert patched_create_client["count"] == 0
 
 
@@ -732,7 +735,6 @@ def test_invalid_authentication_does_not_log_credentials(make_app, patched_creat
             "NACOS_PASSWORD": credentials[1],
             "NACOS_ACCESS_KEY": credentials[2],
             "NACOS_SECRET_KEY": credentials[3],
-            "NACOS_FAIL_FAST": False,
             "NACOS_LOG_ENABLED": True,
             "NACOS_LOG_FILE_ENABLED": False,
         }
@@ -740,6 +742,8 @@ def test_invalid_authentication_does_not_log_credentials(make_app, patched_creat
 
     with caplog.at_level(logging.DEBUG, logger="flask_nacos"):
         extension = FlaskNacos(app)
+        with pytest.raises(NacosConfigError):
+            extension.get_client(app)
 
     with app.app_context():
         assert extension.client is None

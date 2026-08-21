@@ -77,8 +77,9 @@ bash scripts/release_check.sh
 
 脚本会运行 Ruff、mypy、pytest、版本、敏感信息、文档、兼容性、API 和示例检查；
 只清理 `dist/` 根目录旧产物并保留 `dist/1.1.0/` 等版本化归档；构建 wheel 与 sdist；
-执行 `twine check --strict`；校验元数据、包内容和
-源码新鲜度；最后在两个独立临时环境中分别安装两种产物。
+执行 `twine check --strict`；校验元数据、包内容、源码新鲜度及已删除配置键零引用；
+最后在两个独立临时环境中分别安装两种产物，并检查固定公开状态结构及禁用/惰性生命周期
+smoke。
 
 确认 `git status` 中没有非预期的发布输入。Hatch 显式包含列表之外的本地笔记不会
 进入源码包，但仍应人工确认。

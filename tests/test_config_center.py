@@ -94,8 +94,10 @@ def test_get_config_disabled_skips_sdk_even_without_client(
     fake_client.get_config.assert_not_called()
 
 
-def test_missing_default_data_id_honors_fail_fast(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_CONFIG_DATA_ID": None, "NACOS_FAIL_FAST": True})
+def test_missing_default_data_id_raises_validation_error(
+    make_app, patched_create_client, fake_client
+):
+    app = make_app({"NACOS_CONFIG_DATA_ID": None})
     nacos = FlaskNacos(app)
 
     with app.app_context(), pytest.raises(NacosValidationError):
@@ -110,18 +112,7 @@ def test_missing_default_data_id_honors_fail_fast(make_app, patched_create_clien
 def test_invalid_request_timeout_does_not_call_sdk(
     make_app, patched_create_client, fake_client, timeout
 ):
-    app = make_app({"NACOS_REQUEST_TIMEOUT": timeout, "NACOS_FAIL_FAST": False})
-    nacos = FlaskNacos(app)
-
-    with app.app_context():
-        assert nacos.get_config("application.yaml") is None
-    fake_client.get_config.assert_not_called()
-
-
-def test_invalid_request_timeout_raises_when_fail_fast(
-    make_app, patched_create_client, fake_client
-):
-    app = make_app({"NACOS_REQUEST_TIMEOUT": float("inf"), "NACOS_FAIL_FAST": True})
+    app = make_app({"NACOS_REQUEST_TIMEOUT": timeout})
     nacos = FlaskNacos(app)
 
     with app.app_context(), pytest.raises(NacosValidationError):

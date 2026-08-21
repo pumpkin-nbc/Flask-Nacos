@@ -29,9 +29,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: 1.1 registration is always a background lifecycle command.
 - Fix: use `get_status()` and logs for Nacos timeouts, finite retries, and
   transient lifecycle recovery.
-  `NACOS_FAIL_FAST=True` only raises cached deterministic registration errors.
-  Thread creation/start, Client, SDK, timeout, and connection failures are
-  safely recorded and never escape `register_instance()`.
+  Purely local deterministic registration errors raise before a target is
+  submitted. Thread creation/start, Client, SDK, timeout, and connection
+  failures are safely recorded and never escape `register_instance()`.
 
 ## Why does `operation_running=True` remain after finite retries?
 
@@ -70,12 +70,13 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 ## 5. Nacos Client creation fails
 
 - Symptom: `client_created` remains `False`, registration stops with a safe
-  `last_error`, or explicit `get_client()` raises `FlaskNacosError`.
+  `last_error`, or explicit `get_client()` raises `NacosConfigError` or
+  `NacosClientError`.
 - Cause: bad `NACOS_SERVER_ADDR`, network issues, or auth failure.
 - Investigate: verify the server address and connectivity; read logs.
-- Fix: correct the address/credentials. Authentication shape is deterministic
-  and can be surfaced during startup with `NACOS_FAIL_FAST=True`; runtime
-  connection failure remains a background lifecycle error. With SDK `2.0.11`,
+- Fix: correct the address/credentials. Active automatic registration rejects
+  an invalid local authentication shape during startup; runtime connection
+  failure remains a background lifecycle error. With SDK `2.0.11`,
   a verified temporary node-unavailable failure during authenticated Client
   construction continues through lifecycle Recovery after the finite budget;
   HTTP 401/403 stops immediately.
@@ -92,8 +93,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: `NACOS_USERNAME`/`NACOS_PASSWORD` or
   `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` is incomplete, both authentication
   methods are configured, or a credential is not a string.
-- Fix: configure exactly one complete credential pair. Temporarily enable
-  `NACOS_FAIL_FAST=True` to surface the safe configuration error.
+- Fix: configure exactly one complete credential pair. Active automatic
+  registration reports the safe local error during startup; otherwise
+  `get_client()` or explicit registration raises it on first use.
 
 ## 7. Wrong namespace
 
@@ -160,20 +162,19 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   external coordinator own registration and deregistration. See
   [Production](production.md).
 
-## 12. `NACOS_FAIL_FAST=True` prevents startup
+## 12. Local registration configuration prevents startup
 
-- Symptom: the app crashes during `FlaskNacos(app)` / `init_app(app)`, or a
-  lazy-loading WSGI server shows the error on the first request.
-- Cause: `NACOS_FAIL_FAST=True` turns deterministic configuration errors into
-  exceptions. When automatic registration is active, missing or invalid
-  registration settings are checked before Client creation.
+- Symptom: the app raises during `FlaskNacos(app)` / `init_app(app)`.
+- Cause: when automatic registration is active, missing or invalid local
+  registration settings are checked before Client creation and extension-state
+  commit.
 - Investigate: read the exception and confirm when the application factory is
   executed. `NACOS_SERVICE_NAME` must be a non-empty, non-whitespace string when
   automatic registration is active.
-- Fix: correct the invalid configuration, or use `NACOS_FAIL_FAST=False`
-  (default) so the safe error remains observable while startup continues. For
-  Gunicorn `--preload`, set `NACOS_AUTO_REGISTER=False` and register in
-  the worker hook after fork.
+- Fix: correct the invalid configuration. If this process only uses Discovery
+  or Config, set `NACOS_AUTO_REGISTER=False`; explicit registration will still
+  validate and raise later. For Gunicorn `--preload`, register in the worker
+  hook after fork.
 
 ## 13. `get_config()` returns a string, not a dict
 

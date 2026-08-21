@@ -64,8 +64,6 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_DISCOVERY_METADATA": {},
     # Instance normalization (0.4.0).
     "NACOS_INSTANCE_NORMALIZE": True,
-    # Behavior control.
-    "NACOS_FAIL_FAST": False,
     # Safe Flask-Nacos logging control. Raw SDK logs stay silent.
     "NACOS_LOG_ENABLED": False,
     "NACOS_LOG_LEVEL": "INFO",
@@ -105,7 +103,6 @@ def load_config(app) -> Dict[str, Any]:
         "NACOS_HEALTH_CHECK_ENABLED",
         "NACOS_STATUS_ENABLED",
         "NACOS_INSTANCE_NORMALIZE",
-        "NACOS_FAIL_FAST",
         "NACOS_LOG_ENABLED",
         "NACOS_LOG_CONSOLE_ENABLED",
         "NACOS_LOG_FILE_ENABLED",
@@ -116,7 +113,7 @@ def load_config(app) -> Dict[str, Any]:
 
     # Logging file-rotation numbers may arrive as strings (e.g. env vars).
     # Coerce when possible; leave the original value otherwise so logging
-    # setup can decide how to degrade (honoring NACOS_FAIL_FAST).
+    # setup can report an enabled capability's invalid configuration.
     max_bytes_coerced = to_int(merged["NACOS_LOG_MAX_BYTES"], None)
     if max_bytes_coerced is not None:
         merged["NACOS_LOG_MAX_BYTES"] = max_bytes_coerced
@@ -154,8 +151,8 @@ def load_config(app) -> Dict[str, Any]:
         if isinstance(merged[key], dict):
             merged[key] = dict(merged[key])
 
-    # Metadata validation is deferred to registration so a bad value honors
-    # NACOS_FAIL_FAST rather than crashing init_app unconditionally.
+    # Registration-only validation remains deferred until registration is an
+    # actual responsibility (automatic or explicit).
     return merged
 
 

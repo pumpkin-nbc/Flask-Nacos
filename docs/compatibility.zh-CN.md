@@ -89,9 +89,8 @@ wrapper，由日志和可选 Runtime observer共用；按身份节流的日志�
 camelCase（`serviceName`、`clusterName`）与 snake_case（`service_name`、
 `cluster_name`）字段名，并为缺失字段填充合理的默认值。
 
-SDK 返回结构的轻微差异不会导致服务发现整体失败。当结构完全无法识别时，行为遵循
-`NACOS_FAIL_FAST`：`NACOS_FAIL_FAST=False`（默认）时返回空列表并记录日志；
-`NACOS_FAIL_FAST=True` 时抛出异常。
+SDK 返回结构的轻微差异不会导致服务发现整体失败；结构完全无法识别时抛出
+`NacosDiscoveryError`，只有合法空响应才返回 `[]`。
 
 ## Gunicorn / uWSGI 多 worker 注意事项
 

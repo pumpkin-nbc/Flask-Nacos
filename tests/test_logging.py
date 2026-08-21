@@ -141,13 +141,32 @@ def test_disabled_silences_flask_nacos_and_sdk_loggers():
         assert lg.hasHandlers()
 
 
-def test_disabled_ignores_configured_path_and_filename(tmp_path):
+def test_disabled_ignores_all_unused_logging_settings(tmp_path):
     log_directory = tmp_path / "must-not-exist"
     app, cfg = _cfg(
         NACOS_LOG_ENABLED=False,
+        NACOS_LOG_LEVEL=object(),
+        NACOS_LOG_FORMAT=object(),
         NACOS_LOG_PATH=str(log_directory),
         NACOS_LOG_FILENAME="nested/invalid.log",
-        NACOS_FAIL_FAST=True,
+        NACOS_LOG_MAX_BYTES=True,
+        NACOS_LOG_BACKUP_COUNT=float("inf"),
+    )
+
+    nlog.configure_logger(app, cfg)
+
+    assert not log_directory.exists()
+    assert _file_handlers(_flask_logger()) == []
+
+
+def test_file_disabled_ignores_unused_file_settings(tmp_path):
+    log_directory = tmp_path / "must-not-exist"
+    app, cfg = _cfg(
+        NACOS_LOG_FILE_ENABLED=False,
+        NACOS_LOG_PATH=str(log_directory),
+        NACOS_LOG_FILENAME="nested/invalid.log",
+        NACOS_LOG_MAX_BYTES=True,
+        NACOS_LOG_BACKUP_COUNT=float("inf"),
     )
 
     nlog.configure_logger(app, cfg)
@@ -169,17 +188,11 @@ def test_debug_level_applies_only_to_flask_nacos_logger():
         assert sdk_logger.disabled is True
 
 
-# 9-10: invalid level with fail-fast rules -----------------------------------
+# 9: enabled logging rejects invalid levels ----------------------------------
 
 
-def test_invalid_level_without_fail_fast_falls_back_to_info():
-    app, cfg = _cfg(NACOS_LOG_LEVEL="BOGUS", NACOS_FAIL_FAST=False)
-    nlog.configure_logger(app, cfg)
-    assert logging.getLogger("flask_nacos").level == logging.INFO
-
-
-def test_invalid_level_with_fail_fast_raises():
-    app, cfg = _cfg(NACOS_LOG_LEVEL="BOGUS", NACOS_FAIL_FAST=True)
+def test_invalid_level_raises_when_logging_is_enabled():
+    app, cfg = _cfg(NACOS_LOG_LEVEL="BOGUS")
     with pytest.raises(NacosLoggingError):
         nlog.configure_logger(app, cfg)
 
@@ -200,8 +213,8 @@ def test_invalid_level_with_fail_fast_raises():
         ("NACOS_LOG_BACKUP_COUNT", float("inf")),
     ],
 )
-def test_invalid_log_file_and_rotation_settings_fail_fast(key, value):
-    app, cfg = _cfg(NACOS_FAIL_FAST=True, **{key: value})
+def test_invalid_enabled_log_file_and_rotation_settings_raise(key, value):
+    app, cfg = _cfg(**{key: value})
 
     with pytest.raises(NacosLoggingError):
         nlog.validate_logging_config(cfg)
@@ -213,7 +226,6 @@ def test_valid_string_rotation_settings_are_coerced(tmp_path):
         NACOS_LOG_PATH=str(log_directory),
         NACOS_LOG_MAX_BYTES="1024",
         NACOS_LOG_BACKUP_COUNT="2",
-        NACOS_FAIL_FAST=True,
     )
 
     nlog.configure_logger(app, cfg)
@@ -226,9 +238,10 @@ def test_valid_string_rotation_settings_are_coerced(tmp_path):
 
 def test_get_log_level_helper():
     assert nlog.get_log_level("debug") == logging.DEBUG
-    assert nlog.get_log_level(None) == logging.INFO
     with pytest.raises(NacosLoggingError):
-        nlog.get_log_level("nope", fail_fast=True)
+        nlog.get_log_level(None)
+    with pytest.raises(NacosLoggingError):
+        nlog.get_log_level("nope")
 
 
 # 11-12: console handler + dedup ---------------------------------------------
@@ -349,7 +362,8 @@ def test_file_logging_can_be_disabled_without_creating_path(tmp_path):
         NACOS_LOG_FILE_ENABLED=False,
         NACOS_LOG_PATH=123,
         NACOS_LOG_FILENAME="nested/invalid.log",
-        NACOS_FAIL_FAST=True,
+        NACOS_LOG_MAX_BYTES=True,
+        NACOS_LOG_BACKUP_COUNT=float("inf"),
     )
 
     nlog.configure_logger(app, cfg)
@@ -362,7 +376,7 @@ def test_file_logging_can_be_disabled_without_creating_path(tmp_path):
 def test_existing_file_cannot_be_used_as_log_directory(tmp_path):
     legacy_file = tmp_path / "logs"
     legacy_file.write_text("legacy log content", encoding="utf-8")
-    app, cfg = _cfg(NACOS_LOG_PATH=str(legacy_file), NACOS_FAIL_FAST=True)
+    app, cfg = _cfg(NACOS_LOG_PATH=str(legacy_file))
 
     with pytest.raises(NacosLoggingError, match="must point to a directory"):
         nlog.validate_logging_config(cfg)
@@ -381,7 +395,7 @@ def test_file_configured_blocks_sdk_default(tmp_path, monkeypatch):
     assert not (tmp_path / "logs" / "nacos" / "nacos-client-python.log").exists()
 
 
-def test_non_fail_fast_file_failure_keeps_requested_console_logging(monkeypatch):
+def test_file_handler_failure_raises_without_partial_reconfiguration(monkeypatch):
     def fail_file_handler(*args, **kwargs):
         raise OSError("read-only destination")
 
@@ -389,12 +403,13 @@ def test_non_fail_fast_file_failure_keeps_requested_console_logging(monkeypatch)
     app, cfg = _cfg(
         NACOS_LOG_CONSOLE_ENABLED=True,
         NACOS_LOG_PATH="unwritable",
-        NACOS_FAIL_FAST=False,
     )
 
-    nlog.configure_logger(app, cfg)
+    with pytest.raises(NacosLoggingError) as raised:
+        nlog.configure_logger(app, cfg)
 
-    assert len(_console_handlers(_flask_logger())) == 1
+    assert isinstance(raised.value.__cause__, OSError)
+    assert len(_console_handlers(_flask_logger())) == 0
     assert _file_handlers(_flask_logger()) == []
 
 

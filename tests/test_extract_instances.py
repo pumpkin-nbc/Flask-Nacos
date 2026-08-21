@@ -86,21 +86,11 @@ def test_list_instances_handles_data_hosts(make_app, patched_create_client, fake
     assert {r["port"] for r in result} == {8000, 8001}
 
 
-def test_list_instances_unrecognized_shape_default_empty(
+def test_list_instances_unrecognized_shape_raises(
     make_app, patched_create_client, fake_client
 ):
     fake_client.list_naming_instance.return_value = "garbage"
     app = make_app()
-    nacos = FlaskNacos(app)
-
-    assert _call(app, nacos.list_instances, "user-service") == []
-
-
-def test_list_instances_unrecognized_shape_fail_fast_raises(
-    make_app, patched_create_client, fake_client
-):
-    fake_client.list_naming_instance.return_value = "garbage"
-    app = make_app({"NACOS_FAIL_FAST": True})
     nacos = FlaskNacos(app)
 
     with pytest.raises(NacosDiscoveryError):

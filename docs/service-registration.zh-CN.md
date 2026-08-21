@@ -21,13 +21,12 @@ app.config.update(
 `NACOS_AUTO_REGISTER` 与 `NACOS_ENABLED` 都为 true 时，`init_app(app)` 校验注册快照并调用公开的
 `register_instance(app)`。该命令立即返回，Client 创建与 Naming RPC由 Worker完成。
 
-`NACOS_FAIL_FAST=True` 时，确定性注册配置非法会在 `init_app(app)` 提交扩展状态前抛出。
-设为 false 时会完成初始化，状态为 `target_registered=True`、`registered=False` 和安全的
-`last_error`，且不会启动无效 Worker。
+纯本地确定性注册配置非法时，`init_app(app)` 会在提交扩展状态前抛出。初始化线程不会执行
+Client构造、认证网络 I/O 或 Naming RPC。
 
 关闭自动注册时，初始化不校验仅用于注册的配置。首次显式注册才执行纯本地确定性校验、
-缓存当前应用状态的结果，并进入同一生命周期转换。fail-fast 模式下，非法显式命令同步
-抛出，且不会修改目标、generation、错误、operation 或 Client 状态。
+缓存当前应用状态的结果，并进入同一生命周期转换。非法显式命令同步抛出，且不会修改
+目标、generation、错误、operation 或 Client 状态。
 
 ## 显式注册
 
@@ -58,10 +57,8 @@ flowchart TD
     B --> G{"启用自动注册？"}
     G -- "否" --> H["初始化完成；延迟注册专用校验"]
     G -- "是" --> C{"注册存在确定性错误？"}
-    C -- "是，fail-fast" --> D["提交 app 状态前抛出"]
-    C -- "是，安全模式" --> E["提交 Runtime；公开命令记录目标与安全错误"]
+    C -- "是" --> D["提交 app 状态前抛出"]
     C -- "否" --> F["提交 client=None 的 PID Runtime"]
-    E --> H
     F --> I["调用 register_instance(app)"]
     I --> J["发布一个 daemon Worker"]
     J --> H
@@ -182,8 +179,9 @@ target、事实、generation 或 Worker状态。
 ## Fork 与进程服务器
 
 Client、Worker、锁、Event 与注册事实都绑定 PID。fork 后父 Runtime整体作废，同一当前 PID
-只发布一个新 Runtime。普通业务请求与 SDK操作可以恢复待执行的自动注册；`get_status()`、
-`/health/nacos` 和 `.client` 不会消费 pending。
+只发布一个新 Runtime。显式注册或真实的 Client、Discovery、Config SDK操作可以非阻塞恢复
+待执行的自动注册；普通业务请求、`get_status()`、`/health/nacos` 和 `.client` 不会消费
+pending。
 
 Gunicorn `--preload` 会在 worker fork 前由 master初始化应用。推荐设置
 `NACOS_AUTO_REGISTER=False`，并在 Gunicorn 的 post-fork/worker-init hook中显式

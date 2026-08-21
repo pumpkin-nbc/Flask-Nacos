@@ -34,8 +34,7 @@ def extract_instances(response: Any) -> List[Any]:
     - a ``dict`` with ``data`` holding either a list, or a nested dict with
       ``hosts``/``instances`` -> that list
 
-    Raises :class:`NacosDiscoveryError` for a fundamentally unrecognized shape
-    so the caller can honor ``NACOS_FAIL_FAST``.
+    Raises :class:`NacosDiscoveryError` for a fundamentally unrecognized shape.
     """
     if response is None:
         return []
