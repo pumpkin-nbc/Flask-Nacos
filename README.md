@@ -211,7 +211,7 @@ seconds. It falls back to three seconds when no valid SDK timeout is available.
 
 ## Local status
 
-`get_status(app=None)` returns exactly 12 local fields:
+`get_status(app=None)` returns exactly 16 local fields:
 
 ```python
 {
@@ -227,12 +227,24 @@ seconds. It falls back to three seconds when no valid SDK timeout is available.
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
 `registered` is the most recent local fact confirmed by a successful Naming
-RPC, not a live Nacos query. Status does not create a Client, contact Nacos,
-detect an IP, start a thread, or resume post-fork registration.
+RPC, not a live Nacos query. `heartbeat_state` is the most recent local SDK
+heartbeat observation for the current ephemeral registration cycle:
+`unknown` before the first observed beat, `healthy` after success, `failing`
+after failure, and `not_applicable` while disabled, unregistered, or persistent.
+Heartbeat timestamps are Unix epoch seconds; the error field contains only a
+safe exception type. These fields do not prove that the remote instance still
+exists and never drive Lifecycle recovery.
+
+Status does not create a Client, contact Nacos, detect an IP, start a thread,
+or resume post-fork registration.
 
 `get_client(app)` explicitly creates or returns the app/PID Client and raises a
 safe `FlaskNacosError` if creation fails. The `.client` property is cache-only

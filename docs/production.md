@@ -142,8 +142,10 @@ verified transport boundary until the upstream SDK behavior meets your policy.
 
 ## Health and observability
 
-`/health/nacos` and `get_status()` report local lifecycle state only. They do not
-query Nacos or inspect SDK heartbeat success. Add a separate remote probe when
+`/health/nacos` reports local lifecycle state only. `get_status()` additionally
+reports the latest locally observed SDK heartbeat for the current ephemeral
+registration cycle. Neither endpoint queries Nacos, and neither observation
+proves that the remote instance still exists. Add a separate remote probe when
 your readiness policy requires current Nacos reachability.
 
 During transient startup recovery, `operation_running=True` can remain visible

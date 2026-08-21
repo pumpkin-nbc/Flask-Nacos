@@ -25,6 +25,10 @@ STATUS_KEYS = {
     "registered",
     "operation_running",
     "last_error",
+    "heartbeat_state",
+    "last_heartbeat_success_at",
+    "last_heartbeat_failure_at",
+    "heartbeat_error_type",
 }
 
 

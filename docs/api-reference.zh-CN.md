@@ -96,7 +96,7 @@ Client 创建本身不修改注册目标、注册事实、生命周期 generatio
 
 ## `get_status(app=None)`
 
-固定返回以下 12 个本地字段：
+固定返回以下 16 个本地字段：
 
 ```python
 {
@@ -112,12 +112,27 @@ Client 创建本身不修改注册目标、注册事实、生命周期 generatio
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
 `registered` 是最近一次 Naming 注册/注销成功确认的本地事实，不是实时服务端查询。
 `operation_running` 同时覆盖后台注册生命周期与同步注销生命周期。`last_error` 只包含安全的
 异常类型或内部错误码。
+
+`heartbeat_state` 表示当前本地临时注册周期最近一次被接受的 SDK 心跳观测：
+
+- `unknown`：临时注册成功，但尚未观察到本周期心跳。
+- `healthy`：最近一次有效心跳成功。
+- `failing`：最近一次有效心跳失败。
+- `not_applicable`：扩展禁用、尚未注册或当前为持久实例。
+
+两个心跳时间字段为 Unix epoch秒或 `None`；`heartbeat_error_type` 只包含安全异常类型，
+恢复成功后清除。观测按 app/PID、准确注册身份、注册周期和 monotonic完成顺序隔离；它不会
+改变 Lifecycle 状态，也不能证明远端当前健康。
 
 注册前身份来自配置快照，不探测 IP；已注册时优先返回实际缓存的注册身份。
 

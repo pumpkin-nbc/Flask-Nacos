@@ -78,10 +78,13 @@ duplicated, unknown, or complex fields produce stateless `<unknown>` logging;
 Flask-Nacos does not stringify/hash user objects or invent a collision-prone
 key. The wrapper always preserves the SDK return value or original exception.
 
-This is a logging compatibility layer, not remote monitoring. Its state belongs
-to one Client and is discarded with that Client (including after fork). It is
-not exposed through Runtime, status, or health and cannot trigger Lifecycle
-Recovery. SDK heartbeat remains the only post-registration heartbeat owner.
+This remains an instrumentation compatibility layer, not remote monitoring.
+Each Client has exactly one Flask-Nacos heartbeat wrapper shared by logging and
+the optional Runtime observer. Per-identity log throttling belongs to that
+Client and is discarded with it. `get_status()` exposes only the latest
+sanitized observation for the current app/PID ephemeral-registration cycle;
+health omits it. Neither path can trigger Lifecycle Recovery, and the SDK
+remains the only post-registration heartbeat owner.
 
 ## Timeout compatibility
 

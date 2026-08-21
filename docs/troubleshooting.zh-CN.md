@@ -118,9 +118,9 @@
 - 现象：服务出现在 Nacos 中，但健康实例数为 0，稍后实例被删除。
 - 可能原因：临时实例没有持续发送心跳、Flask 进程已停止，或查询使用了不同的
   namespace/group。
-- 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志，确认
+- 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志和 `get_status()` 心跳字段，确认
   `NACOS_SERVICE_EPHEMERAL=True`、namespace 与 group。`/health/nacos` 只反映本地
-  生命周期状态，不是远端心跳探测。
+  生命周期状态；两个接口都不是远端心跳探测。
 - 解决建议：使用 Flask-Nacos 默认的 `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`，或设置
   另一个大于 0 的有限间隔。不要用初始 `healthy=True` 代替持续心跳。
 
@@ -252,7 +252,11 @@
   保持 `DEBUG`。
 - SDK 调用无法提供完整、已验证的安全标量身份时，日志使用 `<unknown>` 并有意保持无状态：
   每次失败均警告，也不推断恢复 `INFO`，避免两个实例共享可能碰撞的占位 key。
-- 这些记录只描述 SDK 心跳调用，不会更新 `registered`、启动 Worker 或证明远端健康。
+- 对于当前准确注册的临时实例身份，`get_status()` 会把最近一次有效调用记录为 `unknown`、
+  `healthy` 或 `failing`，并提供 Unix 时间和安全错误类型。新注册周期会重置观测，迟到或乱序
+  回调不会覆盖当前周期。
+- 无法识别身份的调用仍然只记录日志。任何心跳观测都不会更新 `registered`、启动 Worker 或
+  证明远端健康。
 
 ## 24. 修改 `NACOS_REQUEST_TIMEOUT` 没有改变 Naming timeout
 

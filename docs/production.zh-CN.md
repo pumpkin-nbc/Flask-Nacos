@@ -119,8 +119,9 @@ Nacos 用户名/密码或 AK/SK 应放入环境变量或密钥管理器。不要
 
 ## 健康与观测
 
-`/health/nacos` 与 `get_status()` 只反映本地生命周期，不查询 Nacos，也不读取 SDK 心跳
-成功状态。就绪策略要求当前 Nacos 可达时，请增加独立远端探针。
+`/health/nacos` 只反映本地生命周期；`get_status()` 还会报告当前临时注册周期最近一次本地
+观察到的 SDK心跳。两者都不查询 Nacos，该观测也不能证明远端实例仍然存在。就绪策略要求
+当前 Nacos可达时，请增加独立远端探针。
 
 瞬时启动故障自恢复期间可能持续看到 `operation_running=True` 与 `registered=False`；它表示
 本地仍在收敛，不是远端健康结果。读取 status 或 health 既不会加速，也不会触发重试。

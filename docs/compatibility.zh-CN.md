@@ -62,9 +62,10 @@ SDK版本均不命中。其他 2.x 异常体系继续依据自身结构化证据
 日志。Flask-Nacos 不会格式化/哈希用户对象，也不会构造可能碰撞的 key；wrapper 始终保持
 SDK 返回值或原异常不变。
 
-这只是日志兼容层，不是远端监控。其状态仅属于一个 Client，并随 Client（包括 fork 后）
-丢弃，不进入 Runtime、status 或 health，也不能触发 Lifecycle Recovery。注册后的唯一心跳
-owner 仍是 SDK。
+这仍是 instrumentation兼容层，不是远端监控。每个 Client只有一层 Flask-Nacos heartbeat
+wrapper，由日志和可选 Runtime observer共用；按身份节流的日志状态仅属于该 Client，并随其
+丢弃。`get_status()` 只暴露当前 app/PID临时注册周期最近一次脱敏观测，health不包含它。
+两条路径都不能触发 Lifecycle Recovery，注册后的唯一心跳 owner仍是 SDK。
 
 ## Timeout 兼容性
 

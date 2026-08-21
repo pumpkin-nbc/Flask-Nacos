@@ -339,7 +339,7 @@ def test_heartbeat_failure_states_are_isolated_by_identity(monkeypatch):
             raise failure
         return {"ok": service_name}
 
-    now = iter([0.0, 1.0, 2.0])
+    now = iter(float(value) for value in range(20))
     sdk_client = SimpleNamespace(send_heartbeat=send_heartbeat)
     safe_logger = MagicMock()
     monkeypatch.setattr(client_module.time, "monotonic", lambda: next(now))
@@ -429,7 +429,8 @@ def test_heartbeat_same_failure_is_throttled_and_type_change_warns(monkeypatch):
         ]
     )
     safe_logger = MagicMock()
-    now = iter([0.0, 10.0, 20.0, 81.0])
+    now = iter([-1.0, 0.0, 9.0, 10.0, 19.0, 20.0, 80.0, 81.0, 82.0, 83.0,
+                84.0, 85.0])
     monkeypatch.setattr(client_module.time, "monotonic", lambda: next(now))
     monkeypatch.setattr(client_module, "logger", safe_logger)
     client_module._install_heartbeat_logging(sdk_client)
@@ -555,6 +556,121 @@ def test_heartbeat_sdk_and_logger_calls_run_outside_state_lock(monkeypatch):
     assert sdk_client.send_heartbeat("orders", "10.0.0.8", 8080) is True
     safe_logger.warning.assert_called_once()
     safe_logger.info.assert_called_once()
+
+
+def test_heartbeat_observer_binding_reuses_one_wrapper_and_does_not_accumulate(
+    monkeypatch,
+):
+    original = MagicMock(return_value={"clientBeatInterval": 5000})
+    sdk_client = SimpleNamespace(send_heartbeat=original)
+    safe_logger = MagicMock()
+    first_events = []
+    second_events = []
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    client_module._install_heartbeat_logging(sdk_client)
+    wrapper = sdk_client.send_heartbeat
+    assert client_module._set_heartbeat_observer(
+        sdk_client, lambda *event: first_events.append(event)
+    )
+    assert client_module._set_heartbeat_observer(
+        sdk_client, lambda *event: second_events.append(event)
+    )
+    client_module._install_heartbeat_logging(sdk_client)
+
+    assert sdk_client.send_heartbeat is wrapper
+    result = sdk_client.send_heartbeat("orders", "10.0.0.8", 8080)
+
+    assert result == {"clientBeatInterval": 5000}
+    original.assert_called_once_with("orders", "10.0.0.8", 8080)
+    assert first_events == []
+    assert len(second_events) == 1
+    assert second_events[0][0] == (
+        "orders",
+        "DEFAULT_GROUP",
+        None,
+        "10.0.0.8",
+        8080,
+    )
+    assert second_events[0][1] is True
+    safe_logger.debug.assert_called_once()
+
+
+def test_heartbeat_observer_failure_does_not_change_sdk_or_logging(monkeypatch):
+    original = MagicMock(return_value="sdk-result")
+    sdk_client = SimpleNamespace(send_heartbeat=original)
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    def broken_observer(*_event):
+        raise RuntimeError("observer-private")
+
+    assert client_module._set_heartbeat_observer(sdk_client, broken_observer)
+
+    assert sdk_client.send_heartbeat("orders", "10.0.0.8", 8080) == "sdk-result"
+    original.assert_called_once()
+    safe_logger.debug.assert_called_once()
+    assert "observer-private" not in str(safe_logger.mock_calls)
+
+
+def test_heartbeat_clock_and_success_log_failures_preserve_sdk_result(monkeypatch):
+    original = MagicMock(return_value="sdk-result")
+    sdk_client = SimpleNamespace(send_heartbeat=original)
+    observer = MagicMock()
+    safe_logger = MagicMock()
+    safe_logger.debug.side_effect = RuntimeError("logger-private")
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+    monkeypatch.setattr(
+        client_module.time,
+        "monotonic",
+        MagicMock(side_effect=RuntimeError("clock-private")),
+    )
+    monkeypatch.setattr(
+        client_module.time,
+        "time",
+        MagicMock(side_effect=RuntimeError("wall-clock-private")),
+    )
+    assert client_module._set_heartbeat_observer(sdk_client, observer)
+
+    assert sdk_client.send_heartbeat("orders", "127.0.0.1", 8080) == "sdk-result"
+    original.assert_called_once()
+    observer.assert_not_called()
+    safe_logger.debug.assert_called_once()
+
+
+def test_heartbeat_failure_log_error_preserves_original_sdk_exception(monkeypatch):
+    failure = RuntimeError("sdk-original")
+    sdk_client = SimpleNamespace(send_heartbeat=MagicMock(side_effect=failure))
+    safe_logger = MagicMock()
+    safe_logger.warning.side_effect = ValueError("logger-private")
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+    client_module._install_heartbeat_logging(sdk_client)
+
+    with pytest.raises(RuntimeError) as raised:
+        sdk_client.send_heartbeat("orders", "127.0.0.1", 8080)
+
+    assert raised.value is failure
+    safe_logger.warning.assert_called_once()
+
+
+def test_heartbeat_instrumentation_install_failure_keeps_sdk_client_usable(
+    monkeypatch,
+):
+    class ReadOnlyHeartbeatClient:
+        __slots__ = ()
+
+        def send_heartbeat(self, *_args, **_kwargs):
+            return "original-result"
+
+    sdk_client = ReadOnlyHeartbeatClient()
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+
+    assert client_module._install_heartbeat_instrumentation(sdk_client) is None
+    assert sdk_client.send_heartbeat("orders", "127.0.0.1", 8080) == "original-result"
+    safe_logger.warning.assert_called_once_with(
+        "Nacos heartbeat instrumentation is unavailable for this SDK client"
+    )
 
 
 @pytest.mark.parametrize(

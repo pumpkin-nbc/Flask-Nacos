@@ -25,7 +25,7 @@ from ._recovery import (
     _LifecycleFailureStage,
     _synthetic_lifecycle_failure,
 )
-from .client import create_client
+from .client import _HeartbeatIdentity, _set_heartbeat_observer, create_client
 from .exceptions import FlaskNacosError, NacosConfigError
 from .health import HEALTH_ENDPOINT, register_health_route
 from .logging import (
@@ -50,6 +50,7 @@ _RUNTIME_REBUILD_PID_KEY = "_runtime_rebuild_pid"
 _ATEXIT_REGISTERED_KEY = "_atexit_registered"
 _FORK_HOOK_REGISTERED_KEY = "_fork_hook_registered"
 _REQUEST_HOOK_REGISTERED_KEY = "_request_hook_registered"
+_APP_REF_KEY = "_app_ref"
 
 _INIT_LOCK = RLock()
 _NAMING_RPC_TIMEOUT_FALLBACK = 3.0
@@ -143,6 +144,13 @@ class _AppRuntimeState:
     last_error: Optional[str] = None
     shutting_down: bool = False
     auto_register_pending: bool = False
+
+    heartbeat_state: str = "not_applicable"
+    last_heartbeat_success_at: Optional[float] = None
+    last_heartbeat_failure_at: Optional[float] = None
+    heartbeat_error_type: Optional[str] = None
+    heartbeat_cycle_started_monotonic: Optional[float] = None
+    last_heartbeat_observed_monotonic: Optional[float] = None
 
     naming_rpc_active: bool = False
     naming_rpc_seq: int = 0
@@ -250,6 +258,7 @@ class FlaskNacos:
         state: Dict[str, Any] = {
             "config": cfg,
             _OWNER_KEY: self,
+            _APP_REF_KEY: weakref.ref(app),
             _RUNTIME_KEY: runtime,
             _AUTO_REGISTER_KEY: auto_register_enabled,
             _CONNECTION_ERROR_KEY: connection_error,
@@ -410,9 +419,233 @@ class FlaskNacos:
                 raise connection_error
             config_module.validate_connection_config(cfg)
             client = create_client(cfg)
+            try:
+                app_ref = state.get(_APP_REF_KEY)
+                app = app_ref() if callable(app_ref) else None
+                if app is not None:
+                    _set_heartbeat_observer(
+                        client,
+                        self._make_heartbeat_observer(app, runtime),
+                    )
+            except Exception:
+                # Heartbeat observation is optional and must not make a usable
+                # SDK client unavailable.
+                pass
             cleanup_sdk_default_handlers(cfg)
             runtime.client = client
             return client
+
+    def _make_heartbeat_observer(self, app, runtime: _AppRuntimeState):
+        """Return a non-owning observer for one app/PID Runtime."""
+        extension_ref = weakref.ref(self)
+        app_ref = weakref.ref(app)
+        runtime_ref = weakref.ref(runtime)
+
+        def _observe(
+            identity: Optional[_HeartbeatIdentity],
+            succeeded: bool,
+            started_monotonic: float,
+            observed_monotonic: float,
+            observed_at: float,
+            error_type: Optional[str],
+        ) -> None:
+            extension = extension_ref()
+            target_app = app_ref()
+            target_runtime = runtime_ref()
+            if extension is None or target_app is None or target_runtime is None:
+                return
+            extension._record_heartbeat_observation(
+                target_app,
+                target_runtime,
+                identity,
+                succeeded=succeeded,
+                started_monotonic=started_monotonic,
+                observed_monotonic=observed_monotonic,
+                observed_at=observed_at,
+                error_type=error_type,
+            )
+
+        return _observe
+
+    def _record_heartbeat_observation(
+        self,
+        app,
+        runtime: _AppRuntimeState,
+        identity: Optional[_HeartbeatIdentity],
+        *,
+        succeeded: bool,
+        started_monotonic: float,
+        observed_monotonic: float,
+        observed_at: float,
+        error_type: Optional[str],
+    ) -> None:
+        """Commit one sanitized heartbeat event if it belongs to the current cycle."""
+        started_value = self._heartbeat_time_value(started_monotonic)
+        observed_value = self._heartbeat_time_value(observed_monotonic)
+        observed_wall_time = self._heartbeat_time_value(observed_at)
+        if (
+            started_value is None
+            or observed_value is None
+            or observed_wall_time is None
+        ):
+            return
+
+        state = app.extensions.get(EXTENSION_KEY)
+        if (
+            not self._is_owned_state(state)
+            or state.get(_RUNTIME_KEY) is not runtime
+            or state.get(_RUNTIME_STALE_KEY, False)
+            or runtime.pid != self._current_pid()
+        ):
+            return
+
+        with runtime.state_lock:
+            # Recheck the app/PID authority inside the same critical section as
+            # the observation commit. A fork or state replacement invalidates
+            # the old callback even when the registered identity is unchanged.
+            current_state = app.extensions.get(EXTENSION_KEY)
+            if (
+                current_state is not state
+                or not self._is_owned_state(current_state)
+                or current_state.get(_RUNTIME_KEY) is not runtime
+                or current_state.get(_RUNTIME_STALE_KEY, False)
+                or runtime.pid != self._current_pid()
+                or runtime.shutting_down
+                or not runtime.registered
+            ):
+                return
+
+            registered_identity = runtime.registered_identity
+            if (
+                registered_identity is None
+                or registered_identity.get("ephemeral") is not True
+                or not self._heartbeat_identity_matches_registered(
+                    identity, registered_identity
+                )
+            ):
+                return
+
+            cycle_started = runtime.heartbeat_cycle_started_monotonic
+            if cycle_started is None or started_value < cycle_started:
+                return
+            last_observed = runtime.last_heartbeat_observed_monotonic
+            if last_observed is not None and observed_value < last_observed:
+                return
+
+            runtime.last_heartbeat_observed_monotonic = observed_value
+            if succeeded:
+                runtime.heartbeat_state = "healthy"
+                runtime.last_heartbeat_success_at = observed_wall_time
+                runtime.heartbeat_error_type = None
+            else:
+                runtime.heartbeat_state = "failing"
+                runtime.last_heartbeat_failure_at = observed_wall_time
+                runtime.heartbeat_error_type = (
+                    error_type
+                    if type(error_type) is str and bool(error_type)
+                    else "Exception"
+                )
+
+    @staticmethod
+    def _heartbeat_time_value(value: Any) -> Optional[float]:
+        try:
+            if isinstance(value, bool) or not isinstance(value, Real):
+                return None
+            converted = float(value)
+            return converted if math.isfinite(converted) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _heartbeat_identity_matches_registered(
+        identity: Optional[_HeartbeatIdentity],
+        registered_identity: Dict[str, Any],
+    ) -> bool:
+        """Compare SDK and registration identities with shared default semantics."""
+        try:
+            if identity is None:
+                return False
+            service_name, group_name, cluster_name, ip, port = identity
+            observed = FlaskNacos._normalize_heartbeat_instance_identity(
+                service_name,
+                group_name,
+                cluster_name,
+                ip,
+                port,
+            )
+            registered = FlaskNacos._normalize_heartbeat_instance_identity(
+                registered_identity.get("service_name"),
+                registered_identity.get("group_name"),
+                registered_identity.get("cluster_name"),
+                registered_identity.get("ip"),
+                registered_identity.get("port"),
+            )
+            return observed is not None and observed == registered
+        except Exception:
+            return False
+
+    @staticmethod
+    def _normalize_heartbeat_instance_identity(
+        service_name: Any,
+        group_name: Any,
+        cluster_name: Any,
+        ip: Any,
+        port: Any,
+    ) -> Optional[Tuple[str, str, str, str, int]]:
+        """Normalize both SDK and registered identities without string coercion."""
+        try:
+            normalized_group = "DEFAULT_GROUP" if group_name is None else group_name
+            normalized_cluster = "DEFAULT" if cluster_name is None else cluster_name
+            if (
+                type(service_name) is not str
+                or not service_name.strip()
+                or type(normalized_group) is not str
+                or not normalized_group.strip()
+                or type(normalized_cluster) is not str
+                or not normalized_cluster.strip()
+                or type(ip) is not str
+                or not ip.strip()
+                or type(port) is not int
+                or not 1 <= port <= 65535
+            ):
+                return None
+            return service_name, normalized_group, normalized_cluster, ip, port
+        except Exception:
+            return None
+
+    @staticmethod
+    def _clear_heartbeat_observation_locked(runtime: _AppRuntimeState) -> None:
+        runtime.heartbeat_state = "not_applicable"
+        runtime.last_heartbeat_success_at = None
+        runtime.last_heartbeat_failure_at = None
+        runtime.heartbeat_error_type = None
+        runtime.heartbeat_cycle_started_monotonic = None
+        runtime.last_heartbeat_observed_monotonic = None
+
+    @staticmethod
+    def _start_heartbeat_observation_locked(
+        runtime: _AppRuntimeState, identity: Dict[str, Any]
+    ) -> None:
+        cycle_started: Optional[float] = None
+        try:
+            candidate = time.monotonic()
+            if (
+                not isinstance(candidate, bool)
+                and isinstance(candidate, Real)
+                and math.isfinite(float(candidate))
+            ):
+                cycle_started = float(candidate)
+        except Exception:
+            pass
+
+        runtime.heartbeat_state = (
+            "unknown" if identity.get("ephemeral") is True else "not_applicable"
+        )
+        runtime.last_heartbeat_success_at = None
+        runtime.last_heartbeat_failure_at = None
+        runtime.heartbeat_error_type = None
+        runtime.heartbeat_cycle_started_monotonic = cycle_started
+        runtime.last_heartbeat_observed_monotonic = None
 
     def _client_for_operation(self, app, state: Dict[str, Any], runtime: _AppRuntimeState) -> Any:
         cfg = state["config"]
@@ -1331,9 +1564,13 @@ class FlaskNacos:
                             committed_identity = dict(actual_identity)
                             runtime.registered_identity = committed_identity
                             runtime.registered = True
+                            self._start_heartbeat_observation_locked(
+                                runtime, committed_identity
+                            )
                         else:
                             runtime.registered = False
                             runtime.registered_identity = None
+                            self._clear_heartbeat_observation_locked(runtime)
                         runtime.last_error = None
                     elif record_lifecycle_error and rpc_failure is not None:
                         self._record_rpc_error_locked(
@@ -1560,6 +1797,14 @@ class FlaskNacos:
             last_error = runtime.last_error if enabled else None
             pid = runtime.pid
             client_created = bool(runtime.client is not None) if enabled else False
+            heartbeat_state = runtime.heartbeat_state if enabled else "not_applicable"
+            last_heartbeat_success_at = (
+                runtime.last_heartbeat_success_at if enabled else None
+            )
+            last_heartbeat_failure_at = (
+                runtime.last_heartbeat_failure_at if enabled else None
+            )
+            heartbeat_error_type = runtime.heartbeat_error_type if enabled else None
 
         if identity is None:
             service_name = cfg.get("NACOS_SERVICE_NAME")
@@ -1587,6 +1832,10 @@ class FlaskNacos:
             "registered": registered,
             "operation_running": operation_running,
             "last_error": last_error,
+            "heartbeat_state": heartbeat_state,
+            "last_heartbeat_success_at": last_heartbeat_success_at,
+            "last_heartbeat_failure_at": last_heartbeat_failure_at,
+            "heartbeat_error_type": heartbeat_error_type,
         }
 
     # -- Fork recovery -----------------------------------------------------

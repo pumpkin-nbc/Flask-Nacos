@@ -47,6 +47,8 @@ assert set(status) == {{
     "enabled", "pid", "client_created", "service_name", "group_name",
     "cluster_name", "service_ip", "service_port", "target_registered",
     "registered", "operation_running", "last_error",
+    "heartbeat_state", "last_heartbeat_success_at",
+    "last_heartbeat_failure_at", "heartbeat_error_type",
 }}
 assert status["enabled"] is False
 assert status["client_created"] is False
@@ -54,6 +56,10 @@ assert status["target_registered"] is False
 assert status["registered"] is False
 assert status["operation_running"] is False
 assert status["last_error"] is None
+assert status["heartbeat_state"] == "not_applicable"
+assert status["last_heartbeat_success_at"] is None
+assert status["last_heartbeat_failure_at"] is None
+assert status["heartbeat_error_type"] is None
 
 print("[smoke] import + typing marker + init + registration API OK (version=%s)" % expected)
 """

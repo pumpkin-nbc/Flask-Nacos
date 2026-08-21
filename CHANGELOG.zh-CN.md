@@ -19,6 +19,8 @@
 - 修复同一 SDK Client 为多个实例发送心跳时日志状态串扰。警告节流与恢复现在按准确的
   service/group/cluster/IP/port 身份隔离；不安全或不完整身份退化为无状态 `<unknown>`
   日志，不构造可能碰撞的 key。
+- 修复相同实例身份重复注册时的心跳观测串扰。私有 monotonic周期与完成顺序门禁会拒绝迟到
+  或乱序回调；日志与 Runtime观测共用一个幂等安装的 Client wrapper。
 - 修复 shutdown 活动 Naming RPC timeout 快照，改为读取实际 SDK Client 的
   `default_timeout`。`NACOS_REQUEST_TIMEOUT` 继续只属于配置中心，非法 SDK timeout 仍使用
   有界三秒回退值。
@@ -29,6 +31,9 @@
   清理回调，也不会阻止显式 `deregister_instance()`。
 - 降低 SDK heartbeat wrapper 日志噪声：普通成功为 `DEBUG`，首次/类型变化失败为
   `WARNING`，相同失败 60 秒内节流，失败后每个身份的首次成功记录一次恢复 `INFO`。
+- 将无副作用的 `get_status()` 快照从 12 个字段扩展为 16 个，增加当前临时注册周期的本地
+  心跳状态、最近成功/失败 Unix时间和安全错误类型。health仍保持七字段本地生命周期响应，
+  不使用心跳观测判断状态。
 - 增加 Python 3.8/Flask 1.1.4/gevent兼容测试，并将 SDK兼容矩阵固定为明确验证的
   `2.0.0` 与 `2.0.11`。
 - 扩展高并发、fork、heartbeat 隔离、timeout 与显式启用的真实 Nacos 回归，包含仅用于
@@ -36,8 +41,8 @@
 
 ### 兼容性
 
-- 公共 API、本地 status/health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳归属
-  保持不变。
+- 公共方法签名、七字段 health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳归属
+  保持不变；本地 `get_status()` 结构按文档增加四个 heartbeat字段。
 - 生命周期自恢复仍不执行远端实例监控；本地状态收敛后 Worker退出，心跳与连接维护继续由
   Nacos SDK负责。
 

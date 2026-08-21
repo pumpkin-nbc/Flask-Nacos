@@ -179,7 +179,7 @@ metadata、ephemeral/心跳、认证与重试配置。
 
 ## 本地状态
 
-`get_status(app=None)` 固定返回 12 个本地字段：
+`get_status(app=None)` 固定返回 16 个本地字段：
 
 ```python
 {
@@ -195,11 +195,20 @@ metadata、ephemeral/心跳、认证与重试配置。
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
-`registered` 是最近一次 Naming RPC 成功确认的本地事实，不是实时 Nacos 查询。状态读取不
-创建 Client、不访问 Nacos、不探测 IP、不启动线程，也不恢复 fork 后注册。
+`registered` 是最近一次 Naming RPC 成功确认的本地事实，不是实时 Nacos 查询。
+`heartbeat_state` 是当前临时注册周期最近一次 SDK 心跳的本地观测：首次观测前为
+`unknown`，成功后为 `healthy`，失败后为 `failing`，扩展禁用、未注册或持久实例为
+`not_applicable`。心跳时间使用 Unix epoch秒，错误字段只保存安全异常类型。这些字段不证明
+远端实例仍然存在，也不会驱动 Lifecycle Recovery。
+
+状态读取不创建 Client、不访问 Nacos、不探测 IP、不启动线程，也不恢复 fork 后注册。
 
 `get_client(app)` 显式创建或返回 app/PID Client，失败时抛出安全 `FlaskNacosError`。
 `.client` 属性只读缓存，并要求当前 Flask context。

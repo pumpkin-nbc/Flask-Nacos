@@ -165,11 +165,19 @@ shutdown 会立即唤醒。等待前先清 Event，再复查状态，避免丢�
 `NACOS_SERVICE_HEARTBEAT_INTERVAL`（默认 `5.0` 秒）。`healthy=True` 只是初始注册输入，
 不能替代心跳续约。持久实例不传心跳参数。
 
-Client wrapper 只观测这些 SDK 调用，不会成为第二个心跳 owner。有效身份按 service、group、
-cluster、IP 与 port 隔离：失败按身份独立限制 WARNING，随后首次成功记录一次恢复 `INFO`。
-若已验证 SDK 参数布局无法生成完整安全身份，则使用无状态 `<unknown>` 日志，不保存可能碰撞
-的类型占位 key。日志保持 SDK 返回值/异常原样，也不能修改 target、事实、generation 或
-Worker 状态。
+每个 Client 只有一层 Flask-Nacos wrapper 观测这些 SDK 调用，不会成为第二个心跳 owner。
+日志和可选 Runtime observer 共用该 wrapper，因此一笔 SDK调用最多产生一次观测和一次日志
+动作。有效身份按 service、group、cluster、IP 与 port隔离：失败按身份独立限制 WARNING，
+随后首次成功记录一次恢复 `INFO`。
+
+对于当前已注册的临时实例，`get_status()` 还会报告最近一次本地心跳观测。每个成功注册周期
+从 `unknown` 开始，随后变为 `healthy` 或 `failing`；monotonic周期与完成顺序门禁会拒绝上一
+注册周期的迟到事件和乱序回调，即使新旧周期使用相同身份。这些观测不会修改注册事实或触发
+Recovery。
+
+若已验证 SDK参数布局无法生成完整安全身份，则使用无状态 `<unknown>` 日志且不更新 Runtime
+状态，不保存可能碰撞的类型占位 key。Instrumentation保持 SDK返回值/异常原样，也不能修改
+target、事实、generation 或 Worker状态。
 
 ## Fork 与进程服务器
 
@@ -199,6 +207,6 @@ Gunicorn `--preload` 会在 worker fork 前由 master初始化应用。推荐设
 | Fork | 可能继承进程资源 | 整个 Runtime 重建 |
 | 退出 | 可能复用普通注销 | shutdown 专用路径 |
 
-公开状态只暴露稳定生命周期含义：`target_registered`、`registered`、
-`operation_running` 和 `last_error`。内部 generation、Worker owner、pending恢复与 RPC元数据
-保持私有。
+公开状态通过 `target_registered`、`registered`、`operation_running` 和 `last_error` 暴露
+稳定生命周期含义，并补充当前注册周期的本地心跳观测。内部 generation、Worker owner、
+pending恢复、heartbeat monotonic门禁与 RPC元数据保持私有。

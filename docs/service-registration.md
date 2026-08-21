@@ -191,14 +191,25 @@ RPC completes after the intermediate target change.
 Nacos SDK. `healthy=True` is only initial registration input; it does not replace
 heartbeat renewal. Persistent instances do not receive this heartbeat option.
 
-The Client wrapper observes these SDK calls without becoming a second
-heartbeat owner. Valid identities are isolated by service, group, cluster, IP,
-and port: failures are warning-throttled per identity and the first later
-success emits one recovery `INFO`. If the verified SDK argument layout cannot
-produce a complete safe identity, the call uses stateless `<unknown>` logging;
-it never stores a type-based placeholder that could collide. Logging preserves
-the SDK result/exception and cannot change target, fact, generation, or Worker
-state.
+One Client-level Flask-Nacos wrapper observes these SDK calls without becoming
+a second heartbeat owner. Logging and the optional Runtime observer share that
+single wrapper, so one SDK call produces at most one observation and one log
+action. Valid identities are isolated by service, group, cluster, IP, and port:
+failures are warning-throttled per identity and the first later success emits
+one recovery `INFO`.
+
+For the currently registered ephemeral identity, `get_status()` also reports
+the latest local heartbeat observation. It starts as `unknown`, becomes
+`healthy` or `failing`, and is reset for every successful registration cycle.
+Monotonic cycle and completion gates reject late events from an earlier cycle
+and out-of-order callbacks, even when the same identity is registered again.
+These observations never modify the registration fact or trigger Recovery.
+
+If the verified SDK argument layout cannot produce a complete safe identity,
+the call uses stateless `<unknown>` logging and does not update Runtime status;
+it never stores a type-based placeholder that could collide. Instrumentation
+preserves the SDK result/exception and cannot change target, fact, generation,
+or Worker state.
 
 ## Fork and process servers
 
@@ -233,7 +244,8 @@ The setting controls only process-exit cleanup and never disables an explicit
 | Fork | Could inherit process resources | Entire Runtime rebuilt |
 | Exit | Could reuse normal deregistration | Dedicated shutdown path |
 
-The public status exposes only stable lifecycle meaning:
-`target_registered`, `registered`, `operation_running`, and `last_error`.
-Internal generation, Worker ownership, pending recovery, and RPC metadata remain
+The public status exposes stable lifecycle meaning through
+`target_registered`, `registered`, `operation_running`, and `last_error`, plus
+the current-cycle local heartbeat observation. Internal generation, Worker
+ownership, pending recovery, heartbeat monotonic gates, and RPC metadata remain
 private.

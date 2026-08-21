@@ -133,9 +133,10 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   removed after a short delay.
 - Cause: the ephemeral instance is not renewing its heartbeat, the Flask
   process stopped, or the query uses a different namespace/group.
-- Investigate: keep the Flask process alive; inspect SDK heartbeat logs; confirm
-  `NACOS_SERVICE_EPHEMERAL=True`, the namespace, and the group. `/health/nacos`
-  only reports local lifecycle state and is not a remote heartbeat probe.
+- Investigate: keep the Flask process alive; inspect SDK heartbeat logs and the
+  `get_status()` heartbeat fields; confirm `NACOS_SERVICE_EPHEMERAL=True`, the
+  namespace, and the group. `/health/nacos` only reports local lifecycle state,
+  and neither endpoint is a remote heartbeat probe.
 - Fix: use flask-nacos with the default
   `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`, or set another finite positive interval.
   Do not use the initial `healthy=True` flag as a substitute for heartbeats.
@@ -286,8 +287,12 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   use `<unknown>` and deliberately remain stateless. Every failure warns and no
   recovery `INFO` is inferred, preventing two instances from sharing a
   collision-prone placeholder key.
-- These records only describe SDK heartbeat calls. They never update
-  `registered`, start a Worker, or prove remote health.
+- For the exact currently registered ephemeral identity, `get_status()` records
+  the latest accepted call as `unknown`, `healthy`, or `failing`, together with
+  Unix timestamps and a safe error type. The observation resets on a new
+  registration cycle and rejects late or out-of-order callbacks.
+- Calls with an unknown identity remain log-only. No heartbeat observation
+  updates `registered`, starts a Worker, or proves remote health.
 
 ## 24. Changing `NACOS_REQUEST_TIMEOUT` does not change Naming timeout
 

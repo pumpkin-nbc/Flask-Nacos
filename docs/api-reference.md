@@ -115,7 +115,7 @@ fact, lifecycle generation, or lifecycle error.
 
 ## `get_status(app=None)`
 
-Returns exactly these 12 local-only fields:
+Returns exactly these 16 local-only fields:
 
 ```python
 {
@@ -131,6 +131,10 @@ Returns exactly these 12 local-only fields:
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
@@ -139,6 +143,21 @@ register/deregister call. It is not a live server query. `operation_running` is
 true for either a background registration lifecycle or a synchronous
 deregistration lifecycle. `last_error` contains only a safe exception type or
 internal error code.
+
+`heartbeat_state` is the latest accepted SDK heartbeat observation for the
+current local ephemeral-registration cycle:
+
+- `unknown`: registered ephemerally, but no heartbeat from this cycle has been
+  observed yet.
+- `healthy`: the latest accepted heartbeat succeeded.
+- `failing`: the latest accepted heartbeat failed.
+- `not_applicable`: disabled, unregistered, or registered persistently.
+
+The two heartbeat timestamps are Unix epoch seconds or `None`.
+`heartbeat_error_type` contains only a safe exception type and is cleared after
+recovery. Observations are isolated by app/PID, exact registered identity,
+registration cycle, and monotonic completion order. They never change
+Lifecycle state and are not proof of current remote health.
 
 Before registration, identity values come from the configuration snapshot and
 no IP detection occurs. While registered, the actual cached registration

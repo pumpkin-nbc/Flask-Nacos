@@ -14,7 +14,7 @@ from tests.helpers import wait_registered, wait_until
 
 
 def test_pid_change_rebuilds_all_process_local_resources_once(
-    make_app, patched_create_client, monkeypatch
+    make_app, patched_create_client, fake_client, monkeypatch
 ):
     pid = [100]
     monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
@@ -23,8 +23,21 @@ def test_pid_change_rebuilds_all_process_local_resources_once(
     parent = app.extensions["nacos"]["_runtime"]
     nacos.get_client(app)
     parent.registered = True
-    parent.registered_identity = {"service_name": "parent"}
+    parent.registered_identity = {
+        "service_name": "parent",
+        "group_name": "DEFAULT_GROUP",
+        "cluster_name": "DEFAULT",
+        "ip": "127.0.0.1",
+        "port": 8000,
+        "ephemeral": True,
+    }
     parent.last_error = "ParentError"
+    parent.heartbeat_state = "failing"
+    parent.last_heartbeat_success_at = 100.0
+    parent.last_heartbeat_failure_at = 200.0
+    parent.heartbeat_error_type = "RuntimeError"
+    parent.heartbeat_cycle_started_monotonic = 10.0
+    parent.last_heartbeat_observed_monotonic = 20.0
 
     pid[0] = 200
     first = nacos.get_status(app)
@@ -38,11 +51,21 @@ def test_pid_change_rebuilds_all_process_local_resources_once(
     assert child.registered is False
     assert child.registered_identity is None
     assert child.last_error is None
+    assert child.heartbeat_state == "not_applicable"
+    assert child.last_heartbeat_success_at is None
+    assert child.last_heartbeat_failure_at is None
+    assert child.heartbeat_error_type is None
+    assert child.heartbeat_cycle_started_monotonic is None
+    assert child.last_heartbeat_observed_monotonic is None
     assert child.state_lock is not parent.state_lock
     assert child.client_lock is not parent.client_lock
     assert child.network_operation_lock is not parent.network_operation_lock
     assert child.operation_wakeup is not parent.operation_wakeup
     assert child.auto_register_pending is False
+
+    fake_client.send_heartbeat("parent", "127.0.0.1", 8000)
+    assert parent.heartbeat_state == "failing"
+    assert child.heartbeat_state == "not_applicable"
 
 
 def test_fork_auto_register_pending_is_not_consumed_by_status_health_or_client_property(
