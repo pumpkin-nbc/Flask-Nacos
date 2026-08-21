@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Flask-Nacos 为 Flask 提供 Nacos 服务注册、服务发现与配置中心接入。1.1.0 使用目标状态
+Flask-Nacos 为 Flask 提供 Nacos 服务注册、服务发现与配置中心接入。1.1.1 使用目标状态
 生命周期、按 app/PID 惰性创建 Client，并严格隔离多个 Flask 应用。
 
 ## 新手从这里开始
@@ -53,7 +53,7 @@ python -m pip install flask-nacos
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 ```
 
 ## 快速开始
@@ -156,6 +156,10 @@ metadata、ephemeral/心跳、认证与重试配置。
 - 无法可靠判断的失败只使用现有有限重试预算；
 - 有结构化证据确认的瞬时传输故障先使用相同有限预算，耗尽后进入低频、可中断、带有界
   退避与抖动的生命周期自恢复，直到目标变化、进程退出、后续失败不再属于瞬时故障，或注册成功。
+
+自恢复同时覆盖惰性 Client 构造与 Naming 注册，但只处理经过验证的瞬时证据。SDK `2.0.11`
+在认证 Client 构造期间抛出的精确裸 `nacos.exception.NacosRequestException`，仅在 register
+方向进入自恢复；结构化 401/403 认证失败仍属于确定性错误并立即停止。
 
 `NACOS_RETRY_ENABLED=False` 会同时关闭有限重试和生命周期自恢复。自恢复仅处理已确认的
 瞬时故障，也不轮询远端状态；`registered == target_registered` 后 Worker立即退出，心跳与

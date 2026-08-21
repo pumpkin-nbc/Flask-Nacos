@@ -7,6 +7,30 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## 1.1.1
+
+### 修复
+
+- 修复启用认证时，Nacos 暂不可用导致 Client 构造失败后注册生命周期无法自行恢复的问题。
+  SDK `2.0.11` 在精确 `CLIENT_CREATE/register` 阶段抛出的
+  `NacosRequestException` 现在进入既有瞬时故障 Recovery。
+- 保持结构化 401/403 认证失败为确定性错误；未经验证的 SDK版本、阶段、方向和异常类型仍为
+  `UNKNOWN`，只使用有限重试预算。
+
+### 变更
+
+- 将 SDK heartbeat wrapper 的成功日志降为 `DEBUG`，减少周期性日志噪声；失败日志继续脱敏，
+  行为不变。
+- 增加 Python 3.8/Flask 1.1.4/gevent兼容测试，并将 SDK兼容矩阵固定为明确验证的
+  `2.0.0` 与 `2.0.11`。
+
+### 兼容性
+
+- 公共 API、配置、本地 status/health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳
+  归属保持不变。
+- 生命周期自恢复仍不执行远端实例监控；本地状态收敛后 Worker退出，心跳与连接维护继续由
+  Nacos SDK负责。
+
 ## 1.1.0
 
 ### 新增

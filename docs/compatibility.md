@@ -5,7 +5,7 @@ English | [简体中文](compatibility.zh-CN.md)
 This page documents the supported runtime versions and the compatibility
 guarantees of flask-nacos.
 
-`1.1.0` is the current supported release surface. Its API snapshot is enforced
+`1.1.1` is the current supported release surface. Its API snapshot is enforced
 by the release checks.
 
 See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
@@ -60,10 +60,13 @@ The classic SDK's bare `nacos.exception.NacosRequestException` contains no
 structured cause in a verified node-unavailable path. Flask-Nacos therefore has
 a narrow private compatibility rule for Naming register and compensating
 deregister in SDK `2.0.0` and `2.0.11`. The rule requires the installed exact
-type and exact failure stage. It does not apply during Client construction,
-synchronous/exit deregistration, to a same-named replacement type, or to an
-unverified SDK release. Other 2.x exception systems remain supported through
-their own structured evidence; no common exception hierarchy is assumed.
+type and exact failure stage. SDK `2.0.11` additionally has one verified rule
+for the same exact exception during authenticated Client construction in the
+register direction. SDK `2.0.0` Client construction, synchronous/exit
+deregistration, same-named replacement types, other directions, and unverified
+SDK releases do not match that rule. Other 2.x exception systems remain
+supported through their own structured evidence; no common exception hierarchy
+is assumed. Structured 401/403 evidence always remains deterministic.
 
 ## Nacos SDK response-shape compatibility
 

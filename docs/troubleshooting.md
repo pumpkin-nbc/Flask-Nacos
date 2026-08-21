@@ -42,8 +42,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   `get_status()` remains a local, side-effect-free view.
 - Fix: normally none—restore Nacos/network availability. Deregistration or
   shutdown wakes the wait immediately. Set `NACOS_RETRY_ENABLED=False` when the
-  process must stop after its current attempt. Authentication, parameter, and
-  unknown SDK failures do not remain in lifecycle recovery.
+  process must stop after its current attempt. Structured authentication
+  rejection, parameter failures, and unknown SDK failures do not remain in
+  lifecycle recovery.
 
 ## 2. Registration fails: `NACOS_SERVICE_NAME` empty
 
@@ -74,7 +75,10 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Investigate: verify the server address and connectivity; read logs.
 - Fix: correct the address/credentials. Authentication shape is deterministic
   and can be surfaced during startup with `NACOS_FAIL_FAST=True`; runtime
-  connection failure remains a background lifecycle error.
+  connection failure remains a background lifecycle error. With SDK `2.0.11`,
+  a verified temporary node-unavailable failure during authenticated Client
+  construction continues through lifecycle Recovery after the finite budget;
+  HTTP 401/403 stops immediately.
 
 ## 6. Wrong username / password
 

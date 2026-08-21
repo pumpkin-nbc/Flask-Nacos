@@ -101,7 +101,7 @@ instances. Persistent instances (`NACOS_SERVICE_EPHEMERAL=False`) ignore it.
 The initial healthy flag does not keep an ephemeral instance alive.
 
 With `NACOS_LOG_ENABLED=True`, Flask-Nacos records each actual SDK heartbeat:
-successful requests at `INFO` and failed requests at `ERROR`. The records are
+successful requests at `DEBUG` and failed requests at `ERROR`. The records are
 sanitized and contain only service identity plus the exception class on
 failure. Response bodies and exception messages are intentionally omitted.
 The SDK thread catches the re-raised failure and continues retrying at the

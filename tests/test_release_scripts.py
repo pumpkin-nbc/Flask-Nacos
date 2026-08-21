@@ -403,10 +403,14 @@ def test_ci_has_strict_package_and_sdk_compatibility_checks():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "twine check --strict dist/*" in workflow
     assert 'sdk_spec: "nacos-sdk-python==2.0.0"' in workflow
-    assert 'sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"' in workflow
+    assert 'sdk_spec: "nacos-sdk-python==2.0.11"' in workflow
+    assert 'expected_version: "2.0.11"' in workflow
     assert "python scripts/check_sdk_compatibility.py" in workflow
+    assert '"gevent==24.2.1"' in workflow
+    assert "pytest --no-cov tests/test_gevent_compatibility.py" in workflow
     assert "name: Required CI" in workflow
     assert "- sdk-compatibility" in workflow
+    assert "- gevent-compatibility" in workflow
     assert 'python-version: "3.14"' in workflow
     assert 'flask: "Flask==1.0.4 ' in workflow
     assert 'flask: "Flask==1.1.4 ' in workflow

@@ -12,7 +12,10 @@ If startup meets a verified transient network failure, the Worker first uses
 the configured finite retry budget and then remains as a low-frequency,
 interruptible lifecycle recovery owner. It stops when registration converges,
 the target changes, shutdown starts, or a later failure is no longer classified
-as transient. No request or readiness probe is required to trigger recovery.
+as transient. This includes verified failures while an authenticated SDK
+`2.0.11` Client is being constructed; no request or readiness probe is required
+to trigger recovery. Structured authentication rejection such as HTTP 401/403
+stops instead of entering long-lived Recovery.
 
 Configure the externally reachable `NACOS_SERVICE_IP` and
 `NACOS_SERVICE_PORT`; binding Flask to localhost does not make that advertised
@@ -91,6 +94,12 @@ Native SDK logs are isolated and Flask-Nacos does not create
 `~/logs/nacos`. Safe extension logging is disabled by default. When file output
 is enabled, `NACOS_LOG_PATH` defaults to `./logs` and
 `NACOS_LOG_FILENAME` defaults to `flask-nacos.log`.
+
+Do not let multiple Gunicorn or Celery processes write to the same rotating log
+file. Prefer console output collected by the process supervisor, or configure a
+process-safe logging pipeline in the host application. Flask-Nacos does not
+remove, close, or take ownership of handlers installed by the host application;
+1.1.1 does not add a multi-process file-rotation mechanism.
 
 Keep Nacos username/password or AK/SK in environment variables or a secret
 manager. Do not return complete application configuration or internal status

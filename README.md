@@ -7,7 +7,7 @@
 English | [简体中文](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/README.zh-CN.md)
 
 Flask-Nacos integrates Flask with Nacos service registration, discovery, and
-configuration center. Version 1.1.0 uses a target-state lifecycle, lazy
+configuration center. Version 1.1.1 uses a target-state lifecycle, lazy
 app/PID-bound Clients, and strict multi-application isolation.
 
 ## New users start here
@@ -60,7 +60,7 @@ dependency source because TestPyPI is not a complete mirror:
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 ```
 
 ## Quick start
@@ -180,6 +180,12 @@ Registration lifecycle failures are classified immediately and conservatively:
   budget first, then continue low-frequency, interruptible lifecycle recovery
   with bounded backoff and jitter until the target changes, shutdown begins, a
   later failure is no longer transient, or registration succeeds.
+
+Recovery covers both lazy Client construction and Naming registration when the
+failure has verified transient evidence. In SDK `2.0.11`, the exact bare
+`nacos.exception.NacosRequestException` raised while an authenticated Client is
+constructed is covered only for the register direction. Structured 401/403
+authentication failures remain deterministic and stop immediately.
 
 `NACOS_RETRY_ENABLED=False` disables both finite retry and lifecycle recovery.
 Recovery applies only to proven transient failures and does not poll remote

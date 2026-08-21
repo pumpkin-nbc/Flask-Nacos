@@ -125,6 +125,13 @@ _BARE_SDK_EXCEPTION_WHITELIST = frozenset(
             "2.0.11",
             "nacos.exception",
             "NacosRequestException",
+            _LifecycleFailureStage.CLIENT_CREATE,
+            "register",
+        ),
+        (
+            "2.0.11",
+            "nacos.exception",
+            "NacosRequestException",
             _LifecycleFailureStage.REGISTER_RPC,
             "register",
         ),

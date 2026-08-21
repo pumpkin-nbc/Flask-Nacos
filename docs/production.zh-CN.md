@@ -9,7 +9,8 @@
 
 启动时遇到已确认的瞬时网络故障，Worker会先使用配置的有限重试预算，随后保持为低频、
 可中断的生命周期自恢复 owner；注册收敛、目标改变、shutdown开始或后续失败不再属于瞬时
-故障时结束。自恢复不依赖 HTTP 请求、readiness或其他业务触发。
+故障时结束。这包括认证 SDK `2.0.11` Client构造期间经过验证的瞬时故障；自恢复不依赖
+HTTP 请求、readiness或其他业务触发。结构化 HTTP 401/403 等认证拒绝不会进入长期 Recovery。
 
 请显式配置消费者可访问的 `NACOS_SERVICE_IP` 与 `NACOS_SERVICE_PORT`；Flask 能在本机
 localhost 访问，不代表其他机器可以访问注册到 Nacos 的地址。
@@ -76,6 +77,10 @@ NACOS_LOG_FILE_ENABLED = False
 SDK 原生日志被隔离，Flask-Nacos 不创建 `~/logs/nacos`。扩展安全日志默认关闭。启用文件
 日志时，`NACOS_LOG_PATH` 默认 `./logs`，`NACOS_LOG_FILENAME` 默认
 `flask-nacos.log`。
+
+不要让多个 Gunicorn 或 Celery进程共同写入同一个轮转日志文件。推荐输出到控制台并由进程
+管理器收集，或由宿主应用配置进程安全的日志管道。Flask-Nacos 不删除、关闭或接管宿主应用
+安装的 Handler；1.1.1 不增加多进程文件轮转机制。
 
 Nacos 用户名/密码或 AK/SK 应放入环境变量或密钥管理器。不要通过无鉴权接口返回完整应用
 配置或内部状态。

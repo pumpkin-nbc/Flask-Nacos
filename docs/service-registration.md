@@ -2,7 +2,7 @@
 
 English | [简体中文](service-registration.zh-CN.md)
 
-Flask-Nacos 1.1.0 uses a target-state lifecycle. `target_registered` is the
+Flask-Nacos 1.1.1 uses a target-state lifecycle. `target_registered` is the
 latest requested state; `registered` is the last locally confirmed Naming
 fact. One daemon convergence Worker moves the fact toward the latest target and
 exits as soon as convergence completes or can no longer continue safely.
@@ -160,6 +160,14 @@ statuses. Each recovery round waits first, using bounded exponential backoff
 with jitter. It never retries more frequently than
 `max(NACOS_RETRY_INTERVAL, 1 second)`, and each failure is classified again.
 `NACOS_RETRY_ENABLED=False` means exactly one current attempt and no recovery.
+
+The classifier covers both lazy Client construction and Naming calls, while
+keeping their infrastructure separate: a Client construction failure never
+publishes Naming RPC metadata or a synthetic Naming outcome. For SDK `2.0.11`,
+the exact bare `nacos.exception.NacosRequestException` is verified as transient
+at `CLIENT_CREATE/register`; SDK `2.0.0` Client construction and unverified
+combinations remain unknown. Structured 401/403 authentication failures are
+deterministic and stop immediately.
 
 The retry/recovery phase belongs to the current Naming direction. Switching
 between register and compensating deregister resets that direction's phase;

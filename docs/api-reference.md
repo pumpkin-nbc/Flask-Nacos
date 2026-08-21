@@ -2,7 +2,7 @@
 
 English | [简体中文](api-reference.zh-CN.md)
 
-Flask-Nacos 1.1.0 keeps lifecycle commands small and context-safe. An explicit
+Flask-Nacos 1.1.1 keeps lifecycle commands small and context-safe. An explicit
 `app` always selects that application. Without `app`, an active Flask app or
 request context is required; there is no fallback to a previously initialized
 application.

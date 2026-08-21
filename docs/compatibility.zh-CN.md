@@ -4,7 +4,7 @@
 
 本页说明 flask-nacos 支持的运行时版本及其兼容性保证。
 
-`1.1.0` 是当前受支持的发布接口，其 API 快照由发布检查强制执行。
+`1.1.1` 是当前受支持的发布接口，其 API 快照由发布检查强制执行。
 
 另请参阅：[快速开始](quickstart.zh-CN.md) - [配置项](configuration.zh-CN.md) -
 [生产部署](production.zh-CN.md)。
@@ -49,8 +49,10 @@ flask-nacos 要求 **Flask `>=1.0`**，不人为设置 Flask 上限。CI 当前�
 经典 SDK 在经过验证的节点不可用路径中会抛出不带结构化 cause 的裸
 `nacos.exception.NacosRequestException`。因此 Flask-Nacos 仅为 SDK `2.0.0` 和 `2.0.11`
 的 Naming register 与补偿 deregister 保留窄范围私有兼容规则，并要求实际安装的精确类型和
-精确失败阶段。该规则不用于 Client 构造、同步/退出注销、同名替代类型或未经验证的 SDK
-版本。其他 2.x 异常体系继续依据自身结构化证据处理，不假设它们拥有统一异常层次。
+精确失败阶段。SDK `2.0.11` 另外为认证 Client 构造期间、register方向的同一精确异常保留
+一项已验证规则；SDK `2.0.0` Client构造、同步/退出注销、同名替代类型、其他方向和未经验证的
+SDK版本均不命中。其他 2.x 异常体系继续依据自身结构化证据处理，不假设统一异常层次；
+结构化 401/403 证据始终属于确定性错误。
 
 ## Nacos SDK 返回结构兼容
 

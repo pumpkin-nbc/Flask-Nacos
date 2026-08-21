@@ -48,7 +48,7 @@ def _install_heartbeat_logging(client: Any) -> None:
             )
             raise
 
-        logger.info(
+        logger.debug(
             "Nacos heartbeat succeeded (service=%s, ip=%s, port=%s, group=%s)",
             service_name,
             ip,

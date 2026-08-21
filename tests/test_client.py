@@ -185,13 +185,14 @@ def test_heartbeat_wrapper_logs_success_and_preserves_result(monkeypatch):
     )
 
     assert result == {"clientBeatInterval": 5000}
-    safe_logger.info.assert_called_once_with(
+    safe_logger.debug.assert_called_once_with(
         "Nacos heartbeat succeeded (service=%s, ip=%s, port=%s, group=%s)",
         "orders",
         "10.0.0.8",
         8080,
         "PROD",
     )
+    safe_logger.info.assert_not_called()
     safe_logger.error.assert_not_called()
 
 
@@ -236,7 +237,8 @@ def test_heartbeat_wrapper_is_installed_only_once(monkeypatch):
 
     assert sdk_client.send_heartbeat is wrapped
     sdk_client.send_heartbeat("orders", "127.0.0.1", 8080)
-    safe_logger.info.assert_called_once()
+    safe_logger.debug.assert_called_once()
+    safe_logger.info.assert_not_called()
 
 
 @pytest.mark.parametrize(

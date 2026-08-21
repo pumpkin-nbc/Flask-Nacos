@@ -7,6 +7,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.1
+
+### Fixed
+
+- Fixed registration lifecycle recovery when authenticated Nacos Client
+  construction fails during temporary server unavailability. The verified SDK
+  `2.0.11` `NacosRequestException` at the exact `CLIENT_CREATE/register` stage
+  now participates in the existing transient Recovery path.
+- Kept structured 401/403 authentication failures deterministic, while
+  unverified SDK versions, stages, directions, and exception types remain
+  `UNKNOWN` and stop after the finite retry budget.
+
+### Changed
+
+- Reduced heartbeat log noise by recording successful SDK heartbeat wrapper
+  calls at `DEBUG`; failures remain sanitized and retain their previous
+  behavior.
+- Added Python 3.8/Flask 1.1.4/gevent compatibility coverage and pinned the SDK
+  compatibility matrix to the explicitly verified `2.0.0` and `2.0.11`
+  releases.
+
+### Compatibility
+
+- The public API, configuration, local status/health schema, target-state
+  lifecycle, fork/shutdown behavior, and SDK heartbeat ownership are unchanged.
+- Lifecycle Recovery still performs no remote-instance monitoring: after local
+  state converges, the Worker exits and the Nacos SDK remains responsible for
+  heartbeat and connection maintenance.
+
 ## 1.1.0
 
 ### Added

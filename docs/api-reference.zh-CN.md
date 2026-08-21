@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | 简体中文
 
-Flask-Nacos 1.1.0 将生命周期命令保持精炼并严格绑定 Flask 上下文。显式传入
+Flask-Nacos 1.1.1 将生命周期命令保持精炼并严格绑定 Flask 上下文。显式传入
 `app` 时操作指定应用；未传入时必须存在当前 app/request context，不再回退到最近初始化的
 应用。
 

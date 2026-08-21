@@ -2,7 +2,7 @@
 
 [English](service-registration.md) | 简体中文
 
-Flask-Nacos 1.1.0 使用目标状态生命周期。`target_registered` 表示最后一次请求的状态，
+Flask-Nacos 1.1.1 使用目标状态生命周期。`target_registered` 表示最后一次请求的状态，
 `registered` 表示最近一次本地确认的 Naming 事实；一个 daemon收敛 Worker负责让事实向
 最新目标收敛，并在收敛完成或无法安全继续时退出。
 
@@ -142,6 +142,12 @@ Nacos SDK负责，而不是该 Worker。
 HTTP 状态。每轮 Recovery 都先等待，使用带抖动的有界指数退避，且不会比
 `max(NACOS_RETRY_INTERVAL, 1秒)` 更频繁；每次新失败都会重新分类。
 `NACOS_RETRY_ENABLED=False` 表示只执行当前一次尝试，不进入自恢复。
+
+分类器同时覆盖惰性 Client 构造与 Naming调用，但两套基础设施仍严格分离：Client构造失败
+不会发布 Naming RPC元数据，也不会伪造 Naming Outcome。SDK `2.0.11` 的精确裸
+`nacos.exception.NacosRequestException` 在 `CLIENT_CREATE/register` 阶段已验证为瞬时故障；
+SDK `2.0.0` Client构造和其他未经验证组合保持 UNKNOWN。结构化 401/403 认证失败属于
+确定性错误并立即停止。
 
 有限重试和 Recovery阶段属于当前实际 Naming方向。register 与补偿 deregister 之间切换时
 重置方向级阶段；generation变化本身只触发重新求值。Worker使用 Event等待；注册、注销或
