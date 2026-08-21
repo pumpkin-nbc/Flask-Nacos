@@ -69,7 +69,7 @@ mutually exclusive. Authentication shape is validated during `init_app()`;
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
 | `NACOS_AUTO_REGISTER` | bool | `True` | no | Trigger registration during initialization and post-fork automatic recovery; it does not block explicit registration. |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Allow the shutdown callback to deregister this process's confirmed instance. |
+| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | no | Install the normal process-exit callback that may deregister this process's confirmed instance. |
 | `NACOS_SERVICE_NAME` | str | `None` | yes (to register) | Service name. |
 | `NACOS_SERVICE_IP` | str | `None` | recommended | Service IP; auto-detected if unset. |
 | `NACOS_SERVICE_PORT` | int | `None` | yes (to register) | Service port, `1-65535`. |
@@ -208,7 +208,10 @@ nacos.register_instance(app)
 `register_instance()` returns `None` before Client creation or network I/O.
 Registration is single-flight per app and process; use `get_status()` to observe
 `target_registered`, `registered`, `operation_running`, and `last_error`.
-`NACOS_AUTO_DEREGISTER` is the only exit deregistration switch.
+`NACOS_DEREGISTER_ON_EXIT` is the only exit deregistration switch. When it is
+`False`, no remote deregistration callback is installed; explicit
+`deregister_instance()` remains available. Exit cleanup is best-effort on a
+normal interpreter shutdown and cannot be guaranteed for forced termination.
 
 ## 8. Logging
 

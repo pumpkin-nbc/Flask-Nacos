@@ -149,7 +149,7 @@ def test_uninitialized_current_app_does_not_use_another_app(make_app, patched_cr
         nacos.register_instance()
 
 
-def test_each_atexit_callback_only_operates_its_app(make_app, monkeypatch):
+def test_atexit_installation_and_cleanup_are_isolated_per_app(make_app, monkeypatch):
     callbacks = []
     client_a = _client()
     client_b = _client()
@@ -161,15 +161,16 @@ def test_each_atexit_callback_only_operates_its_app(make_app, monkeypatch):
         SimpleNamespace(register=callbacks.append),
     )
 
-    app_a = make_app({"NACOS_AUTO_DEREGISTER": True})
-    app_b = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app_a = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
+    app_b = make_app({"NACOS_DEREGISTER_ON_EXIT": False})
     nacos = FlaskNacos(app_a)
     nacos.init_app(app_b)
     nacos.register_instance(app_a)
+    nacos.register_instance(app_b)
     wait_registered(nacos, app_a)
+    wait_registered(nacos, app_b)
 
-    assert len(callbacks) == 2
-    callbacks[1]()
+    assert len(callbacks) == 1
     callbacks[0]()
     client_b.remove_naming_instance.assert_not_called()
     client_a.remove_naming_instance.assert_called_once()

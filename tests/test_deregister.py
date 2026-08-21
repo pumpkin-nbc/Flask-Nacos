@@ -2,12 +2,22 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from flask_nacos import FlaskNacos
 from tests.helpers import wait_registered
 
 
-def test_manual_deregister(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_REGISTER": True})
+@pytest.mark.parametrize("deregister_on_exit", [True, False])
+def test_manual_deregister_is_independent_of_exit_setting(
+    make_app, patched_create_client, fake_client, deregister_on_exit
+):
+    app = make_app(
+        {
+            "NACOS_AUTO_REGISTER": True,
+            "NACOS_DEREGISTER_ON_EXIT": deregister_on_exit,
+        }
+    )
     nacos = FlaskNacos(app)
     wait_registered(nacos, app)
 
@@ -20,7 +30,7 @@ def test_manual_deregister(make_app, patched_create_client, fake_client):
     assert kwargs["group_name"] == "DEFAULT_GROUP"
 
 
-def test_auto_deregister_registers_atexit(make_app, patched_create_client, monkeypatch):
+def test_deregister_on_exit_registers_atexit(make_app, patched_create_client, monkeypatch):
     registered = []
 
     import flask_nacos.extension as extension_module
@@ -31,10 +41,11 @@ def test_auto_deregister_registers_atexit(make_app, patched_create_client, monke
         SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     FlaskNacos(app)
 
     assert len(registered) == 1
+    assert app.extensions["nacos"]["_atexit_registered"] is True
 
 
 def test_atexit_callback_deregisters(make_app, patched_create_client, fake_client, monkeypatch):
@@ -48,7 +59,7 @@ def test_atexit_callback_deregisters(make_app, patched_create_client, fake_clien
         SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     wait_registered(nacos, app)
@@ -57,7 +68,7 @@ def test_atexit_callback_deregisters(make_app, patched_create_client, fake_clien
     fake_client.remove_naming_instance.assert_called_once()
 
 
-def test_atexit_is_installed_even_when_remote_cleanup_is_disabled(
+def test_atexit_is_not_installed_when_remote_cleanup_is_disabled(
     make_app, patched_create_client, monkeypatch
 ):
     registered = []
@@ -70,7 +81,8 @@ def test_atexit_is_installed_even_when_remote_cleanup_is_disabled(
         SimpleNamespace(register=lambda fn: registered.append(fn)),
     )
 
-    app = make_app({"NACOS_AUTO_DEREGISTER": False})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": False})
     FlaskNacos(app)
 
-    assert len(registered) == 1
+    assert registered == []
+    assert app.extensions["nacos"]["_atexit_registered"] is False

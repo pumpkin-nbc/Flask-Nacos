@@ -40,7 +40,7 @@ def test_gevent_monkey_patched_registration_lifecycle():
             NACOS_SERVICE_IP="127.0.0.1",
             NACOS_SERVICE_PORT=8080,
             NACOS_AUTO_REGISTER=True,
-            NACOS_AUTO_DEREGISTER=False,
+            NACOS_DEREGISTER_ON_EXIT=False,
             NACOS_RETRY_INTERVAL=0,
         )
         nacos = FlaskNacos(app)

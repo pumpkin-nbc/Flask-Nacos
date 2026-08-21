@@ -29,7 +29,7 @@ def test_authenticated_config_round_trip():
     app.config.update(
         **integration_nacos_config(environment),
         NACOS_AUTO_REGISTER=False,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_CONFIG_ENABLED=True,
         NACOS_REQUEST_TIMEOUT=5.0,
         NACOS_RETRY_ENABLED=False,
@@ -63,7 +63,7 @@ def test_invalid_credentials_fail_deterministically():
     app.config.update(
         **config,
         NACOS_AUTO_REGISTER=False,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_CONFIG_ENABLED=False,
         NACOS_RETRY_ENABLED=False,
         NACOS_FAIL_FAST=True,
@@ -105,7 +105,7 @@ def test_authenticated_client_create_recovers_through_tcp_gate(monkeypatch):
         app.config.update(
             **config,
             NACOS_AUTO_REGISTER=True,
-            NACOS_AUTO_DEREGISTER=False,
+            NACOS_DEREGISTER_ON_EXIT=False,
             NACOS_CONFIG_ENABLED=False,
             NACOS_SERVICE_NAME=service_name,
             NACOS_SERVICE_IP="127.0.0.1",

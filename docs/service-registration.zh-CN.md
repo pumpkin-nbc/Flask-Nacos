@@ -182,7 +182,8 @@ Gunicorn `--preload` 会在 worker fork 前由 master初始化应用。推荐设
 调用 `nacos.register_instance(app)`。Runtime重建无法撤销 master在 fork 前已经启动的注册。
 
 多个 worker共享相同 service/group/cluster/IP/port 时，Nacos 只看到一个远端实例。应设置
-`NACOS_AUTO_DEREGISTER=False`，避免一个 worker退出时删除共享端点，或使用单一外部协调者。
+`NACOS_DEREGISTER_ON_EXIT=False`，避免一个 worker退出时删除共享端点，或使用单一外部协调者。
+该配置只控制进程退出清理，不会禁止显式 `deregister_instance()`。
 
 ## 新旧调度对照
 

@@ -269,11 +269,13 @@ Gunicorn `--preload` 推荐设置 `NACOS_AUTO_REGISTER=False`，并在 post-fork
 worker-init hook中调用 `nacos.register_instance(app)`，避免 preload master启动 SDK Runtime。
 
 多个 worker使用相同服务身份与 IP:port（相同 service/group/cluster/IP/port）时，是同一个
-Nacos 实例。共享端点应设置 `NACOS_AUTO_DEREGISTER=False`，防止一个 worker退出时删除
+Nacos 实例。共享端点应设置 `NACOS_DEREGISTER_ON_EXIT=False`，防止一个 worker退出时删除
 仍由其他 worker提供服务的实例。
 
-`NACOS_AUTO_DEREGISTER=True` 是唯一退出注销开关。退出不会修改用户目标，不启动正常重试，
-只会有限等待已经活跃的一笔 Naming RPC，随后最多执行一次尽力清理。
+`NACOS_DEREGISTER_ON_EXIT=True` 会安装进程退出注销回调；设为 `False` 时不安装远端清理
+回调。该配置不影响显式 `deregister_instance()`。解释器正常退出时，清理不会修改用户目标、
+不会启动正常重试，只会有限等待已经活跃的一笔 Naming RPC，随后最多执行一次尽力清理。
+`SIGKILL` 等强制终止无法保证回调执行。
 
 ## 安全说明
 

@@ -127,41 +127,28 @@ def test_fork_preserves_non_fail_fast_registration_config_error(
     assert patched_create_client["count"] == 0
 
 
-def test_atexit_callback_is_always_installed_once(make_app, patched_create_client, monkeypatch):
+def test_atexit_callback_is_installed_once_when_enabled(
+    make_app, patched_create_client, monkeypatch
+):
     callbacks = []
     monkeypatch.setattr(
         extension_module,
         "atexit",
         SimpleNamespace(register=callbacks.append),
     )
-    app = make_app({"NACOS_AUTO_DEREGISTER": False})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.init_app(app)
     assert len(callbacks) == 1
 
 
-def test_auto_deregister_false_only_stops_lifecycle(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_DEREGISTER": False})
-    nacos = FlaskNacos(app)
-    nacos.register_instance(app)
-    wait_registered(nacos, app)
-    runtime = app.extensions["nacos"]["_runtime"]
-    target_before = runtime.target_registered
-
-    nacos._atexit_handler(app)
-
-    assert runtime.shutting_down is True
-    assert runtime.target_registered is target_before
-    fake_client.remove_naming_instance.assert_not_called()
-
-
-def test_auto_deregister_true_uses_cached_identity(
+def test_deregister_on_exit_uses_cached_identity(
     make_app, patched_create_client, fake_client, monkeypatch
 ):
     import flask_nacos.naming as naming_module
 
     monkeypatch.setattr(naming_module, "get_local_ip", lambda: "192.0.2.80")
-    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     wait_registered(nacos, app)
@@ -187,7 +174,7 @@ def test_exit_waits_for_the_specific_active_rpc_then_deregisters(
         return True
 
     fake_client.add_naming_instance.side_effect = blocked_register
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     assert entered.wait(1.0)
@@ -273,7 +260,7 @@ def test_exit_handles_incomplete_rpc_metadata_and_missing_identity(
         "warning",
         lambda message, *_args: warnings.append(message),
     )
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     runtime = app.extensions["nacos"]["_runtime"]
     runtime.client = fake_client
@@ -314,7 +301,7 @@ def test_exit_wait_timeout_is_bounded_and_does_not_race_rpc(
     started_at,
     expected_wait,
 ):
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     runtime = app.extensions["nacos"]["_runtime"]
     waits = []

@@ -45,20 +45,24 @@ Nacos 中是同一个实例；虽然每个进程拥有独立本地 Runtime 和 C
 不应删除其他 worker仍在提供服务的共享实例：
 
 ```python
-NACOS_AUTO_DEREGISTER = False
+NACOS_DEREGISTER_ON_EXIT = False
 ```
 
 也可以由单一外部协调者负责注册与注销。每个 worker拥有不同 IP 或端口时，默认的
-`NACOS_AUTO_DEREGISTER=True` 才可能合适。
+`NACOS_DEREGISTER_ON_EXIT=True` 才可能合适。
 
 ## 退出行为
 
-退出回调会把当前 PID Runtime 标记为 shutting down 并唤醒重试等待。此后普通生命周期路径
-不能再启动 Naming RPC。
+`NACOS_DEREGISTER_ON_EXIT=True` 时，已安装的退出回调会把当前 PID Runtime 标记为
+shutting down 并唤醒重试等待。此后普通生命周期路径不能再启动 Naming RPC。
 
-- `NACOS_AUTO_DEREGISTER=False` 时立即返回，不等待，也不修改用户注册目标。
+- `NACOS_DEREGISTER_ON_EXIT=False` 时不安装远端注销回调，因此进程退出时不等待 Naming，
+  也不执行远端清理。
 - 设为 `True` 时，只可能等待已经在执行的那一笔 Naming RPC，使用其剩余超时加少量调度
   余量，并设置五秒等待上限；随后最多执行一次基于准确缓存身份的退出注销。
+
+该配置不会禁止显式 `deregister_instance()`。退出清理只在解释器正常关闭时尽力执行；
+`SIGKILL`、容器强制终止或宿主机故障都无法保证回调运行。
 
 活动 RPC 的 timeout 快照来自实际 SDK Client 的 `default_timeout`，而不是只用于配置中心的
 `NACOS_REQUEST_TIMEOUT`。SDK 值缺失、读取抛错、为布尔/非数字/非有限数或不大于零时，

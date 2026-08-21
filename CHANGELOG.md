@@ -28,6 +28,9 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
+- Clarified process-exit cleanup with the sole
+  `NACOS_DEREGISTER_ON_EXIT` setting. Disabling it installs no remote cleanup
+  callback and never blocks an explicit `deregister_instance()`.
 - Reduced heartbeat log noise: ordinary success is `DEBUG`, first/type-changed
   failure is `WARNING`, unchanged failures are warning-throttled for 60 seconds,
   and the first per-identity success after failure is one recovery `INFO`.
@@ -39,8 +42,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Compatibility
 
-- The public API, configuration, local status/health schema, target-state
-  lifecycle, fork/shutdown behavior, and SDK heartbeat ownership are unchanged.
+- The public API, local status/health schema, target-state lifecycle,
+  fork/shutdown behavior, and SDK heartbeat ownership are unchanged.
 - Lifecycle Recovery still performs no remote-instance monitoring: after local
   state converges, the Worker exits and the Nacos SDK remains responsible for
   heartbeat and connection maintenance.
@@ -85,7 +88,7 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   `.client` cache reads have no SDK side effects.
 - `deregister_instance(app=None)` preserves the last lifecycle command and
   keeps its idempotent, synchronous-cleanup contract.
-- `NACOS_AUTO_DEREGISTER` is the single exit deregistration switch.
+- `NACOS_DEREGISTER_ON_EXIT` is the single exit deregistration switch.
 - Kept retry/recovery ownership inside the Register Worker. Client creation and
   Naming failures share conservative classification without mixing Client state
   into Naming RPC outcome metadata, and successful convergence still hands

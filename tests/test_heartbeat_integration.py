@@ -35,7 +35,7 @@ def test_temporary_instance_registration_discovery_and_heartbeat_recovery():
     app.config.update(
         **integration_nacos_config(environment),
         NACOS_AUTO_REGISTER=True,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_CONFIG_ENABLED=False,
         NACOS_SERVICE_NAME=service_name,
         NACOS_SERVICE_IP="127.0.0.1",

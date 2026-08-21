@@ -85,7 +85,7 @@ same code target another Nacos deployment without hardcoding credentials.
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | Default config data ID. |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | Config group. |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | Config-read timeout in seconds. |
-| `NACOS_AUTO_DEREGISTER` | `true` | Allow this process to deregister its confirmed instance during shutdown. |
+| `NACOS_DEREGISTER_ON_EXIT` | `true` | Install normal process-exit cleanup for this process's confirmed instance. |
 | `NACOS_LOG_ENABLED` | `false` | Enable sanitized Flask-Nacos logging. |
 | `NACOS_LOG_CONSOLE_ENABLED` | `true` | Write logs to the console when logging is enabled. |
 | `NACOS_LOG_FILE_ENABLED` | `true` | Write a rotating file when logging is enabled. |
@@ -303,7 +303,7 @@ docker compose -f examples/docker-compose-nacos.yml down
 Run the factory with Gunicorn on platforms where Gunicorn is supported:
 
 ```bash
-export NACOS_AUTO_DEREGISTER="false"
+export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
@@ -311,8 +311,12 @@ Each worker executes `create_app()`. Registration is always per-app,
 per-process, single-flight, and inherited locks/state are recreated after a
 fork. Workers sharing one IP and port advertise the same Nacos
 instance identity, not one instance per worker. Set
-`NACOS_AUTO_DEREGISTER=False` for that shared endpoint, or use one external
+`NACOS_DEREGISTER_ON_EXIT=False` for that shared endpoint, or use one external
 coordinator to own registration and deregistration.
+
+This setting controls only the normal process-exit callback. Explicit
+`deregister_instance()` remains available, and forced termination cannot
+guarantee best-effort cleanup.
 
 Native SDK logging is always silent because it may include sensitive request or
 configuration data. `NACOS_LOG_*` controls only Flask-Nacos safety logs; by

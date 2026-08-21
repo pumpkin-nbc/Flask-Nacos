@@ -55,24 +55,29 @@ Client. One worker must not delete that shared instance while others still
 serve traffic:
 
 ```python
-NACOS_AUTO_DEREGISTER = False
+NACOS_DEREGISTER_ON_EXIT = False
 ```
 
 Alternatively, let one external coordinator own registration and
 deregistration. When each worker advertises a distinct IP or port, the default
-`NACOS_AUTO_DEREGISTER=True` can be appropriate.
+`NACOS_DEREGISTER_ON_EXIT=True` can be appropriate.
 
 ## Shutdown behavior
 
-The exit callback marks the current PID Runtime as shutting down and wakes any
-retry wait. Normal lifecycle paths cannot begin another Naming RPC afterward.
+With `NACOS_DEREGISTER_ON_EXIT=True`, the installed exit callback marks the
+current PID Runtime as shutting down and wakes any retry wait. Normal lifecycle
+paths cannot begin another Naming RPC afterward.
 
-- With `NACOS_AUTO_DEREGISTER=False`, exit returns without waiting or changing
-  the user's registration target.
+- With `NACOS_DEREGISTER_ON_EXIT=False`, no remote deregistration callback is
+  installed, so process exit performs no Naming wait or cleanup.
 - With `True`, exit may wait for only the already-active Naming RPC, using its
   remaining timeout plus a small scheduling allowance and a five-second wait
   cap. It then performs at most one exit deregistration with the cached exact
   identity.
+
+This setting never disables an explicit `deregister_instance()`. Exit cleanup
+is best-effort on normal interpreter shutdown; `SIGKILL`, forced container
+termination, and host failure cannot guarantee callback execution.
 
 The active RPC timeout snapshot comes from the actual SDK Client
 `default_timeout`, not `NACOS_REQUEST_TIMEOUT` (which is configuration-center

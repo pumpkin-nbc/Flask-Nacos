@@ -45,7 +45,7 @@ def create_app() -> Flask:
         NACOS_CONFIG_GROUP=os.environ.get("NACOS_CONFIG_GROUP", "DEFAULT_GROUP"),
         NACOS_REQUEST_TIMEOUT=float(os.environ.get("NACOS_REQUEST_TIMEOUT", "5.0")),
         NACOS_AUTO_REGISTER=True,
-        NACOS_AUTO_DEREGISTER=os.environ.get("NACOS_AUTO_DEREGISTER", "true"),
+        NACOS_DEREGISTER_ON_EXIT=os.environ.get("NACOS_DEREGISTER_ON_EXIT", "true"),
         NACOS_HEALTH_CHECK_ENABLED=True,
         NACOS_HEALTH_CHECK_PATH="/health/nacos",
         NACOS_LOG_ENABLED=os.environ.get("NACOS_LOG_ENABLED", "false"),

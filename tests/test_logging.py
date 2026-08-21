@@ -293,7 +293,7 @@ def test_repeated_init_app_does_not_duplicate_handlers(monkeypatch):
     app.config.update(
         NACOS_ENABLED=True,
         NACOS_AUTO_REGISTER=False,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_SERVER_ADDR="127.0.0.1:8848",
         NACOS_LOG_ENABLED=True,
         NACOS_LOG_CONSOLE_ENABLED=True,
@@ -603,7 +603,7 @@ def test_logs_do_not_contain_secrets(monkeypatch):
     app.config.update(
         NACOS_ENABLED=True,
         NACOS_AUTO_REGISTER=False,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_SERVER_ADDR="127.0.0.1:8848",
         NACOS_USERNAME="admin",
         NACOS_PASSWORD="supersecret-password",
@@ -644,7 +644,7 @@ def test_get_config_still_returns_raw_string(monkeypatch):
     app.config.update(
         NACOS_ENABLED=True,
         NACOS_AUTO_REGISTER=False,
-        NACOS_AUTO_DEREGISTER=False,
+        NACOS_DEREGISTER_ON_EXIT=False,
         NACOS_SERVER_ADDR="127.0.0.1:8848",
     )
     nacos = FlaskNacos(app)

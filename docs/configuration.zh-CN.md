@@ -65,7 +65,7 @@ AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 是否在初始化及 fork 后自动恢复时触发注册；不阻止显式注册。 |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 是否允许退出回调注销当前进程已确认的实例。 |
+| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | 否 | 是否安装正常进程退出回调，以注销当前进程已确认的实例。 |
 | `NACOS_SERVICE_NAME` | str | `None` | 是（注册时） | 服务名。 |
 | `NACOS_SERVICE_IP` | str | `None` | 建议 | 服务 IP；未设置时自动识别。 |
 | `NACOS_SERVICE_PORT` | int | `None` | 是（注册时） | 服务端口，`1-65535`。 |
@@ -189,7 +189,9 @@ nacos.register_instance(app)
 
 `register_instance()` 在 Client 创建与网络 I/O 前返回 `None`。注册按 app、按进程
 single-flight；通过 `get_status()` 观察 `target_registered`、`registered`、
-`operation_running` 与 `last_error`。`NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
+`operation_running` 与 `last_error`。`NACOS_DEREGISTER_ON_EXIT` 是唯一退出注销开关；设为
+`False` 时不会安装远端注销回调，但显式 `deregister_instance()` 仍然可用。退出清理只在解释器
+正常关闭时尽力执行，强制终止无法保证回调运行。
 
 ## 8. 日志
 

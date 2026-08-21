@@ -155,7 +155,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   advertising the same IP and port share one instance even though Flask-Nacos
   tracks their local state separately.
 - Investigate: compare the complete advertised identities, not the worker count.
-- Fix: for a shared endpoint set `NACOS_AUTO_DEREGISTER=False`, or let one
+- Fix: for a shared endpoint set `NACOS_DEREGISTER_ON_EXIT=False`, or let one
   external coordinator own registration and deregistration. See
   [Production](production.md).
 

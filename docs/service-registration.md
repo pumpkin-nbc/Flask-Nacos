@@ -214,8 +214,10 @@ hook. Runtime rebuilding cannot undo a registration that the master already
 started before the fork.
 
 When multiple workers share the same service/group/cluster/IP/port, Nacos sees
-one remote instance. Set `NACOS_AUTO_DEREGISTER=False` so one exiting worker does
+one remote instance. Set `NACOS_DEREGISTER_ON_EXIT=False` so one exiting worker does
 not remove the shared endpoint, or use a single external coordinator.
+The setting controls only process-exit cleanup and never disables an explicit
+`deregister_instance()`.
 
 ## Old and new scheduling
 

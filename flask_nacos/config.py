@@ -30,7 +30,7 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_GROUP_NAME": "DEFAULT_GROUP",
     # Service registration.
     "NACOS_AUTO_REGISTER": True,
-    "NACOS_AUTO_DEREGISTER": True,
+    "NACOS_DEREGISTER_ON_EXIT": True,
     "NACOS_SERVICE_NAME": None,
     "NACOS_SERVICE_IP": None,
     "NACOS_SERVICE_PORT": None,
@@ -97,7 +97,7 @@ def load_config(app) -> Dict[str, Any]:
     bool_keys = (
         "NACOS_ENABLED",
         "NACOS_AUTO_REGISTER",
-        "NACOS_AUTO_DEREGISTER",
+        "NACOS_DEREGISTER_ON_EXIT",
         "NACOS_SERVICE_HEALTHY",
         "NACOS_SERVICE_ENABLED",
         "NACOS_CONFIG_ENABLED",

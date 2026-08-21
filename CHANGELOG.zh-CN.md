@@ -25,6 +25,8 @@
 
 ### 变更
 
+- 使用唯一的 `NACOS_DEREGISTER_ON_EXIT` 配置明确进程退出清理职责；关闭时不安装远端
+  清理回调，也不会阻止显式 `deregister_instance()`。
 - 降低 SDK heartbeat wrapper 日志噪声：普通成功为 `DEBUG`，首次/类型变化失败为
   `WARNING`，相同失败 60 秒内节流，失败后每个身份的首次成功记录一次恢复 `INFO`。
 - 增加 Python 3.8/Flask 1.1.4/gevent兼容测试，并将 SDK兼容矩阵固定为明确验证的
@@ -34,8 +36,8 @@
 
 ### 兼容性
 
-- 公共 API、配置、本地 status/health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳
-  归属保持不变。
+- 公共 API、本地 status/health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳归属
+  保持不变。
 - 生命周期自恢复仍不执行远端实例监控；本地状态收敛后 Worker退出，心跳与连接维护继续由
   Nacos SDK负责。
 
@@ -67,7 +69,7 @@
   编排流程，且不增加 Runtime 或公开状态字段。
 - Client 按 Flask app/PID惰性创建；状态、健康与 `.client` 缓存读取无 SDK副作用。
 - `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并保持幂等与同步清理契约。
-- `NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
+- `NACOS_DEREGISTER_ON_EXIT` 是唯一退出注销开关。
 - 有限重试与自恢复继续统一由 Register Worker负责。Client 创建和 Naming失败共用保守分类，
   但 Client状态不会混入 Naming RPC Outcome元数据；收敛成功后心跳仍完全交由 Nacos SDK。
 - 同步双语 Quickstart 与可运行的 beginner 示例，补齐完整工厂案例实际读取的全部环境变量，

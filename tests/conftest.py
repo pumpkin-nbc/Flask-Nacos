@@ -73,7 +73,7 @@ def base_config():
         "NACOS_SERVICE_IP": "127.0.0.1",
         "NACOS_SERVICE_PORT": 8000,
         "NACOS_AUTO_REGISTER": False,
-        "NACOS_AUTO_DEREGISTER": False,
+        "NACOS_DEREGISTER_ON_EXIT": False,
     }
 
 

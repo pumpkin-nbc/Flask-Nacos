@@ -180,6 +180,8 @@ def test_examples_check_is_clean(check_examples):
 
 def test_smoke_test_package_has_entrypoint(smoke_test_package):
     assert callable(smoke_test_package.main)
+    script = (SCRIPTS_DIR / "smoke_test_package.py").read_text(encoding="utf-8")
+    assert '[str(py), "-m", "pip", "check"]' in script
 
 
 def test_sensitive_scan_is_clean(check_sensitive_info):

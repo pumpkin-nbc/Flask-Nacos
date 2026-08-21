@@ -115,6 +115,17 @@ def _test_artifact(kind: str, artifact: str, expected: str, parent: Path) -> boo
         )
         return False
 
+    dependency_check = subprocess.run(
+        [str(py), "-m", "pip", "check"],
+        check=False,
+    )
+    if dependency_check.returncode != 0:
+        print(
+            f"[smoke_test_package] FAILED - {kind} dependency check failed",
+            file=sys.stderr,
+        )
+        return False
+
     check = subprocess.run([str(py), "-c", _CHECK_SCRIPT.format(expected=expected)], check=False)
     if check.returncode != 0:
         print(

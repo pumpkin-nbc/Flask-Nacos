@@ -313,12 +313,15 @@ For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER=False` and call
 starting SDK runtime in the preload master.
 
 Workers advertising the same service/group/cluster with the same IP and port
-represent one Nacos instance. Set `NACOS_AUTO_DEREGISTER=False` for a shared
+represent one Nacos instance. Set `NACOS_DEREGISTER_ON_EXIT=False` for a shared
 endpoint so one exiting worker cannot delete it while others remain alive.
 
-`NACOS_AUTO_DEREGISTER=True` is the only exit-deregistration switch. Shutdown
+`NACOS_DEREGISTER_ON_EXIT=True` installs the process-exit deregistration
+callback; `False` installs no remote-cleanup callback. The setting never blocks
+an explicit `deregister_instance()`. On a normal interpreter exit, cleanup
 never changes the user's target, never starts normal retry, and waits only a
 bounded time for an already-active Naming RPC before one best-effort cleanup.
+Forced termination such as `SIGKILL` cannot guarantee callback execution.
 
 ## Security note
 

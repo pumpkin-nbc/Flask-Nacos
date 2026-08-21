@@ -723,7 +723,7 @@ def test_shutdown_immediately_interrupts_long_recovery_wait(
         {
             "NACOS_RETRY_TIMES": 1,
             "NACOS_RETRY_INTERVAL": 100,
-            "NACOS_AUTO_DEREGISTER": False,
+            "NACOS_DEREGISTER_ON_EXIT": False,
         }
     )
     nacos = FlaskNacos(app)

@@ -23,7 +23,7 @@ app.config.update(
     NACOS_SERVICE_IP="127.0.0.1",
     NACOS_SERVICE_PORT=5002,
     NACOS_AUTO_REGISTER=True,
-    NACOS_AUTO_DEREGISTER=True,
+    NACOS_DEREGISTER_ON_EXIT=True,
     # Register the health-check route at the given path.
     NACOS_HEALTH_CHECK_ENABLED=True,
     NACOS_HEALTH_CHECK_PATH="/health/nacos",

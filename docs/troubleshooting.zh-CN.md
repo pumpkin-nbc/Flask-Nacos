@@ -138,7 +138,7 @@
 - 可能原因：Nacos 使用 service/group/cluster/IP/port 标识实例。多个 worker 公布相同 IP
   和端口时共享同一个实例，尽管 Flask-Nacos 会分别维护它们的本地状态。
 - 排查方法：比较完整的注册地址，不要仅比较 worker 数量。
-- 解决建议：共享端点设置 `NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册
+- 解决建议：共享端点设置 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册
   与注销。详见[生产部署](production.zh-CN.md)。
 
 ## 12. `NACOS_FAIL_FAST=True` 导致启动失败

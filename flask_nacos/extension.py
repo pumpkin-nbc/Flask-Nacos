@@ -1684,6 +1684,8 @@ class FlaskNacos:
     # -- Process exit ------------------------------------------------------
 
     def _register_atexit(self, app, state: Dict[str, Any]) -> None:
+        if not state["config"]["NACOS_DEREGISTER_ON_EXIT"]:
+            return
         if state.get(_ATEXIT_REGISTERED_KEY):
             return
         extension_ref = weakref.ref(self)
@@ -1734,8 +1736,6 @@ class FlaskNacos:
         del rpc_seq, registered_identity
 
         runtime.operation_wakeup.set()
-        if not state["config"].get("NACOS_AUTO_DEREGISTER", True):
-            return
 
         if rpc_active:
             if rpc_done is None:
