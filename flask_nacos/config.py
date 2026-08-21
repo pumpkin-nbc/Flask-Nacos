@@ -29,7 +29,6 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_SECRET_KEY": None,
     "NACOS_GROUP_NAME": "DEFAULT_GROUP",
     # Service registration.
-    "NACOS_REGISTER_ENABLED": True,
     "NACOS_AUTO_REGISTER": True,
     "NACOS_AUTO_DEREGISTER": True,
     "NACOS_SERVICE_NAME": None,
@@ -97,7 +96,6 @@ def load_config(app) -> Dict[str, Any]:
     # bool and is validated strictly at registration time.
     bool_keys = (
         "NACOS_ENABLED",
-        "NACOS_REGISTER_ENABLED",
         "NACOS_AUTO_REGISTER",
         "NACOS_AUTO_DEREGISTER",
         "NACOS_SERVICE_HEALTHY",

@@ -60,6 +60,7 @@ REQUIRED_CLASSIFIERS = {
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 }
+REMOVED_REGISTRATION_SWITCH = "NACOS_REGISTER_" + "ENABLED"
 
 _RELATIVE_MARKDOWN_LINK_RE = re.compile(r"\]\((?!https?://|mailto:|#)([^)]+)\)", re.IGNORECASE)
 
@@ -247,6 +248,10 @@ def validate_wheel_freshness(archive: zipfile.ZipFile) -> List[str]:
             problems.append(f"wheel missing current source file: {relative}")
         elif archive.read(relative) != source.read_bytes():
             problems.append(f"wheel contains stale source file: {relative}")
+    forbidden = REMOVED_REGISTRATION_SWITCH.encode("ascii")
+    for name in archive.namelist():
+        if forbidden in archive.read(name):
+            problems.append(f"wheel contains removed registration switch: {name}")
     return problems
 
 
@@ -276,6 +281,13 @@ def validate_sdist_freshness(archive: tarfile.TarFile) -> List[str]:
         extracted = archive.extractfile(member)
         if extracted is None or extracted.read() != source.read_bytes():
             problems.append(f"sdist contains stale source file: {relative}")
+    forbidden = REMOVED_REGISTRATION_SWITCH.encode("ascii")
+    for member in archive.getmembers():
+        if not member.isfile():
+            continue
+        extracted = archive.extractfile(member)
+        if extracted is not None and forbidden in extracted.read():
+            problems.append(f"sdist contains removed registration switch: {member.name}")
     return problems
 
 

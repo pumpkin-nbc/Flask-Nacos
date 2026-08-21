@@ -39,7 +39,7 @@ INVALID_REGISTRATION_SETTINGS = [
 
 
 @pytest.mark.parametrize("overrides", INVALID_REGISTRATION_SETTINGS)
-def test_manual_register_reuses_cached_validation_and_fail_fast(
+def test_manual_register_caches_validation_without_committing_fail_fast_state(
     make_app, patched_create_client, fake_client, overrides
 ):
     app = make_app({**overrides, "NACOS_AUTO_REGISTER": False, "NACOS_FAIL_FAST": True})
@@ -49,10 +49,11 @@ def test_manual_register_reuses_cached_validation_and_fail_fast(
         nacos.register_instance(app)
 
     status = nacos.get_status(app)
-    assert status["target_registered"] is True
+    assert status["target_registered"] is False
     assert status["registered"] is False
     assert status["operation_running"] is False
-    assert status["last_error"] == "NacosValidationError"
+    assert status["last_error"] is None
+    assert app.extensions[EXTENSION_KEY]["_runtime"].operation_generation == 0
     assert patched_create_client["count"] == 0
     fake_client.add_naming_instance.assert_not_called()
 
@@ -84,7 +85,6 @@ def test_auto_registration_fail_fast_is_transactional(
     app = make_app(
         {
             "NACOS_SERVICE_NAME": service_name,
-            "NACOS_REGISTER_ENABLED": True,
             "NACOS_AUTO_REGISTER": True,
             "NACOS_FAIL_FAST": True,
         }
@@ -174,24 +174,22 @@ def test_retry_numbers_are_ignored_when_retry_disabled(
     fake_client.add_naming_instance.assert_called_once()
 
 
-def test_register_enabled_false_makes_registration_a_noop(
+def test_removed_registration_switch_is_ignored(
     make_app, patched_create_client, fake_client
 ):
+    removed_key = "NACOS_REGISTER_" + "ENABLED"
     app = make_app(
         {
-            "NACOS_SERVICE_NAME": None,
-            "NACOS_REGISTER_ENABLED": False,
-            "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": True,
+            removed_key: False,
+            "NACOS_AUTO_REGISTER": False,
         }
     )
     nacos = FlaskNacos(app)
+    assert removed_key not in app.extensions[EXTENSION_KEY]["config"]
     nacos.register_instance(app)
-    status = nacos.get_status(app)
-    assert status["target_registered"] is False
-    assert status["last_error"] is None
-    assert patched_create_client["count"] == 0
-    fake_client.add_naming_instance.assert_not_called()
+    wait_registered(nacos, app)
+    assert patched_create_client["count"] == 1
+    fake_client.add_naming_instance.assert_called_once()
 
 
 def test_missing_service_name_allowed_at_init_but_explicit_register_fails(

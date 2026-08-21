@@ -93,8 +93,9 @@ init_app(app)
 ```
 
 `NACOS_AUTO_REGISTER` (default `True`) is the single automatic-registration
-switch. Automatic registration requires `NACOS_ENABLED`,
-`NACOS_REGISTER_ENABLED`, and `NACOS_AUTO_REGISTER` to be enabled.
+switch. Automatic registration runs when both `NACOS_ENABLED` and
+`NACOS_AUTO_REGISTER` are enabled. Turning automatic registration off does not
+block an explicit `register_instance(app)` command.
 
 ## Application factory
 
@@ -135,8 +136,7 @@ network retry, Naming RPC, and SDK heartbeat startup never delay the caller.
 `deregister_instance(app=None) -> bool` changes the final target to
 unregistered. It returns `True` for an idempotent/accepted/successful cleanup or
 when a newer register command makes the RPC unnecessary, and `False` when
-cleanup is still required but fails. `NACOS_REGISTER_ENABLED=False` prevents
-new registration but does not prevent cleanup of an existing instance.
+cleanup is still required but fails.
 
 The Worker continually re-reads the latest target. A sequence such as register
 → deregister → register therefore ends at the final register target; an old
@@ -156,6 +156,11 @@ See the full [lifecycle diagrams and old/new scheduling table](https://github.co
 When automatic registration is enabled, `init_app(app)` validates
 `NACOS_SERVICE_NAME`, port, weight, metadata, ephemeral/heartbeat settings,
 authentication, and retry settings before creating extension state.
+
+When automatic registration is disabled, initialization skips registration-only
+validation. The first explicit `register_instance(app)` performs that local,
+deterministic validation and caches its result without creating a Client or
+performing network I/O.
 
 - `NACOS_FAIL_FAST=True`: deterministic automatic-registration errors raise
   before `app.extensions["nacos"]` is committed.

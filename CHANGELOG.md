@@ -37,10 +37,16 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Removed the redundant initialization-specific auto-registration switch.
   `NACOS_AUTO_REGISTER` is now the single automatic-registration switch, and
   initialization calls the public registration command without waiting for Nacos.
+- Removed the redundant registration-permission switch. `NACOS_ENABLED` now
+  controls the integration, while `NACOS_AUTO_REGISTER` controls only automatic
+  registration; an explicit `register_instance()` remains the registration command.
+- Registration-only validation is lazy when automatic registration is disabled.
+  Automatic, explicit, and post-fork pending registration share one call-local
+  orchestration path without adding Runtime or public status fields.
 - Client creation is lazy and bound to one Flask app/PID. Status, health, and
   `.client` cache reads have no SDK side effects.
-- `deregister_instance(app=None)` preserves the last lifecycle command and can
-  still clean an existing instance when new registration is disabled.
+- `deregister_instance(app=None)` preserves the last lifecycle command and
+  keeps its idempotent, synchronous-cleanup contract.
 - `NACOS_AUTO_DEREGISTER` is the single exit deregistration switch.
 - Kept retry/recovery ownership inside the Register Worker. Client creation and
   Naming failures share conservative classification without mixing Client state

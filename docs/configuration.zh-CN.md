@@ -64,8 +64,7 @@ AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否允许新注册；不阻止清理已经注册的实例。 |
-| `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 自动注册总开关。 |
+| `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 是否在初始化及 fork 后自动恢复时触发注册；不阻止显式注册。 |
 | `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 是否允许退出回调注销当前进程已确认的实例。 |
 | `NACOS_SERVICE_NAME` | str | `None` | 是（注册时） | 服务名。 |
 | `NACOS_SERVICE_IP` | str | `None` | 建议 | 服务 IP；未设置时自动识别。 |

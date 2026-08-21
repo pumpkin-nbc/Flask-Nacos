@@ -29,9 +29,12 @@
   生命周期重试与心跳启动均由具名 daemon 线程执行。
 - 删除重复的初始化专用自动注册开关；`NACOS_AUTO_REGISTER` 现在是唯一自动注册开关，
   初始化通过公开注册命令调度后台工作且不等待 Nacos。
+- 删除重复的注册权限开关。`NACOS_ENABLED` 负责控制整体集成，`NACOS_AUTO_REGISTER`
+  只控制自动注册；显式 `register_instance()` 继续表达注册命令。
+- 关闭自动注册时按需执行注册专用校验；自动、显式与 fork 后 pending 恢复共享同一调用期
+  编排流程，且不增加 Runtime 或公开状态字段。
 - Client 按 Flask app/PID惰性创建；状态、健康与 `.client` 缓存读取无 SDK副作用。
-- `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并且在禁止新注册后仍可
-  清理已有实例。
+- `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并保持幂等与同步清理契约。
 - `NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
 - 有限重试与自恢复继续统一由 Register Worker负责。Client 创建和 Naming失败共用保守分类，
   但 Client状态不会混入 Naming RPC Outcome元数据；收敛成功后心跳仍完全交由 Nacos SDK。

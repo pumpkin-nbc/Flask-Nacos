@@ -51,6 +51,17 @@ def test_removed_log_file_setting_is_ignored():
     assert "NACOS_LOG_FILE" not in cfg
 
 
+def test_removed_registration_switch_is_ignored():
+    app = Flask(__name__)
+    removed_key = "NACOS_REGISTER_" + "ENABLED"
+    app.config[removed_key] = False
+
+    cfg = load_config(app)
+
+    assert removed_key not in DEFAULTS
+    assert removed_key not in cfg
+
+
 def test_removed_log_directory_settings_are_ignored():
     app = Flask(__name__)
     app.config.update(NACOS_LOG_DIR="canonical-logs", NACOS_LOG_FILE="legacy-logs")

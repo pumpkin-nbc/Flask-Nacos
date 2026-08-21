@@ -217,7 +217,6 @@ Nacos 配置应放在 Flask 配置类或环境变量中，不要写入 `app/exte
 本机 IP。如果应用只读取配置或发现其他服务，可以关闭自动注册并省略注册标识：
 
 ```python
-NACOS_REGISTER_ENABLED = False
 NACOS_AUTO_REGISTER = False
 ```
 

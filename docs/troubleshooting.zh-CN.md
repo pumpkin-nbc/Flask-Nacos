@@ -10,9 +10,9 @@
 ## 1. 应用启动后没有注册到 Nacos
 
 - 现象：Flask 应用已运行，但实例没有出现在 Nacos 中。
-- 可能原因：某个注册开关被显式关闭、确定性注册预检失败，或后台注册操作失败。
-- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与
-  `NACOS_AUTO_REGISTER`；查看日志和 `get_status()`。
+- 可能原因：Nacos 或自动注册被显式关闭、确定性注册预检失败，或后台注册操作失败。
+- 排查方法：检查 `NACOS_ENABLED` 与 `NACOS_AUTO_REGISTER`；查看日志和
+  `get_status()`。
 - 解决建议：恢复预期的开关（`NACOS_AUTO_REGISTER` 默认值为 `True`），或修复状态中报告的原因后
   显式调用 `nacos.register_instance(app)`。
 - 若 `operation_running=True`，生命周期仍在收敛。已确认的瞬时网络故障会让 Worker保持低频

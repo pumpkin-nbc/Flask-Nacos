@@ -9,18 +9,17 @@ exits as soon as convergence completes or can no longer continue safely.
 
 ## Automatic registration
 
-Both registration switches default to `True`:
+Automatic registration defaults to enabled:
 
 ```python
 app.config.update(
     NACOS_AUTO_REGISTER=True,
-    NACOS_REGISTER_ENABLED=True,
     NACOS_SERVICE_NAME="orders-api",
     NACOS_SERVICE_PORT=5000,
 )
 ```
 
-When both switches and `NACOS_ENABLED` are true, `init_app(app)` validates the
+When `NACOS_AUTO_REGISTER` and `NACOS_ENABLED` are true, `init_app(app)` validates the
 registration snapshot and calls public `register_instance(app)`. That command
 returns immediately; the Worker creates the Client and performs the Naming RPC.
 
@@ -28,6 +27,12 @@ With `NACOS_FAIL_FAST=True`, invalid deterministic registration configuration
 raises during `init_app(app)` before extension state is committed. With false,
 initialization completes with `target_registered=True`, `registered=False`, and
 a safe `last_error`, without starting an invalid Worker.
+
+When automatic registration is off, initialization does not validate
+registration-only settings. The first explicit registration performs the local
+deterministic validation, caches the app-state result, and then enters the same
+lifecycle transition. In fail-fast mode an invalid explicit command raises
+without changing the target, generation, error, operation, or Client state.
 
 ## Explicit registration
 
@@ -56,14 +61,15 @@ recovering from a verified transient failure remains the single owner.
 
 ```mermaid
 flowchart TD
-    A["init_app(app)"] --> B["Load and validate configuration"]
-    B --> C{"Deterministic auto-registration error?"}
+    A["init_app(app)"] --> B["Load connection and extension configuration"]
+    B --> G{"Automatic registration enabled?"}
+    G -- "no" --> H["Initialization complete; registration validation deferred"]
+    G -- "yes" --> C{"Deterministic registration error?"}
     C -- "yes, fail-fast" --> D["Raise before committing app state"]
-    C -- "yes, safe mode" --> E["Commit target=True and safe last_error"]
+    C -- "yes, safe mode" --> E["Commit Runtime; public command records target and safe error"]
     C -- "no" --> F["Commit PID Runtime with client=None"]
-    F --> G{"Automatic registration enabled?"}
-    G -- "no" --> H["Initialization complete"]
-    G -- "yes" --> I["Call register_instance(app)"]
+    E --> H
+    F --> I["Call register_instance(app)"]
     I --> J["Publish one daemon Worker"]
     J --> H
 ```
@@ -136,9 +142,6 @@ normal deregistration safely returns `False` with
 - `True` for an idempotent cleanup, an accepted target change, a successful SDK
   call, or an obsolete call skipped after a newer register command.
 - `False` when deregistration is still needed but fails.
-
-`NACOS_REGISTER_ENABLED=False` prevents new registration but does not block
-cleanup of an existing registered instance.
 
 ## Retry, transient recovery, and target changes
 

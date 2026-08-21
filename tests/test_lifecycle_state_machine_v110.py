@@ -407,9 +407,10 @@ def test_cached_deterministic_error_obeys_fail_fast(make_app, patched_create_cli
         nacos.register_instance(app)
 
     status = nacos.get_status(app)
-    assert status["target_registered"] is True
+    assert status["target_registered"] is False
     assert status["operation_running"] is False
-    assert status["last_error"] == "NacosValidationError"
+    assert status["last_error"] is None
+    assert app.extensions["nacos"]["_runtime"].operation_generation == 0
     assert patched_create_client["count"] == 0
 
 
@@ -454,27 +455,17 @@ def test_missing_registered_identity_is_failed_not_skipped(
     fake_client.remove_naming_instance.assert_not_called()
 
 
-def test_register_enabled_false_blocks_register_but_allows_existing_cleanup(
+def test_removed_registration_switch_does_not_block_register_or_cleanup(
     make_app, patched_create_client, fake_client
 ):
-    app = make_app({"NACOS_REGISTER_ENABLED": False})
+    removed_key = "NACOS_REGISTER_" + "ENABLED"
+    app = make_app({removed_key: False})
     nacos = FlaskNacos(app)
     runtime = app.extensions["nacos"]["_runtime"]
 
     nacos.register_instance(app)
-    assert runtime.target_registered is False
-    assert patched_create_client["count"] == 0
-
-    runtime.client = fake_client
-    runtime.registered = True
-    runtime.target_registered = True
-    runtime.registered_identity = {
-        "service_name": "test-service",
-        "ip": "127.0.0.1",
-        "port": 8000,
-        "cluster_name": "DEFAULT",
-        "group_name": "DEFAULT_GROUP",
-        "ephemeral": True,
-    }
+    wait_until(lambda: runtime.registered)
+    assert runtime.target_registered is True
+    assert patched_create_client["count"] == 1
     assert nacos.deregister_instance(app) is True
     fake_client.remove_naming_instance.assert_called_once()

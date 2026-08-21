@@ -68,8 +68,7 @@ mutually exclusive. Authentication shape is validated during `init_app()`;
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Permit new registration. It does not prevent cleanup of an already registered instance. |
-| `NACOS_AUTO_REGISTER` | bool | `True` | no | Master switch for auto-registration. |
+| `NACOS_AUTO_REGISTER` | bool | `True` | no | Trigger registration during initialization and post-fork automatic recovery; it does not block explicit registration. |
 | `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Allow the shutdown callback to deregister this process's confirmed instance. |
 | `NACOS_SERVICE_NAME` | str | `None` | yes (to register) | Service name. |
 | `NACOS_SERVICE_IP` | str | `None` | recommended | Service IP; auto-detected if unset. |

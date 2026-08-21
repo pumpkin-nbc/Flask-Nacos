@@ -7,6 +7,7 @@ import os
 import random
 import time
 import weakref
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from threading import Event, Lock, RLock, Thread, current_thread
@@ -40,7 +41,6 @@ EXTENSION_KEY = "nacos"
 _OWNER_KEY = "_extension"
 _RUNTIME_KEY = "_runtime"
 _AUTO_REGISTER_KEY = "_auto_register_enabled"
-_REGISTRATION_VALID_KEY = "_registration_config_valid"
 _REGISTRATION_ERROR_KEY = "_registration_config_error"
 _CONNECTION_ERROR_KEY = "_connection_config_error"
 _RUNTIME_STALE_KEY = "_runtime_stale"
@@ -65,6 +65,36 @@ class _NamingResult(Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+class _RegistrationSource(Enum):
+    """Identity of the call that entered registration orchestration."""
+
+    EXPLICIT_REGISTER = "explicit_register"
+    AUTO_REGISTER = "auto_register"
+    PENDING_RECOVERY = "pending_recovery"
+
+
+_REGISTRATION_SOURCE_CONTEXT: ContextVar[_RegistrationSource] = ContextVar(
+    "flask_nacos_registration_source",
+    default=_RegistrationSource.EXPLICIT_REGISTER,
+)
+
+
+@dataclass(frozen=True)
+class _RegisterContext:
+    """Immutable call-local registration metadata."""
+
+    source: _RegistrationSource
+
+
+@dataclass(frozen=True)
+class _RegistrationPolicy:
+    """Pure, call-local decisions derived from a registration source."""
+
+    propagate_config_error: bool
+    consume_pending: bool
+    log_label: str
 
 
 @dataclass(frozen=True)
@@ -120,6 +150,19 @@ class _AppRuntimeState:
     naming_rpc_done: Any = None
 
 
+@dataclass(frozen=True)
+class _PendingRegistrationSnapshot:
+    """Call-local proof that one PID's pending recovery is still current."""
+
+    runtime: _AppRuntimeState
+    pid: int
+    generation: int
+    target_registered: bool
+    operation_kind: Optional[str]
+    operation_thread: Any
+    shutting_down: bool
+
+
 class FlaskNacos:
     """Flask extension integrating Nacos discovery and configuration.
 
@@ -172,7 +215,11 @@ class FlaskNacos:
 
         auto_register_enabled = self._should_auto_register(cfg)
         connection_error = self._connection_config_error(cfg)
-        registration_error = self._registration_config_error(cfg, connection_error)
+        registration_error = (
+            self._registration_config_error(cfg, connection_error)
+            if auto_register_enabled
+            else None
+        )
 
         if connection_error is not None and cfg.get("NACOS_FAIL_FAST", False):
             raise connection_error
@@ -204,8 +251,6 @@ class FlaskNacos:
             _OWNER_KEY: self,
             _RUNTIME_KEY: runtime,
             _AUTO_REGISTER_KEY: auto_register_enabled,
-            _REGISTRATION_VALID_KEY: registration_error is None,
-            _REGISTRATION_ERROR_KEY: registration_error,
             _CONNECTION_ERROR_KEY: connection_error,
             _RUNTIME_STALE_KEY: False,
             _RUNTIME_REBUILD_LOCK_KEY: Lock(),
@@ -214,6 +259,10 @@ class FlaskNacos:
             _FORK_HOOK_REGISTERED_KEY: False,
             _REQUEST_HOOK_REGISTERED_KEY: False,
         }
+        if auto_register_enabled:
+            # Key presence is the private three-state cache: absent means not
+            # validated, ``None`` means valid, and an exception means invalid.
+            state[_REGISTRATION_ERROR_KEY] = registration_error
 
         try:
             app.extensions[EXTENSION_KEY] = state
@@ -228,7 +277,13 @@ class FlaskNacos:
             if auto_register_enabled:
                 # Automatic and explicit registration intentionally share the
                 # same public entry point and atomic preparation logic.
-                self.register_instance(app)
+                token = _REGISTRATION_SOURCE_CONTEXT.set(
+                    _RegistrationSource.AUTO_REGISTER
+                )
+                try:
+                    self.register_instance(app)
+                finally:
+                    _REGISTRATION_SOURCE_CONTEXT.reset(token)
         except Exception:
             installed = app.extensions.get(EXTENSION_KEY)
             if installed is state:
@@ -244,7 +299,6 @@ class FlaskNacos:
     def _should_auto_register(cfg: Dict[str, Any]) -> bool:
         return bool(
             cfg.get("NACOS_ENABLED", True)
-            and cfg.get("NACOS_REGISTER_ENABLED", True)
             and cfg.get("NACOS_AUTO_REGISTER", True)
         )
 
@@ -266,7 +320,7 @@ class FlaskNacos:
     def _registration_config_error(
         cfg: Dict[str, Any], connection_error: Optional[NacosConfigError]
     ) -> Optional[NacosConfigError]:
-        if not cfg.get("NACOS_ENABLED", True) or not cfg.get("NACOS_REGISTER_ENABLED", True):
+        if not cfg.get("NACOS_ENABLED", True):
             return None
         if connection_error is not None:
             return connection_error
@@ -376,69 +430,212 @@ class FlaskNacos:
 
     def register_instance(self, app=None) -> None:
         """Set the registration target and start non-blocking convergence."""
-        app, state, runtime = self._require_state(app)
-        cfg = state["config"]
-        if not cfg.get("NACOS_ENABLED", True):
-            return None
-        if not cfg.get("NACOS_REGISTER_ENABLED", True):
-            return None
-
-        thread, config_error = self._prepare_registration(
-            app, state, runtime, explicit=True, consume_pending=False
-        )
-        self._start_registration_thread(app, state, runtime, thread)
-
-        if config_error is not None and cfg.get("NACOS_FAIL_FAST", False):
-            raise config_error
+        source = _REGISTRATION_SOURCE_CONTEXT.get()
+        context = _RegisterContext(source=source)
+        self._prepare_registration(app, context, new_command=True)
         return None
 
     def _prepare_registration(
         self,
         app,
-        state: Dict[str, Any],
-        runtime: _AppRuntimeState,
+        context: _RegisterContext,
         *,
-        explicit: bool,
-        consume_pending: bool,
-    ) -> Tuple[Any, Optional[BaseException]]:
-        """Run the sole atomic register preparation state transition."""
-        with runtime.state_lock:
-            return self._prepare_register_locked(
-                app,
-                state,
-                runtime,
-                explicit=explicit,
-                consume_pending=consume_pending,
-            )
+        new_command: bool,
+    ) -> None:
+        """Validate, arbitrate, and enter the sole register state transition."""
+        while True:
+            target_app, state, runtime = self._require_state(app)
+            cfg = state["config"]
+            if not cfg.get("NACOS_ENABLED", True):
+                return
 
-    def _prepare_register_locked(
+            pending_snapshot: Optional[_PendingRegistrationSnapshot] = None
+            with runtime.state_lock:
+                if runtime.shutting_down:
+                    return
+                if context.source is _RegistrationSource.PENDING_RECOVERY:
+                    pending_snapshot = self._pending_snapshot_locked(runtime)
+                    if pending_snapshot is None:
+                        return
+                cache_present = _REGISTRATION_ERROR_KEY in state
+                registration_error = state.get(_REGISTRATION_ERROR_KEY)
+
+            if not cache_present:
+                # This is intentionally outside the lifecycle lock. Validation
+                # is deterministic and local: it creates no client or Worker
+                # and performs no SDK or network operation.
+                candidate = self._registration_config_error(
+                    cfg,
+                    state.get(_CONNECTION_ERROR_KEY),
+                )
+                current_app, current_state, current_runtime = self._require_state(
+                    target_app
+                )
+                if (
+                    current_state is not state
+                    or current_state.get("config") is not cfg
+                    or current_runtime is not runtime
+                ):
+                    continue
+
+                restart = False
+                with current_runtime.state_lock:
+                    if not self._registration_state_is_current(
+                        current_app,
+                        current_state,
+                        cfg,
+                        current_runtime,
+                    ):
+                        restart = True
+                    else:
+                        # Compare-and-set: the first completed candidate owns
+                        # this app state's immutable validation result.
+                        if _REGISTRATION_ERROR_KEY not in current_state:
+                            current_state[_REGISTRATION_ERROR_KEY] = candidate
+                        registration_error = current_state[_REGISTRATION_ERROR_KEY]
+                if restart:
+                    continue
+
+            policy = self._registration_policy(context, cfg)
+            current_app, current_state, current_runtime = self._require_state(target_app)
+            if (
+                current_state is not state
+                or current_state.get("config") is not cfg
+                or current_runtime is not runtime
+            ):
+                continue
+
+            restart = False
+            thread = None
+            error_to_raise: Optional[BaseException] = None
+            with current_runtime.state_lock:
+                if not self._registration_state_is_current(
+                    current_app,
+                    current_state,
+                    cfg,
+                    current_runtime,
+                ):
+                    restart = True
+                elif current_runtime.shutting_down:
+                    return
+                elif policy.consume_pending and not self._pending_snapshot_matches_locked(
+                    current_runtime,
+                    pending_snapshot,
+                ):
+                    # The deterministic cache may remain, but a stale pending
+                    # recovery must not submit lifecycle state.
+                    return
+                elif registration_error is not None and policy.propagate_config_error:
+                    error_to_raise = registration_error
+                else:
+                    # Pending handling is source policy, not part of the
+                    # lifecycle transition. Both branches finish before the
+                    # source-blind state machine is entered.
+                    current_runtime.auto_register_pending = False
+                    thread, _ = self._prepare_register_locked(
+                        current_state,
+                        current_runtime,
+                        new_command=new_command,
+                    )
+
+            if restart:
+                continue
+            if error_to_raise is not None:
+                raise error_to_raise
+            self._start_registration_thread(
+                current_app,
+                current_state,
+                current_runtime,
+                thread,
+            )
+            return
+
+    @staticmethod
+    def _registration_policy(
+        context: _RegisterContext,
+        cfg: Dict[str, Any],
+    ) -> _RegistrationPolicy:
+        """Return immutable entry behavior without touching lifecycle state."""
+        source = context.source
+        return _RegistrationPolicy(
+            propagate_config_error=bool(
+                cfg.get("NACOS_FAIL_FAST", False)
+                and source is not _RegistrationSource.PENDING_RECOVERY
+            ),
+            consume_pending=source is _RegistrationSource.PENDING_RECOVERY,
+            log_label=source.value,
+        )
+
+    def _registration_state_is_current(
         self,
         app,
         state: Dict[str, Any],
+        cfg: Dict[str, Any],
+        runtime: _AppRuntimeState,
+    ) -> bool:
+        """Return whether call-local objects still own the current app/PID."""
+        return bool(
+            app.extensions.get(EXTENSION_KEY) is state
+            and state.get(_OWNER_KEY) is self
+            and state.get("config") is cfg
+            and state.get(_RUNTIME_KEY) is runtime
+            and not state.get(_RUNTIME_STALE_KEY, False)
+            and runtime.pid == self._current_pid()
+        )
+
+    @staticmethod
+    def _pending_snapshot_locked(
+        runtime: _AppRuntimeState,
+    ) -> Optional[_PendingRegistrationSnapshot]:
+        if runtime.shutting_down or not runtime.auto_register_pending:
+            return None
+        return _PendingRegistrationSnapshot(
+            runtime=runtime,
+            pid=runtime.pid,
+            generation=runtime.operation_generation,
+            target_registered=runtime.target_registered,
+            operation_kind=runtime.operation_kind,
+            operation_thread=runtime.operation_thread,
+            shutting_down=runtime.shutting_down,
+        )
+
+    @staticmethod
+    def _pending_snapshot_matches_locked(
+        runtime: _AppRuntimeState,
+        snapshot: Optional[_PendingRegistrationSnapshot],
+    ) -> bool:
+        return bool(
+            snapshot is not None
+            and snapshot.runtime is runtime
+            and snapshot.pid == runtime.pid
+            and snapshot.generation == runtime.operation_generation
+            and snapshot.target_registered == runtime.target_registered
+            and snapshot.operation_kind == runtime.operation_kind
+            and snapshot.operation_thread is runtime.operation_thread
+            and snapshot.shutting_down == runtime.shutting_down
+            and not runtime.shutting_down
+            and runtime.auto_register_pending
+        )
+
+    def _prepare_register_locked(
+        self,
+        state: Dict[str, Any],
         runtime: _AppRuntimeState,
         *,
-        explicit: bool,
-        consume_pending: bool,
+        new_command: bool,
     ) -> Tuple[Any, Optional[BaseException]]:
         """Prepare one register Worker while ``runtime.state_lock`` is held."""
-        del app  # the argument documents which app owns the prepared Worker
         cfg = state["config"]
-        if not cfg.get("NACOS_ENABLED", True) or not cfg.get("NACOS_REGISTER_ENABLED", True):
+        if not cfg.get("NACOS_ENABLED", True):
             return None, None
         if runtime.shutting_down:
             return None, None
-
-        if consume_pending:
-            if not runtime.auto_register_pending:
-                return None, None
-            runtime.auto_register_pending = False
-        elif explicit:
-            runtime.auto_register_pending = False
 
         target_changed = not runtime.target_registered
         if target_changed:
             runtime.target_registered = True
             runtime.operation_generation += 1
+            runtime.operation_wakeup.set()
 
         if runtime.registered:
             runtime.last_error = None
@@ -452,10 +649,11 @@ class FlaskNacos:
         if runtime.operation_kind is not None:
             return None, None
 
-        if explicit and not target_changed:
-            # An explicit call retries an unmet idle target. Pure duplicate
-            # calls while an operation is active never reach this branch.
+        if new_command and not target_changed:
+            # Any new registration command retries an unmet idle target. The
+            # transition is deliberately identical for all call sources.
             runtime.operation_generation += 1
+            runtime.operation_wakeup.set()
 
         try:
             thread = Thread(
@@ -978,13 +1176,12 @@ class FlaskNacos:
                 )
 
             if schedule_register:
-                thread, _ = self._prepare_registration(
-                    app,
-                    state,
-                    runtime,
-                    explicit=False,
-                    consume_pending=False,
-                )
+                with runtime.state_lock:
+                    thread, _ = self._prepare_register_locked(
+                        state,
+                        runtime,
+                        new_command=False,
+                    )
                 self._start_registration_thread(app, state, runtime, thread)
 
         return outcome.result is not _NamingResult.FAILED
@@ -1447,14 +1644,15 @@ class FlaskNacos:
     def _resume_auto_register_if_pending(
         self, app, state: Dict[str, Any], runtime: _AppRuntimeState
     ) -> None:
-        thread, _ = self._prepare_registration(
+        del state
+        with runtime.state_lock:
+            if runtime.shutting_down or not runtime.auto_register_pending:
+                return
+        self._prepare_registration(
             app,
-            state,
-            runtime,
-            explicit=False,
-            consume_pending=True,
+            _RegisterContext(source=_RegistrationSource.PENDING_RECOVERY),
+            new_command=True,
         )
-        self._start_registration_thread(app, state, runtime, thread)
 
     def _register_request_recovery_hook(self, app, state: Dict[str, Any]) -> None:
         if state.get(_REQUEST_HOOK_REGISTERED_KEY):

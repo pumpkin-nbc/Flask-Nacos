@@ -32,7 +32,8 @@ get_client(app=None) -> Any
 ## `FlaskNacos(app=None)` 与 `init_app(app)`
 
 `FlaskNacos(app)` 立即初始化一个应用；`FlaskNacos()` 配合 `init_app(app)` 适用于应用工厂。
-初始化会校验确定性配置并安装本地钩子，但不会创建 Nacos Client。
+初始化会校验当前已启用职责所需的确定性配置并安装本地钩子，但不会创建 Nacos Client。
+仅在自动注册开启时于初始化阶段执行注册专用校验；否则延迟到首次显式注册命令。
 
 启用自动注册时，`init_app()` 调用与业务代码相同的公开 `register_instance(app)` 命令，
 网络请求由一个 daemon收敛 Worker执行；收敛后退出，不会成为第二套心跳监控。
@@ -60,9 +61,9 @@ with app.app_context():
 - 注册进行中或已经完成时重复调用是幂等的。
 - UNKNOWN/确定性失败且当前空闲时，再次调用会启动新的有限尝试；已确认瞬时故障会保留现有
   Worker进行低频生命周期自恢复。
-- `NACOS_REGISTER_ENABLED=False` 时该命令无副作用。
 - `NACOS_ENABLED=False` 时该命令完全禁用且无副作用。
-- `NACOS_FAIL_FAST=True` 时，缓存的确定性注册配置错误可以同步抛出；Thread、Client、
+- `NACOS_FAIL_FAST=True` 时，缓存的确定性注册配置错误可以同步抛出且不提交新的生命周期
+  目标；Thread、Client、
   SDK、超时与连接失败只安全写入本地状态，不由该命令抛出。
 
 临时实例注册成功后，心跳由 SDK接管，Flask-Nacos Worker随即退出，并不是永久心跳线程。
@@ -80,7 +81,6 @@ with app.app_context():
 - 仍然需要注销但无法完成时返回 `False`。
 
 空闲且已注册时同步注销；Register Worker活动时由该 Worker收敛到最新目标。
-`NACOS_REGISTER_ENABLED=False` 只禁止新注册，不会阻止清理已有注册实例。
 
 所有注销都使用最近一次成功注册缓存的准确身份，不重新猜测 IP 或实例身份。
 

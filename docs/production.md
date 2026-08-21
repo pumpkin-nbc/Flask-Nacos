@@ -59,10 +59,6 @@ Alternatively, let one external coordinator own registration and
 deregistration. When each worker advertises a distinct IP or port, the default
 `NACOS_AUTO_DEREGISTER=True` can be appropriate.
 
-`NACOS_REGISTER_ENABLED=False` prevents new registration but intentionally
-does not prevent cleanup of an instance already registered by the current
-Runtime.
-
 ## Shutdown behavior
 
 The exit callback marks the current PID Runtime as shutting down and wakes any

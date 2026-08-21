@@ -6,6 +6,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = ROOT / "scripts"
 DOCS_DIR = ROOT / "docs"
@@ -115,13 +117,13 @@ def test_auto_register_default_is_documented_as_true():
         ROOT / "README.md": "`NACOS_AUTO_REGISTER` (default `True`)",
         DOCS_DIR / "configuration.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
         DOCS_DIR / "production.md": "`NACOS_AUTO_REGISTER=True`",
-        DOCS_DIR / "service-registration.md": "Both registration switches default to `True`",
+        DOCS_DIR / "service-registration.md": "Automatic registration defaults to enabled",
     }
     chinese = {
         ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER`（默认 `True`）",
         DOCS_DIR / "configuration.zh-CN.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
         DOCS_DIR / "production.zh-CN.md": "`NACOS_AUTO_REGISTER=True`",
-        DOCS_DIR / "service-registration.zh-CN.md": "两个注册开关的默认值均为 `True`",
+        DOCS_DIR / "service-registration.zh-CN.md": "自动注册默认开启",
     }
 
     for path, marker in {**english, **chinese}.items():
@@ -235,7 +237,6 @@ def test_complete_guides_document_centralized_extension_initialization():
         "with app.app_context():",
         'app.extensions["nacos"]',
         "NACOS_SERVICE_IP",
-        "NACOS_REGISTER_ENABLED = False",
         "NACOS_AUTO_REGISTER = False",
     )
 
@@ -365,8 +366,14 @@ def test_bilingual_docs_describe_auto_registration_preflight():
             assert marker in text
 
 
-def test_removed_auto_registration_key_is_absent_from_current_tree():
-    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+@pytest.mark.parametrize(
+    "removed_key",
+    (
+        "NACOS_AUTO_REGISTER_" + "ON_INIT",
+        "NACOS_REGISTER_" + "ENABLED",
+    ),
+)
+def test_removed_registration_keys_are_absent_from_current_tree(removed_key):
     text_roots = (
         ROOT / "flask_nacos",
         ROOT / "examples",

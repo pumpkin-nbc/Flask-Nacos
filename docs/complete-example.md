@@ -228,7 +228,6 @@ detection. If the application only reads configuration or discovers other
 services, disable automatic registration and omit the registration identity:
 
 ```python
-NACOS_REGISTER_ENABLED = False
 NACOS_AUTO_REGISTER = False
 ```
 

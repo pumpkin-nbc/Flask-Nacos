@@ -11,10 +11,10 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 ## 1. App starts but nothing registers in Nacos
 
 - Symptom: the Flask app runs, but the instance does not appear in Nacos.
-- Cause: one of the registration switches was explicitly disabled, deterministic
+- Cause: Nacos or automatic registration was explicitly disabled, deterministic
   registration preflight failed, or the background operation failed.
-- Investigate: check `NACOS_ENABLED`, `NACOS_REGISTER_ENABLED`, and
-  `NACOS_AUTO_REGISTER`; inspect logs and `get_status()`.
+- Investigate: check `NACOS_ENABLED` and `NACOS_AUTO_REGISTER`; inspect logs and
+  `get_status()`.
 - Fix: restore the intended switches (`NACOS_AUTO_REGISTER` defaults to `True`),
   or call `nacos.register_instance(app)` explicitly after fixing the reported cause.
 - If `operation_running=True`, the lifecycle is still converging. A verified

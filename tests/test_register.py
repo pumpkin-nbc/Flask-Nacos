@@ -160,3 +160,17 @@ def test_removed_secondary_switch_is_ignored(make_app, patched_create_client, fa
         assert removed_key not in nacos.config
     wait_registered(nacos, app)
     fake_client.add_naming_instance.assert_called_once()
+
+
+def test_removed_registration_permission_switch_does_not_disable_auto_registration(
+    make_app, patched_create_client, fake_client
+):
+    removed_key = "NACOS_REGISTER_" + "ENABLED"
+    app = make_app({"NACOS_AUTO_REGISTER": True, removed_key: False})
+    nacos = FlaskNacos(app)
+
+    with app.app_context():
+        assert removed_key not in nacos.config
+    wait_registered(nacos, app)
+    assert patched_create_client["count"] == 1
+    fake_client.add_naming_instance.assert_called_once()

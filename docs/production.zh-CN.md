@@ -50,8 +50,6 @@ NACOS_AUTO_DEREGISTER = False
 也可以由单一外部协调者负责注册与注销。每个 worker拥有不同 IP 或端口时，默认的
 `NACOS_AUTO_DEREGISTER=True` 才可能合适。
 
-`NACOS_REGISTER_ENABLED=False` 会阻止新注册，但不会阻止清理当前 Runtime 已经注册的实例。
-
 ## 退出行为
 
 退出回调会把当前 PID Runtime 标记为 shutting down 并唤醒重试等待。此后普通生命周期路径

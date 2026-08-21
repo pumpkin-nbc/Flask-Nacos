@@ -8,23 +8,26 @@ Flask-Nacos 1.1.0 使用目标状态生命周期。`target_registered` 表示最
 
 ## 自动注册
 
-两个注册开关的默认值均为 `True`：
+自动注册默认开启：
 
 ```python
 app.config.update(
     NACOS_AUTO_REGISTER=True,
-    NACOS_REGISTER_ENABLED=True,
     NACOS_SERVICE_NAME="orders-api",
     NACOS_SERVICE_PORT=5000,
 )
 ```
 
-两个开关与 `NACOS_ENABLED` 都为 true 时，`init_app(app)` 校验注册快照并调用公开的
+`NACOS_AUTO_REGISTER` 与 `NACOS_ENABLED` 都为 true 时，`init_app(app)` 校验注册快照并调用公开的
 `register_instance(app)`。该命令立即返回，Client 创建与 Naming RPC由 Worker完成。
 
 `NACOS_FAIL_FAST=True` 时，确定性注册配置非法会在 `init_app(app)` 提交扩展状态前抛出。
 设为 false 时会完成初始化，状态为 `target_registered=True`、`registered=False` 和安全的
 `last_error`，且不会启动无效 Worker。
+
+关闭自动注册时，初始化不校验仅用于注册的配置。首次显式注册才执行纯本地确定性校验、
+缓存当前应用状态的结果，并进入同一生命周期转换。fail-fast 模式下，非法显式命令同步
+抛出，且不会修改目标、generation、错误、operation 或 Client 状态。
 
 ## 显式注册
 
@@ -51,14 +54,15 @@ Worker运行中重复调用不会增加生命周期 generation，也不会启动
 
 ```mermaid
 flowchart TD
-    A["init_app(app)"] --> B["加载并校验配置"]
-    B --> C{"自动注册存在确定性错误？"}
+    A["init_app(app)"] --> B["加载连接与扩展配置"]
+    B --> G{"启用自动注册？"}
+    G -- "否" --> H["初始化完成；延迟注册专用校验"]
+    G -- "是" --> C{"注册存在确定性错误？"}
     C -- "是，fail-fast" --> D["提交 app 状态前抛出"]
-    C -- "是，安全模式" --> E["提交 target=True 与安全 last_error"]
+    C -- "是，安全模式" --> E["提交 Runtime；公开命令记录目标与安全错误"]
     C -- "否" --> F["提交 client=None 的 PID Runtime"]
-    F --> G{"启用自动注册？"}
-    G -- "否" --> H["初始化完成"]
-    G -- "是" --> I["调用 register_instance(app)"]
+    E --> H
+    F --> I["调用 register_instance(app)"]
     I --> J["发布一个 daemon Worker"]
     J --> H
 ```
@@ -123,8 +127,6 @@ Nacos SDK负责，而不是该 Worker。
 
 - 幂等清理、目标变更被接受、SDK注销成功，或新的注册命令使本次注销过期时返回 `True`。
 - 注销仍有必要但失败时返回 `False`。
-
-`NACOS_REGISTER_ENABLED=False` 只禁止新注册，不会阻止清理已有注册实例。
 
 ## 重试、瞬时故障自恢复与目标变化
 

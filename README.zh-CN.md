@@ -85,8 +85,9 @@ init_app(app)
   -> daemon Worker创建 Client并执行 Naming I/O，初始化线程直接返回
 ```
 
-`NACOS_AUTO_REGISTER`（默认 `True`）是唯一的自动注册开关。自动注册要求
-`NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时开启。
+`NACOS_AUTO_REGISTER`（默认 `True`）是唯一的自动注册开关。`NACOS_ENABLED` 与
+`NACOS_AUTO_REGISTER` 同时开启时执行自动注册；关闭自动注册不影响显式调用
+`register_instance(app)`。
 
 ## 应用工厂
 
@@ -124,7 +125,6 @@ Worker。Client 构造、网络重试、Naming RPC 与 SDK 心跳启动都不会
 
 `deregister_instance(app=None) -> bool` 将最终目标设为未注册。幂等/接受/成功清理，或新的
 注册命令使 RPC 不再需要时返回 `True`；清理仍有必要但失败时返回 `False`。
-`NACOS_REGISTER_ENABLED=False` 只阻止新注册，不会阻止清理已有实例。
 
 Worker持续读取最新目标，因此 register → deregister → register 最终服从最后一次 register；
 旧命令不会永久覆盖它。注册、普通注销、补偿注销与退出注销共享同一 Naming single-flight
@@ -139,6 +139,10 @@ Worker持续读取最新目标，因此 register → deregister → register 最
 
 启用自动注册时，`init_app(app)` 会在创建扩展状态前校验 `NACOS_SERVICE_NAME`、端口、权重、
 metadata、ephemeral/心跳、认证与重试配置。
+
+关闭自动注册时，初始化会跳过仅服务于注册的校验。首次显式调用
+`register_instance(app)` 时才执行并缓存纯本地确定性校验；该过程不创建 Client，也不执行
+网络 I/O。
 
 - `NACOS_FAIL_FAST=True`：确定性自动注册错误在提交 `app.extensions["nacos"]` 前抛出。
 - `NACOS_FAIL_FAST=False`：保留可用扩展状态与安全错误，不启动无效 Worker。

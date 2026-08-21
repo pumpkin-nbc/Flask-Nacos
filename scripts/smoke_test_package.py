@@ -28,12 +28,16 @@ assert flask_nacos.__version__ == expected, (
 assert Path(flask_nacos.__file__).with_name("py.typed").is_file(), "py.typed missing"
 
 app = Flask(__name__)
-app.config.update(NACOS_ENABLED=False)
+removed_registration_switch = "NACOS_REGISTER_" + "ENABLED"
+app.config.update(NACOS_ENABLED=False, **{{removed_registration_switch: False}})
 nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
 with app.app_context():
     assert nacos.config["NACOS_AUTO_REGISTER"] is True, (
         "NACOS_AUTO_REGISTER must default to True"
+    )
+    assert removed_registration_switch not in nacos.config, (
+        "removed registration switch must not be copied into the extension snapshot"
     )
     assert nacos.client is None, "cache-only client property must remain lazy"
 

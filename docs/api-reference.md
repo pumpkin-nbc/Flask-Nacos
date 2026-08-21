@@ -33,9 +33,11 @@ get_client(app=None) -> Any
 ## `FlaskNacos(app=None)` and `init_app(app)`
 
 `FlaskNacos(app)` initializes one application immediately. `FlaskNacos()` plus
-`init_app(app)` supports application factories. Initialization validates
-deterministic configuration and installs local hooks, but never constructs a
-Nacos Client.
+`init_app(app)` supports application factories. Initialization validates its
+enabled responsibilities and installs local hooks, but never constructs a
+Nacos Client. Registration-only validation runs at initialization only when
+automatic registration is enabled; otherwise it is deferred to the first
+explicit registration command.
 
 When automatic registration is enabled, `init_app()` calls the same public
 `register_instance(app)` command used by application code. The network request
@@ -68,10 +70,10 @@ and returns `None` without waiting for Client creation or network I/O.
 - A call after an unknown/deterministic failed idle attempt starts a new finite
   attempt. Verified transient failures retain the existing Worker for
   low-frequency lifecycle recovery.
-- `NACOS_REGISTER_ENABLED=False` makes this command a no-op.
 - `NACOS_ENABLED=False` makes this command a side-effect-free no-op.
 - With `NACOS_FAIL_FAST=True`, a cached deterministic registration error may be
-  raised synchronously. Thread, Client, SDK, timeout, and connection failures
+  raised synchronously without committing a new lifecycle target. Thread,
+  Client, SDK, timeout, and connection failures
   are recorded safely in local status and are not raised by this command.
 
 Registration success starts the SDK's heartbeat for ephemeral instances. The
@@ -93,9 +95,7 @@ Sets the target to unregistered. The return value is:
 - `False` when deregistration is still required but cannot be completed.
 
 An idle registered instance is deregistered synchronously. During an active
-Register Worker, the target change is handled by that Worker. Disabling new
-registration with `NACOS_REGISTER_ENABLED=False` does not prevent cleanup of an
-already registered instance.
+Register Worker, the target change is handled by that Worker.
 
 All deregistration paths use the exact identity cached by the last successful
 registration. They never guess a new IP or identity.
