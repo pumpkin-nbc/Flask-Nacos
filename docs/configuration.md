@@ -100,12 +100,20 @@ Production tip: set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 instances. Persistent instances (`NACOS_SERVICE_EPHEMERAL=False`) ignore it.
 The initial healthy flag does not keep an ephemeral instance alive.
 
-With `NACOS_LOG_ENABLED=True`, Flask-Nacos records each actual SDK heartbeat:
-successful requests at `DEBUG` and failed requests at `ERROR`. The records are
-sanitized and contain only service identity plus the exception class on
-failure. Response bodies and exception messages are intentionally omitted.
-The SDK thread catches the re-raised failure and continues retrying at the
-configured interval.
+With `NACOS_LOG_ENABLED=True`, Flask-Nacos records actual SDK heartbeat calls.
+Normal success uses `DEBUG`. For each complete
+service/group/cluster/IP/port identity, the first failure and a changed failure
+type use `WARNING`; an unchanged type is limited to one warning per 60 seconds.
+The first success after failure removes that identity's private state and emits
+one recovery `INFO`. Identities on the same Client, different Clients, and
+different Flask apps do not share this state.
+
+Identity extraction is best-effort and accepts only the verified SDK argument
+layout and safe scalar fields. If the identity cannot be confirmed, success is
+a stateless `DEBUG` and every failure is a stateless `WARNING` using fixed
+`<unknown>` fields. No collision-prone placeholder is stored. SDK return values
+and exceptions are preserved, response bodies/messages remain omitted, and
+heartbeat logging never changes Lifecycle state or starts registration.
 
 ## 3. Service discovery
 
@@ -164,6 +172,12 @@ Numeric strings are accepted. Booleans, fractional attempt counts, NaN,
 Infinity, and out-of-range values are rejected without retrying. Retry values
 are ignored when retries are disabled; request timeout is ignored when the
 configuration center is disabled.
+
+`NACOS_REQUEST_TIMEOUT` is exclusively the configuration-center `get_config()`
+timeout. Naming uses the synchronous SDK Client's `default_timeout`; it is not
+overwritten by this setting. Exit cleanup snapshots the timeout of the active
+Naming RPC and waits for the remaining value plus `0.25` seconds, capped at
+`5.0` seconds. A missing or invalid SDK timeout uses a `3.0` second fallback.
 
 For configuration-center and discovery calls these settings retain their
 ordinary finite meaning. The Register Worker also uses the same finite attempt

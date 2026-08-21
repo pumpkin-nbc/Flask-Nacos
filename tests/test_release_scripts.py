@@ -141,6 +141,14 @@ def test_scripts_are_import_safe(
     assert check_sdk_compatibility is not None
 
 
+def test_release_check_preserves_versioned_dist_archives():
+    script = (SCRIPTS_DIR / "release_check.sh").read_text(encoding="utf-8")
+
+    assert "rm -rf dist " not in script
+    assert "find dist -mindepth 1 -maxdepth 1 -type f" in script
+    assert "dist/*.whl dist/*.tar.gz" in script
+
+
 def test_version_check_passes_with_current_version(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message

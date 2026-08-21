@@ -39,6 +39,11 @@ register/deregister RPC. `status=ok` means the local lifecycle is converged or
 converging without a recorded error. Neither field proves that Nacos is
 currently reachable or that the remote instance still exists.
 
+SDK heartbeat warning throttling and recovery records are private
+observability state inside each Client wrapper. They are not included in this
+response, do not change `registered`, and never wake or create a Lifecycle
+Worker. A separate remote probe is required for real-time Nacos readiness.
+
 The health route never creates a Client, performs SDK or Nacos I/O, detects an
 IP, starts a thread, or resumes pending post-fork registration. A completely
 lazy enabled state (`client_created=false`, target and fact both false) is

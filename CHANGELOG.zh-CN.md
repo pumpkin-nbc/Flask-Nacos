@@ -16,13 +16,21 @@
   `NacosRequestException` 现在进入既有瞬时故障 Recovery。
 - 保持结构化 401/403 认证失败为确定性错误；未经验证的 SDK版本、阶段、方向和异常类型仍为
   `UNKNOWN`，只使用有限重试预算。
+- 修复同一 SDK Client 为多个实例发送心跳时日志状态串扰。警告节流与恢复现在按准确的
+  service/group/cluster/IP/port 身份隔离；不安全或不完整身份退化为无状态 `<unknown>`
+  日志，不构造可能碰撞的 key。
+- 修复 shutdown 活动 Naming RPC timeout 快照，改为读取实际 SDK Client 的
+  `default_timeout`。`NACOS_REQUEST_TIMEOUT` 继续只属于配置中心，非法 SDK timeout 仍使用
+  有界三秒回退值。
 
 ### 变更
 
-- 将 SDK heartbeat wrapper 的成功日志降为 `DEBUG`，减少周期性日志噪声；失败日志继续脱敏，
-  行为不变。
+- 降低 SDK heartbeat wrapper 日志噪声：普通成功为 `DEBUG`，首次/类型变化失败为
+  `WARNING`，相同失败 60 秒内节流，失败后每个身份的首次成功记录一次恢复 `INFO`。
 - 增加 Python 3.8/Flask 1.1.4/gevent兼容测试，并将 SDK兼容矩阵固定为明确验证的
   `2.0.0` 与 `2.0.11`。
+- 扩展高并发、fork、heartbeat 隔离、timeout 与显式启用的真实 Nacos 回归，包含仅用于
+  测试的 TCP 恢复 gate。
 
 ### 兼容性
 

@@ -61,8 +61,11 @@ export FLASK_NACOS_TEST_NAMESPACE_ID="<optional-namespace-id>"
 .venv/bin/python -m pytest tests/test_authenticated_integration.py tests/test_heartbeat_integration.py -v
 ```
 
-认证测试会发布、读取并删除唯一临时配置；心跳测试会注册唯一临时服务，默认等待
-35 秒，确认实例仍保持健康，并在 `finally` 中注销。
+认证测试组会发布/读取/删除唯一配置，验证配置不存在和错误凭据，并通过仅用于测试的标准库
+TCP gate 证明 SDK `2.0.11` Client 构造无需 HTTP、第二次注册或 `get_client()` 即可自恢复；
+gate 场景要求单一 server地址。心跳测试使用唯一服务和 metadata，覆盖自动/显式注册、发现、
+多个心跳周期、第二个 SDK Client 外部删除、SDK 管理的恢复与有界清理。默认心跳观察窗口仍为
+35 秒。
 
 ## 4. 本地干净验收
 
@@ -73,7 +76,8 @@ bash scripts/release_check.sh
 ```
 
 脚本会运行 Ruff、mypy、pytest、版本、敏感信息、文档、兼容性、API 和示例检查；
-清理旧产物；构建 wheel 与 sdist；执行 `twine check --strict`；校验元数据、包内容和
+只清理 `dist/` 根目录旧产物并保留 `dist/1.1.0/` 等版本化归档；构建 wheel 与 sdist；
+执行 `twine check --strict`；校验元数据、包内容和
 源码新鲜度；最后在两个独立临时环境中分别安装两种产物。
 
 确认 `git status` 中没有非预期的发布输入。Hatch 显式包含列表之外的本地笔记不会

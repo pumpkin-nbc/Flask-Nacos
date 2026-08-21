@@ -165,6 +165,12 @@ shutdown 会立即唤醒。等待前先清 Event，再复查状态，避免丢�
 `NACOS_SERVICE_HEARTBEAT_INTERVAL`（默认 `5.0` 秒）。`healthy=True` 只是初始注册输入，
 不能替代心跳续约。持久实例不传心跳参数。
 
+Client wrapper 只观测这些 SDK 调用，不会成为第二个心跳 owner。有效身份按 service、group、
+cluster、IP 与 port 隔离：失败按身份独立限制 WARNING，随后首次成功记录一次恢复 `INFO`。
+若已验证 SDK 参数布局无法生成完整安全身份，则使用无状态 `<unknown>` 日志，不保存可能碰撞
+的类型占位 key。日志保持 SDK 返回值/异常原样，也不能修改 target、事实、generation 或
+Worker 状态。
+
 ## Fork 与进程服务器
 
 Client、Worker、锁、Event 与注册事实都绑定 PID。fork 后父 Runtime整体作废，同一当前 PID

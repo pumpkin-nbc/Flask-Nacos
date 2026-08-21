@@ -68,6 +68,28 @@ SDK releases do not match that rule. Other 2.x exception systems remain
 supported through their own structured evidence; no common exception hierarchy
 is assumed. Structured 401/403 evidence always remains deterministic.
 
+## Heartbeat observability compatibility
+
+The synchronous SDK 2.x `send_heartbeat` layout is used only by one private,
+best-effort identity extractor. Keyword arguments take precedence over the
+verified positional fallback. A complete safe service/group/cluster/IP/port
+identity gets independent warning throttling and one recovery record. Missing,
+duplicated, unknown, or complex fields produce stateless `<unknown>` logging;
+Flask-Nacos does not stringify/hash user objects or invent a collision-prone
+key. The wrapper always preserves the SDK return value or original exception.
+
+This is a logging compatibility layer, not remote monitoring. Its state belongs
+to one Client and is discarded with that Client (including after fork). It is
+not exposed through Runtime, status, or health and cannot trigger Lifecycle
+Recovery. SDK heartbeat remains the only post-registration heartbeat owner.
+
+## Timeout compatibility
+
+`NACOS_REQUEST_TIMEOUT` remains the configuration-center read timeout. Naming
+uses the actual SDK Client `default_timeout`, and shutdown snapshots that value
+for its bounded active-RPC wait. This separation avoids silently rewriting
+shared SDK Client behavior.
+
 ## Nacos SDK response-shape compatibility
 
 Different SDK versions return service-discovery results in slightly different

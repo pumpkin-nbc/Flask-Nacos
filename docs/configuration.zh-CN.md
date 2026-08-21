@@ -95,9 +95,15 @@ app.config.update(
 `NACOS_SERVICE_HEARTBEAT_INTERVAL` 仅在临时实例注册时传给 SDK 2.x；持久实例
 （`NACOS_SERVICE_EPHEMERAL=False`）会忽略它。初始健康标识不能让临时实例持续存活。
 
-当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录每次实际 SDK 心跳：成功请求使用
-`DEBUG`，失败请求使用 `ERROR`。日志经过脱敏，只包含服务身份以及失败时的异常类型，
-刻意省略响应正文和异常消息。失败会原样抛回 SDK 心跳线程，由 SDK 按配置间隔继续重试。
+当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录实际 SDK 心跳。普通成功使用 `DEBUG`。
+对每个完整 service/group/cluster/IP/port 身份，首次失败和失败类型变化使用 `WARNING`；
+相同类型持续失败最多每 60 秒再次警告一次。失败后的首次成功会删除该身份的私有状态并记录
+一次恢复 `INFO`。同一 Client 的不同身份、不同 Client 以及不同 Flask app 均不共享状态。
+
+身份提取采用 best-effort，只接受已验证 SDK 参数布局和安全标量。无法确认完整身份时，成功
+退化为无状态 `DEBUG`，每次失败使用固定 `<unknown>` 字段记录无状态 `WARNING`，不会保存
+可能碰撞的占位 key。SDK 返回值与异常保持不变，响应正文和异常消息继续省略；心跳日志不会
+修改 Lifecycle 状态或启动注册。
 
 ## 3. 服务发现
 
@@ -154,6 +160,10 @@ app.config.update(
 
 支持合法数字字符串；布尔值、小数尝试次数、NaN、Infinity 和越界值会立即失败且不重试。
 关闭重试时忽略重试参数；关闭配置中心时忽略请求超时。
+
+`NACOS_REQUEST_TIMEOUT` 只用于配置中心 `get_config()`。Naming 使用同步 SDK Client 自身的
+`default_timeout`，不会被该配置覆盖。退出清理快照活动 Naming RPC 的 timeout，等待其剩余
+时间加 `0.25` 秒，最多 `5.0` 秒；SDK timeout 缺失或非法时回退 `3.0` 秒。
 
 配置中心与服务发现继续只使用这些配置表达的普通有限重试。Register Worker也先使用同一有限
 尝试预算；只有预算耗尽且存在明确瞬时传输故障证据时，才进入低频生命周期自恢复。UNKNOWN

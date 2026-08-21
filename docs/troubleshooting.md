@@ -236,7 +236,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   client before flask-nacos configured logging.
 - Investigate: ensure `FlaskNacos(app)` / `init_app(app)` runs before any code
   that constructs a `nacos.NacosClient` directly.
-- Fix: use 1.1.0. Flask-Nacos silences SDK loggers before creating the
+- Fix: use 1.1.1. Flask-Nacos silences SDK loggers before creating the
   client and directs SDK setup away from the home directory. A directly created
   SDK client is outside Flask-Nacos control.
 
@@ -273,5 +273,27 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Symptom: calling `init_app(app)` more than once multiplies handlers/log lines.
 - Cause: naive handler setup re-adds handlers on every call.
 - Investigate: count handlers on `logging.getLogger("flask_nacos")`.
-- Fix: none needed on 1.1.0. flask-nacos de-duplicates handlers, so repeated
+- Fix: none needed on 1.1.1. flask-nacos de-duplicates handlers, so repeated
   `init_app(app)` never adds a second console or file handler.
+
+## 23. Heartbeat warnings are repeated or recovery looks missing
+
+- A complete service/group/cluster/IP/port identity gets an immediate first
+  `WARNING`, then at most one warning per 60 seconds while the exception type is
+  unchanged. A changed exception type warns immediately. The first later
+  success emits one recovery `INFO`; ordinary successes remain `DEBUG`.
+- If the SDK call does not expose a complete verified scalar identity, records
+  use `<unknown>` and deliberately remain stateless. Every failure warns and no
+  recovery `INFO` is inferred, preventing two instances from sharing a
+  collision-prone placeholder key.
+- These records only describe SDK heartbeat calls. They never update
+  `registered`, start a Worker, or prove remote health.
+
+## 24. Changing `NACOS_REQUEST_TIMEOUT` does not change Naming timeout
+
+- This is expected: `NACOS_REQUEST_TIMEOUT` controls only configuration-center
+  reads.
+- Naming uses `client.default_timeout`. Shutdown snapshots the actual active
+  Naming timeout and waits for the remaining budget plus `0.25` seconds, capped
+  at five seconds. If the SDK value is unavailable or invalid, the wait uses the
+  three-second fallback.

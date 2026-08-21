@@ -18,15 +18,24 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Kept structured 401/403 authentication failures deterministic, while
   unverified SDK versions, stages, directions, and exception types remain
   `UNKNOWN` and stop after the finite retry budget.
+- Fixed heartbeat log-state cross-talk when one SDK Client sends beats for
+  multiple instances. Warning throttling and recovery are now isolated by the
+  exact service/group/cluster/IP/port identity; unsafe or incomplete identities
+  fall back to stateless `<unknown>` logging without collision-prone keys.
+- Fixed shutdown's active Naming RPC timeout snapshot to use the actual SDK
+  Client `default_timeout`. `NACOS_REQUEST_TIMEOUT` remains configuration-center
+  only, and invalid SDK timeout values retain the bounded three-second fallback.
 
 ### Changed
 
-- Reduced heartbeat log noise by recording successful SDK heartbeat wrapper
-  calls at `DEBUG`; failures remain sanitized and retain their previous
-  behavior.
+- Reduced heartbeat log noise: ordinary success is `DEBUG`, first/type-changed
+  failure is `WARNING`, unchanged failures are warning-throttled for 60 seconds,
+  and the first per-identity success after failure is one recovery `INFO`.
 - Added Python 3.8/Flask 1.1.4/gevent compatibility coverage and pinned the SDK
   compatibility matrix to the explicitly verified `2.0.0` and `2.0.11`
   releases.
+- Expanded concurrency, fork, heartbeat isolation, timeout, and opt-in real
+  Nacos regression coverage, including a test-only TCP recovery gate.
 
 ### Compatibility
 

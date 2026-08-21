@@ -55,14 +55,19 @@ echo "==> [8/13] Public API snapshot check"
 echo "==> [9/13] Examples check"
 "${PY}" scripts/check_examples.py
 
-echo "==> [10/13] Clean previous build artifacts"
-rm -rf dist build ./*.egg-info
+echo "==> [10/13] Clean current root build artifacts"
+mkdir -p dist
+# Preserve versioned archives such as dist/1.1.0/. Only root-level artifacts
+# belong to the current unpublished build.
+find dist -mindepth 1 -maxdepth 1 -type f \
+  \( -name '*.whl' -o -name '*.tar.gz' \) -delete
+rm -rf build ./*.egg-info
 
 echo "==> [11/13] Build distributions"
 "${PY}" -m build
 
 echo "==> [12/13] Twine check + package content check"
-"${PY}" -m twine check --strict dist/*
+"${PY}" -m twine check --strict dist/*.whl dist/*.tar.gz
 "${PY}" scripts/check_package.py
 
 echo "==> [13/13] Package smoke test"

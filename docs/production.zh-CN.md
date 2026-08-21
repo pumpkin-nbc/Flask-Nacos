@@ -60,6 +60,10 @@ NACOS_AUTO_DEREGISTER = False
 - 设为 `True` 时，只可能等待已经在执行的那一笔 Naming RPC，使用其剩余超时加少量调度
   余量，并设置五秒等待上限；随后最多执行一次基于准确缓存身份的退出注销。
 
+活动 RPC 的 timeout 快照来自实际 SDK Client 的 `default_timeout`，而不是只用于配置中心的
+`NACOS_REQUEST_TIMEOUT`。SDK 值缺失、读取抛错、为布尔/非数字/非有限数或不大于零时，
+使用三秒回退值。
+
 退出注销不重试、不调度后续注册，也不会猜测缺失身份。
 
 ## 容器部署
@@ -81,6 +85,24 @@ SDK 原生日志被隔离，Flask-Nacos 不创建 `~/logs/nacos`。扩展安全�
 不要让多个 Gunicorn 或 Celery进程共同写入同一个轮转日志文件。推荐输出到控制台并由进程
 管理器收集，或由宿主应用配置进程安全的日志管道。Flask-Nacos 不删除、关闭或接管宿主应用
 安装的 Handler；1.1.1 不增加多进程文件轮转机制。
+
+应只选择一种不重复输出的拓扑：
+
+```python
+# console/file Handler 全部由宿主应用管理。
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = False
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = True
+```
+
+```python
+# 只输出容器 stdout。
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = True
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = False
+```
 
 Nacos 用户名/密码或 AK/SK 应放入环境变量或密钥管理器。不要通过无鉴权接口返回完整应用
 配置或内部状态。

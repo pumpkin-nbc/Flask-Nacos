@@ -10,6 +10,7 @@ import weakref
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
+from numbers import Real
 from threading import Event, Lock, RLock, Thread, current_thread
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1280,6 +1281,7 @@ class FlaskNacos:
                 )
                 return _NamingOutcome(_NamingResult.FAILED, failure, False, stage)
 
+            naming_rpc_timeout = self._naming_timeout_seconds(client)
             with runtime.state_lock:
                 gate = self._naming_rpc_gate_locked(runtime, rpc_type, allow_during_shutdown)
                 if gate is _NamingResult.SKIPPED:
@@ -1289,7 +1291,7 @@ class FlaskNacos:
                 runtime.naming_rpc_active = True
                 runtime.naming_rpc_done = rpc_done
                 runtime.naming_rpc_started_at = time.monotonic()
-                runtime.naming_rpc_timeout = self._naming_timeout_seconds(state["config"])
+                runtime.naming_rpc_timeout = naming_rpc_timeout
 
             rpc_failure: Optional[_LifecycleFailure] = None
             try:
@@ -1433,9 +1435,12 @@ class FlaskNacos:
             runtime.last_error = None
 
     @staticmethod
-    def _naming_timeout_seconds(cfg: Dict[str, Any]) -> Optional[float]:
-        value = cfg.get("NACOS_REQUEST_TIMEOUT")
-        if value is None or isinstance(value, bool):
+    def _naming_timeout_seconds(client: Any) -> Optional[float]:
+        try:
+            value = client.default_timeout
+        except Exception:
+            return None
+        if isinstance(value, bool) or not isinstance(value, Real):
             return None
         try:
             parsed = float(value)

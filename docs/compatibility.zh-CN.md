@@ -54,6 +54,24 @@ flask-nacos 要求 **Flask `>=1.0`**，不人为设置 Flask 上限。CI 当前�
 SDK版本均不命中。其他 2.x 异常体系继续依据自身结构化证据处理，不假设统一异常层次；
 结构化 401/403 证据始终属于确定性错误。
 
+## Heartbeat 可观测兼容性
+
+同步 SDK 2.x 的 `send_heartbeat` 布局只由一个私有 best-effort 身份提取 helper 使用。
+关键字参数优先，再回退到已验证位置。完整安全的 service/group/cluster/IP/port 身份拥有独立
+警告节流和一次恢复日志；字段缺失、重复、未知或为复杂对象时退化为无状态 `<unknown>`
+日志。Flask-Nacos 不会格式化/哈希用户对象，也不会构造可能碰撞的 key；wrapper 始终保持
+SDK 返回值或原异常不变。
+
+这只是日志兼容层，不是远端监控。其状态仅属于一个 Client，并随 Client（包括 fork 后）
+丢弃，不进入 Runtime、status 或 health，也不能触发 Lifecycle Recovery。注册后的唯一心跳
+owner 仍是 SDK。
+
+## Timeout 兼容性
+
+`NACOS_REQUEST_TIMEOUT` 继续只表示配置中心读取 timeout。Naming 使用实际 SDK Client 的
+`default_timeout`，shutdown 快照该值用于有界活动 RPC 等待，避免静默改写共享 SDK Client
+行为。
+
 ## Nacos SDK 返回结构兼容
 
 不同版本的 SDK 返回的服务发现结果结构略有差异。`list_instances()` 使用内部的

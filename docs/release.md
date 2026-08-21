@@ -67,10 +67,14 @@ export FLASK_NACOS_TEST_NAMESPACE_ID="<optional-namespace-id>"
 .venv/bin/python -m pytest tests/test_authenticated_integration.py tests/test_heartbeat_integration.py -v
 ```
 
-The authentication test publishes, reads, and removes a unique temporary
-configuration. The heartbeat test registers a unique ephemeral service, waits
-35 seconds by default, confirms it remains healthy, and deregisters it in a
-`finally` block.
+The authenticated suite publishes/reads/removes a unique config, verifies a
+missing config and bad credentials, and uses a test-only standard-library TCP
+gate to prove SDK `2.0.11` Client-construction Recovery without HTTP, a second
+register call, or `get_client()`. The gate case requires one server address.
+The heartbeat suite uses a unique service and metadata to cover automatic and
+explicit registration, discovery, several heartbeat periods, out-of-band
+deletion through a second SDK Client, SDK-managed recovery, and bounded cleanup.
+The default heartbeat observation window remains 35 seconds.
 
 ## 4. Clean local verification
 
@@ -82,7 +86,8 @@ bash scripts/release_check.sh
 
 The script runs Ruff, mypy, pytest, version, sensitive-information,
 documentation, compatibility, API and example checks; removes old build
-artifacts; builds wheel and sdist; runs `twine check --strict`; verifies
+artifacts from the `dist/` root while preserving versioned archives such as
+`dist/1.1.0/`; builds wheel and sdist; runs `twine check --strict`; verifies
 metadata, contents and source freshness; then installs both artifacts in
 separate temporary environments.
 

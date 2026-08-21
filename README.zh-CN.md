@@ -165,9 +165,17 @@ metadata、ephemeral/心跳、认证与重试配置。
 瞬时故障，也不轮询远端状态；`registered == target_registered` 后 Worker立即退出，心跳与
 连接维护仍完全由 Nacos SDK负责。
 
+心跳可观测状态也只属于当前 Client：失败按 service/group/cluster/IP/port 身份独立节流，
+失败后的首次成功只记录一次恢复日志。若无法安全提取完整身份，则退化为无状态
+`<unknown>` 日志，不构造可能碰撞的 key。该日志状态不会修改 Lifecycle，也不会触发注册。
+
 `NACOS_RETRY_TIMES` 必须是 `>=1` 的整数；`NACOS_RETRY_INTERVAL` 必须是 `>=0` 的有限
 数字；配置中心开启时 `NACOS_REQUEST_TIMEOUT` 必须是 `>0` 的有限数字。支持数字字符串，
 拒绝布尔值、NaN、Infinity、小数尝试次数和越界值。
+
+`NACOS_REQUEST_TIMEOUT` 只控制配置中心读取。Naming RPC 使用 SDK Client 自身的
+`default_timeout`；退出清理快照实际 timeout，只等待剩余预算加少量调度余量，并设置五秒
+上限。SDK timeout 不可用时回退为三秒。
 
 ## 本地状态
 

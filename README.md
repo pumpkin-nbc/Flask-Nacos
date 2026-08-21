@@ -192,10 +192,22 @@ Recovery applies only to proven transient failures and does not poll remote
 state. Once `registered == target_registered`, the Worker exits and the Nacos
 SDK continues to own heartbeat and connection maintenance.
 
+Heartbeat observability is Client-local: failures are throttled separately for
+each service/group/cluster/IP/port identity, and the first successful beat after
+a failure emits one recovery record. If a complete safe identity cannot be
+extracted, logging falls back to stateless `<unknown>` records rather than a
+possibly colliding key. These records never change Lifecycle state or trigger
+registration.
+
 `NACOS_RETRY_TIMES` must be an integer `>=1`; `NACOS_RETRY_INTERVAL` must be a
 finite number `>=0`; `NACOS_REQUEST_TIMEOUT` must be finite and `>0` when the
 configuration center is enabled. Numeric strings are accepted. Booleans, NaN,
 Infinity, fractional attempt counts, and out-of-range values are rejected.
+
+`NACOS_REQUEST_TIMEOUT` applies only to configuration-center reads. Naming RPCs
+use the SDK Client's own `default_timeout`; shutdown snapshots that actual value
+and waits for its remaining budget plus a small allowance, capped at five
+seconds. It falls back to three seconds when no valid SDK timeout is available.
 
 ## Local status
 

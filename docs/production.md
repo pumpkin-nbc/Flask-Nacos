@@ -74,6 +74,11 @@ retry wait. Normal lifecycle paths cannot begin another Naming RPC afterward.
   cap. It then performs at most one exit deregistration with the cached exact
   identity.
 
+The active RPC timeout snapshot comes from the actual SDK Client
+`default_timeout`, not `NACOS_REQUEST_TIMEOUT` (which is configuration-center
+only). A missing, raising, boolean, non-numeric, non-finite, or non-positive SDK
+value uses the three-second fallback.
+
 Exit deregistration never retries, schedules follow-up registration, or guesses
 a missing identity.
 
@@ -100,6 +105,24 @@ file. Prefer console output collected by the process supervisor, or configure a
 process-safe logging pipeline in the host application. Flask-Nacos does not
 remove, close, or take ownership of handlers installed by the host application;
 1.1.1 does not add a multi-process file-rotation mechanism.
+
+Choose exactly one non-duplicating topology:
+
+```python
+# Host application owns console/file handlers.
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = False
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = True
+```
+
+```python
+# Container stdout is the only output.
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = True
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = False
+```
 
 Keep Nacos username/password or AK/SK in environment variables or a secret
 manager. Do not return complete application configuration or internal status

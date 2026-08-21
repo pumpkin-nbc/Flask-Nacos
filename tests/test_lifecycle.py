@@ -5,6 +5,8 @@ import threading
 import weakref
 from types import SimpleNamespace
 
+import pytest
+
 import flask_nacos.extension as extension_module
 import flask_nacos.lifecycle as lifecycle_module
 from flask_nacos import FlaskNacos
@@ -295,8 +297,22 @@ def test_exit_handles_incomplete_rpc_metadata_and_missing_identity(
     assert any("registered identity is missing" in message for message in warnings)
 
 
+@pytest.mark.parametrize(
+    ("rpc_timeout", "started_at", "expected_wait"),
+    [
+        (None, None, 3.25),
+        (4.0, 98.0, 2.25),
+        (10.0, 100.0, 5.0),
+    ],
+)
 def test_exit_wait_timeout_is_bounded_and_does_not_race_rpc(
-    make_app, patched_create_client, fake_client, monkeypatch
+    make_app,
+    patched_create_client,
+    fake_client,
+    monkeypatch,
+    rpc_timeout,
+    started_at,
+    expected_wait,
 ):
     app = make_app({"NACOS_AUTO_DEREGISTER": True})
     nacos = FlaskNacos(app)
@@ -327,11 +343,11 @@ def test_exit_wait_timeout_is_bounded_and_does_not_race_rpc(
     }
     runtime.naming_rpc_active = True
     runtime.naming_rpc_done = NeverDone()
-    runtime.naming_rpc_started_at = None
-    runtime.naming_rpc_timeout = None
+    runtime.naming_rpc_started_at = started_at
+    runtime.naming_rpc_timeout = rpc_timeout
     monkeypatch.setattr(extension_module.time, "monotonic", lambda: 100.0)
 
     nacos._atexit_handler(app)
-    assert waits == [3.25]
+    assert waits == [expected_wait]
     fake_client.remove_naming_instance.assert_not_called()
     assert any("timed out" in message for message in warnings)

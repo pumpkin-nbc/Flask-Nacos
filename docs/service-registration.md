@@ -191,6 +191,15 @@ RPC completes after the intermediate target change.
 Nacos SDK. `healthy=True` is only initial registration input; it does not replace
 heartbeat renewal. Persistent instances do not receive this heartbeat option.
 
+The Client wrapper observes these SDK calls without becoming a second
+heartbeat owner. Valid identities are isolated by service, group, cluster, IP,
+and port: failures are warning-throttled per identity and the first later
+success emits one recovery `INFO`. If the verified SDK argument layout cannot
+produce a complete safe identity, the call uses stateless `<unknown>` logging;
+it never stores a type-based placeholder that could collide. Logging preserves
+the SDK result/exception and cannot change target, fact, generation, or Worker
+state.
+
 ## Fork and process servers
 
 Client, Worker, locks, events, and registration facts are PID-bound. After a

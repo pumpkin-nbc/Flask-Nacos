@@ -3,6 +3,7 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 
@@ -382,15 +383,61 @@ def test_private_rpc_local_failures_are_failed_not_skipped(
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
+        (None, None),
         (True, None),
+        ("2.5", None),
         ("invalid", None),
         (float("inf"), None),
+        (float("nan"), None),
+        (-1, None),
         (0, None),
         (2.5, 2.5),
     ],
 )
 def test_naming_timeout_snapshot_uses_finite_positive_seconds(value, expected):
-    assert FlaskNacos._naming_timeout_seconds({"NACOS_REQUEST_TIMEOUT": value}) == expected
+    client = SimpleNamespace(default_timeout=value)
+
+    assert FlaskNacos._naming_timeout_seconds(client) == expected
+
+
+def test_naming_timeout_snapshot_handles_missing_or_raising_attribute():
+    class RaisingTimeout:
+        @property
+        def default_timeout(self):
+            raise RuntimeError("unavailable")
+
+    assert FlaskNacos._naming_timeout_seconds(SimpleNamespace()) is None
+    assert FlaskNacos._naming_timeout_seconds(RaisingTimeout()) is None
+
+
+def test_naming_rpc_snapshots_actual_client_timeout_not_config_timeout(
+    make_app, patched_create_client, fake_client
+):
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocked_register(*_args, **_kwargs):
+        entered.set()
+        assert release.wait(2.0)
+        return True
+
+    fake_client.default_timeout = 2.5
+    fake_client.add_naming_instance.side_effect = blocked_register
+    app = make_app({"NACOS_REQUEST_TIMEOUT": 0.25})
+    nacos = FlaskNacos(app)
+    runtime = app.extensions["nacos"]["_runtime"]
+
+    try:
+        nacos.register_instance(app)
+        assert entered.wait(1.0)
+        assert runtime.naming_rpc_active is True
+        assert runtime.naming_rpc_timeout == 2.5
+        assert app.extensions["nacos"]["config"]["NACOS_REQUEST_TIMEOUT"] == 0.25
+    finally:
+        release.set()
+
+    _wait_settled(nacos, app, True)
+    assert runtime.naming_rpc_timeout is None
 
 
 def test_cached_deterministic_error_obeys_fail_fast(make_app, patched_create_client):

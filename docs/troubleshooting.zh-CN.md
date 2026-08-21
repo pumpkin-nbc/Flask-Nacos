@@ -207,7 +207,7 @@
 - 可能原因：使用了旧版 flask-nacos，或其他组件在 flask-nacos 配置日志之前就创建了 client。
 - 排查方法：确保 `FlaskNacos(app)` / `init_app(app)` 在任何直接构造 `nacos.NacosClient`
   的代码之前执行。
-- 解决建议：使用 1.1.0。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
+- 解决建议：使用 1.1.1。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
   初始化不使用用户主目录。直接创建的 SDK client 不受 Flask-Nacos 控制。
 
 ## 19. flask-nacos 日志重复输出
@@ -242,5 +242,20 @@
 - 现象：多次调用 `init_app(app)` 导致 handler / 日志行成倍增加。
 - 可能原因：简单的 handler 设置会在每次调用时重复添加。
 - 排查方法：统计 `logging.getLogger("flask_nacos")` 上的 handler 数量。
-- 解决建议：1.1.0 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
+- 解决建议：1.1.1 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
   添加第二个 console 或 file handler。
+
+## 23. Heartbeat 警告重复或没有看到恢复日志
+
+- 完整 service/group/cluster/IP/port 身份首次失败立即记录 `WARNING`；异常类型不变时最多
+  每 60 秒再次警告一次，类型变化则立即警告。随后首次成功记录一次恢复 `INFO`，普通成功
+  保持 `DEBUG`。
+- SDK 调用无法提供完整、已验证的安全标量身份时，日志使用 `<unknown>` 并有意保持无状态：
+  每次失败均警告，也不推断恢复 `INFO`，避免两个实例共享可能碰撞的占位 key。
+- 这些记录只描述 SDK 心跳调用，不会更新 `registered`、启动 Worker 或证明远端健康。
+
+## 24. 修改 `NACOS_REQUEST_TIMEOUT` 没有改变 Naming timeout
+
+- 这是预期行为：`NACOS_REQUEST_TIMEOUT` 只控制配置中心读取。
+- Naming 使用 `client.default_timeout`。shutdown 快照实际活动 Naming timeout，等待剩余预算
+  加 `0.25` 秒，最多五秒；SDK 值不可用或非法时使用三秒回退值。

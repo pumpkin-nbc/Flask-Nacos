@@ -19,6 +19,7 @@ def no_sleep(monkeypatch):
 def fake_client():
     """A MagicMock standing in for the synchronous Nacos client."""
     client = MagicMock(name="NacosClient")
+    client.default_timeout = 3.0
     client.add_naming_instance.return_value = True
     client.remove_naming_instance.return_value = True
     client.list_naming_instance.return_value = {
