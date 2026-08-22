@@ -89,6 +89,58 @@ init_app(app)
 `NACOS_AUTO_REGISTER` 同时开启时执行自动注册；关闭自动注册不影响显式调用
 `register_instance(app)`。
 
+## 配置项速查
+
+所有配置都从 Flask `app.config` 读取。下表与当前代码默认值保持一致；参数约束和完整示例见
+[配置项参考](docs/configuration.zh-CN.md)。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `NACOS_ENABLED` | `True` | Nacos 总开关；关闭后不创建 Client，相关操作为 no-op。 |
+| `NACOS_SERVER_ADDR` | `"127.0.0.1:8848"` | Nacos Server 地址，格式为 `host:port`。 |
+| `NACOS_NAMESPACE_ID` | `""` | 命名空间 ID。 |
+| `NACOS_USERNAME` | `None` | 用户名认证的用户名，必须与密码成对配置。 |
+| `NACOS_PASSWORD` | `None` | 用户名认证的密码，请勿提交到源码库。 |
+| `NACOS_ACCESS_KEY` | `None` | AccessKey 认证信息，必须与 SecretKey 成对配置。 |
+| `NACOS_SECRET_KEY` | `None` | SecretKey 认证信息，请勿提交到源码库。 |
+| `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | 默认 group 回退值。 |
+| `NACOS_AUTO_REGISTER` | `True` | 初始化及 fork 后恢复时自动提交注册目标。 |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | 是否安装正常进程退出时的尽力注销回调。 |
+| `NACOS_SERVICE_NAME` | `None` | 注册服务名；执行注册时必填。 |
+| `NACOS_SERVICE_IP` | `None` | 注册实例 IP；未设置时自动识别。 |
+| `NACOS_SERVICE_PORT` | `None` | 注册实例端口，范围 `1-65535`；执行注册时必填。 |
+| `NACOS_SERVICE_GROUP` | `"DEFAULT_GROUP"` | 服务注册所用 group。 |
+| `NACOS_SERVICE_CLUSTER` | `"DEFAULT"` | 服务注册所用 cluster。 |
+| `NACOS_SERVICE_WEIGHT` | `1.0` | 实例负载均衡权重，必须为大于 `0` 的有限数字。 |
+| `NACOS_SERVICE_METADATA` | `{}` | 注册实例 metadata。 |
+| `NACOS_SERVICE_EPHEMERAL` | `True` | 是否注册为临时实例。 |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | 临时实例的 SDK 心跳间隔，单位为秒。 |
+| `NACOS_SERVICE_HEALTHY` | `True` | 注册时的初始健康标识。 |
+| `NACOS_SERVICE_ENABLED` | `True` | 注册实例是否启用。 |
+| `NACOS_CONFIG_ENABLED` | `True` | 是否启用配置中心能力。 |
+| `NACOS_CONFIG_DATA_ID` | `None` | `get_config()` 未传 `data_id` 时使用的默认值。 |
+| `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | 配置中心默认 group。 |
+| `NACOS_RETRY_ENABLED` | `True` | 是否启用有限重试和注册生命周期恢复。 |
+| `NACOS_RETRY_TIMES` | `3` | 有限阶段最大尝试次数，必须为整数且 `>=1`。 |
+| `NACOS_RETRY_INTERVAL` | `1.0` | 尝试间隔秒数，必须为有限数字且 `>=0`。 |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置中心读取超时；不覆盖 Naming Client timeout。 |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | 是否注册 Flask 健康检查路由。 |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | 健康实例选择策略：`first`、`random` 或 `weight`。 |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | 服务发现默认 cluster 过滤条件。 |
+| `NACOS_DISCOVERY_METADATA` | `{}` | 服务发现默认 metadata 过滤条件。 |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | 是否返回标准化实例字典并跳过非法端点。 |
+| `NACOS_LOG_ENABLED` | `False` | Flask-Nacos 安全日志总开关。 |
+| `NACOS_LOG_LEVEL` | `"INFO"` | 安全日志级别。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | 日志启用后是否输出到控制台。 |
+| `NACOS_LOG_FILE_ENABLED` | `True` | 日志启用后是否写入文件。 |
+| `NACOS_LOG_PATH` | `"./logs"` | 日志文件目录。 |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | `NACOS_LOG_PATH` 内的日志文件名。 |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Flask-Nacos handler 使用的日志格式。 |
+| `NACOS_LOG_PROPAGATE` | `True` | 是否将记录传播给父级 logger。 |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | 轮转文件大小上限；设为 `None` 时使用普通文件 Handler。 |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | 轮转日志保留的备份文件数。 |
+
 ## 应用工厂
 
 ```python
@@ -255,16 +307,7 @@ with app.app_context():
 ## 日志
 
 `NACOS_LOG_ENABLED=False` 为默认值。SDK 原生日志被隔离，因此 Flask-Nacos 不创建
-`~/logs/nacos` 或 SDK 日志文件。安全扩展日志配置：
-
-| 配置 | 默认值 | 说明 |
-| --- | --- | --- |
-| `NACOS_LOG_ENABLED` | `False` | 日志总开关。 |
-| `NACOS_LOG_CONSOLE_ENABLED` | `True` | 启用后输出彩色控制台日志。 |
-| `NACOS_LOG_FILE_ENABLED` | `True` | 启用后输出轮转文件。 |
-| `NACOS_LOG_PROPAGATE` | `True` | 将记录传播给宿主 handler。 |
-| `NACOS_LOG_PATH` | `./logs` | 日志目录。 |
-| `NACOS_LOG_FILENAME` | `flask-nacos.log` | 日志文件名。 |
+`~/logs/nacos` 或 SDK 日志文件。全部日志配置和默认值见上方“配置项速查”。
 
 控制台 DEBUG 蓝色、INFO 绿色、WARNING 黄色、ERROR 红色、CRITICAL 加粗红色；文件不含
 ANSI 颜色。日志总开关关闭时，即使配置路径也不会创建目录。

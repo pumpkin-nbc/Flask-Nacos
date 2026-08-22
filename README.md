@@ -97,6 +97,59 @@ switch. Automatic registration runs when both `NACOS_ENABLED` and
 `NACOS_AUTO_REGISTER` are enabled. Turning automatic registration off does not
 block an explicit `register_instance(app)` command.
 
+## Configuration quick reference
+
+All settings are read from Flask `app.config`. This table matches the current
+code defaults; see the [configuration reference](docs/configuration.md) for
+validation rules and complete examples.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `NACOS_ENABLED` | `True` | Master switch; when disabled, no Client is created and related operations are no-ops. |
+| `NACOS_SERVER_ADDR` | `"127.0.0.1:8848"` | Nacos Server address in `host:port` form. |
+| `NACOS_NAMESPACE_ID` | `""` | Namespace ID. |
+| `NACOS_USERNAME` | `None` | Username authentication value; configure it together with the password. |
+| `NACOS_PASSWORD` | `None` | Username authentication password; never commit it to source control. |
+| `NACOS_ACCESS_KEY` | `None` | AccessKey authentication value; configure it together with the SecretKey. |
+| `NACOS_SECRET_KEY` | `None` | SecretKey authentication value; never commit it to source control. |
+| `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | Default group fallback. |
+| `NACOS_AUTO_REGISTER` | `True` | Submit the registration target during initialization and post-fork recovery. |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | Install the best-effort normal-process-exit deregistration callback. |
+| `NACOS_SERVICE_NAME` | `None` | Service name; required when registering. |
+| `NACOS_SERVICE_IP` | `None` | Registered instance IP; auto-detected when unset. |
+| `NACOS_SERVICE_PORT` | `None` | Registered instance port in `1-65535`; required when registering. |
+| `NACOS_SERVICE_GROUP` | `"DEFAULT_GROUP"` | Group used for service registration. |
+| `NACOS_SERVICE_CLUSTER` | `"DEFAULT"` | Cluster used for service registration. |
+| `NACOS_SERVICE_WEIGHT` | `1.0` | Finite load-balancing weight greater than `0`. |
+| `NACOS_SERVICE_METADATA` | `{}` | Registered instance metadata. |
+| `NACOS_SERVICE_EPHEMERAL` | `True` | Register as an ephemeral instance. |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | SDK heartbeat interval in seconds for ephemeral instances. |
+| `NACOS_SERVICE_HEALTHY` | `True` | Initial health flag sent during registration. |
+| `NACOS_SERVICE_ENABLED` | `True` | Whether the registered instance is enabled. |
+| `NACOS_CONFIG_ENABLED` | `True` | Enable configuration-center features. |
+| `NACOS_CONFIG_DATA_ID` | `None` | Default used when `get_config()` receives no `data_id`. |
+| `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | Default configuration-center group. |
+| `NACOS_RETRY_ENABLED` | `True` | Enable finite retry and registration lifecycle recovery. |
+| `NACOS_RETRY_TIMES` | `3` | Maximum finite-stage attempts; integer `>=1`. |
+| `NACOS_RETRY_INTERVAL` | `1.0` | Finite delay between attempts in seconds; must be `>=0`. |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | Configuration-center read timeout; does not override Naming Client timeout. |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | Register the Flask health-check route. |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Health-check route path. |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | Healthy-instance strategy: `first`, `random`, or `weight`. |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | Default discovery cluster filter. |
+| `NACOS_DISCOVERY_METADATA` | `{}` | Default discovery metadata filter. |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | Return normalized instance dictionaries and skip malformed endpoints. |
+| `NACOS_LOG_ENABLED` | `False` | Master switch for Flask-Nacos safety logs. |
+| `NACOS_LOG_LEVEL` | `"INFO"` | Safety-log level. |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Emit console records when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `True` | Write file records when logging is enabled. |
+| `NACOS_LOG_PATH` | `"./logs"` | Log file directory. |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | Log filename inside `NACOS_LOG_PATH`. |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Format used by Flask-Nacos handlers. |
+| `NACOS_LOG_PROPAGATE` | `True` | Propagate records to parent loggers. |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | Rotating-file size limit; `None` selects a plain file handler. |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | Number of rotated log backups to retain. |
+
 ## Application factory
 
 ```python
@@ -295,17 +348,8 @@ authentication methods are mutually exclusive. Never commit real credentials.
 ## Logging
 
 `NACOS_LOG_ENABLED=False` by default. SDK-native logs are isolated, so
-Flask-Nacos does not create `~/logs/nacos` or an SDK log file. Safe extension
-logging supports:
-
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `NACOS_LOG_ENABLED` | `False` | Master switch. |
-| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Colored console output when enabled. |
-| `NACOS_LOG_FILE_ENABLED` | `True` | Rotating file output when enabled. |
-| `NACOS_LOG_PROPAGATE` | `True` | Propagate records to host handlers. |
-| `NACOS_LOG_PATH` | `./logs` | Log directory. |
-| `NACOS_LOG_FILENAME` | `flask-nacos.log` | Log filename. |
+Flask-Nacos does not create `~/logs/nacos` or an SDK log file. The complete
+logging settings and defaults are listed in the quick-reference table above.
 
 Console records use blue DEBUG, green INFO, yellow WARNING, red ERROR, and bold
 red CRITICAL. File records contain no ANSI colors. When logging is disabled,
