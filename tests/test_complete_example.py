@@ -52,7 +52,7 @@ def test_complete_example_configuration_and_routes(monkeypatch, patched_create_c
     assert cfg["NACOS_SERVICE_GROUP"] == "APP_GROUP"
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 2.5
     assert cfg["NACOS_AUTO_REGISTER"] is True
-    assert cfg["NACOS_AUTO_DEREGISTER"] is True
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is True
 
     client = app.test_client()

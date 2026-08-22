@@ -61,16 +61,16 @@ app.config.update(
 Use the namespace ID rather than its display name. Prefer username/password or
 AK/SK according to the server's authentication mode; do not hardcode either.
 Each credential pair must be complete, and the two authentication methods are
-mutually exclusive. Authentication shape is validated during `init_app()`;
-`NACOS_FAIL_FAST` controls whether that deterministic error prevents commit.
+mutually exclusive. With automatic registration enabled, an invalid local auth
+shape fails `init_app()` before extension state is committed. Otherwise the
+cached local error is raised by the first Client or explicit registration use.
 
 ## 2. Service registration
 
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | no | Permit new registration. It does not prevent cleanup of an already registered instance. |
-| `NACOS_AUTO_REGISTER` | bool | `True` | no | Master switch for auto-registration. |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | no | Allow the shutdown callback to deregister this process's confirmed instance. |
+| `NACOS_AUTO_REGISTER` | bool | `True` | no | Trigger registration during initialization and post-fork automatic recovery; it does not block explicit registration. |
+| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | no | Install the normal process-exit callback that may deregister this process's confirmed instance. |
 | `NACOS_SERVICE_NAME` | str | `None` | yes (to register) | Service name. |
 | `NACOS_SERVICE_IP` | str | `None` | recommended | Service IP; auto-detected if unset. |
 | `NACOS_SERVICE_PORT` | int | `None` | yes (to register) | Service port, `1-65535`. |
@@ -101,12 +101,20 @@ Production tip: set `NACOS_SERVICE_NAME`, `NACOS_SERVICE_IP`, and
 instances. Persistent instances (`NACOS_SERVICE_EPHEMERAL=False`) ignore it.
 The initial healthy flag does not keep an ephemeral instance alive.
 
-With `NACOS_LOG_ENABLED=True`, Flask-Nacos records each actual SDK heartbeat:
-successful requests at `INFO` and failed requests at `ERROR`. The records are
-sanitized and contain only service identity plus the exception class on
-failure. Response bodies and exception messages are intentionally omitted.
-The SDK thread catches the re-raised failure and continues retrying at the
-configured interval.
+With `NACOS_LOG_ENABLED=True`, Flask-Nacos records actual SDK heartbeat calls.
+Normal success uses `DEBUG`. For each complete
+service/group/cluster/IP/port identity, the first failure and a changed failure
+type use `WARNING`; an unchanged type is limited to one warning per 60 seconds.
+The first success after failure removes that identity's private state and emits
+one recovery `INFO`. Identities on the same Client, different Clients, and
+different Flask apps do not share this state.
+
+Identity extraction is best-effort and accepts only the verified SDK argument
+layout and safe scalar fields. If the identity cannot be confirmed, success is
+a stateless `DEBUG` and every failure is a stateless `WARNING` using fixed
+`<unknown>` fields. No collision-prone placeholder is stored. SDK return values
+and exceptions are preserved, response bodies/messages remain omitted, and
+heartbeat logging never changes Lifecycle state or starts registration.
 
 ## 3. Service discovery
 
@@ -166,6 +174,12 @@ Infinity, and out-of-range values are rejected without retrying. Retry values
 are ignored when retries are disabled; request timeout is ignored when the
 configuration center is disabled.
 
+`NACOS_REQUEST_TIMEOUT` is exclusively the configuration-center `get_config()`
+timeout. Naming uses the synchronous SDK Client's `default_timeout`; it is not
+overwritten by this setting. Exit cleanup snapshots the timeout of the active
+Naming RPC and waits for the remaining value plus `0.25` seconds, capped at
+`5.0` seconds. A missing or invalid SDK timeout uses a `3.0` second fallback.
+
 For configuration-center and discovery calls these settings retain their
 ordinary finite meaning. The Register Worker also uses the same finite attempt
 budget. Only after that budget is exhausted may a failure with explicit
@@ -178,9 +192,9 @@ adds no public retry setting and never waits less than
 
 ## 6. Runtime status
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | no | Deprecated no-op retained for 1.x compatibility; planned for removal in 2.0. |
+Runtime status has no enable/disable configuration. `get_status()` is always a
+side-effect-free local snapshot; it neither creates an SDK Client nor contacts
+Nacos. See [Health and status](health-check.md) for the fixed schemas.
 
 ## 7. Lifecycle
 
@@ -195,7 +209,10 @@ nacos.register_instance(app)
 `register_instance()` returns `None` before Client creation or network I/O.
 Registration is single-flight per app and process; use `get_status()` to observe
 `target_registered`, `registered`, `operation_running`, and `last_error`.
-`NACOS_AUTO_DEREGISTER` is the only exit deregistration switch.
+`NACOS_DEREGISTER_ON_EXIT` is the only exit deregistration switch. When it is
+`False`, no remote deregistration callback is installed; explicit
+`deregister_instance()` remains available. Exit cleanup is best-effort on a
+normal interpreter shutdown and cannot be guaranteed for forced termination.
 
 ## 8. Logging
 
@@ -216,7 +233,7 @@ use the configured plain formatter and contain no ANSI color sequences.
 | Key | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | no | Master switch for Flask-Nacos safety logs. SDK-native logging remains silent in either state. |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values follow `NACOS_FAIL_FAST`. |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | no | Flask-Nacos safety-log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Invalid values raise `NacosLoggingError` when logging is enabled. |
 | `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | no | Print both normal and error records to the console when logging is enabled. |
 | `NACOS_LOG_FILE_ENABLED` | bool | `True` | no | Write a rotating log file when logging is enabled. |
 | `NACOS_LOG_PATH` | str | `"./logs"` | no | Directory for Flask-Nacos safety logs. It is created only when both logging and file output are enabled. |
@@ -267,14 +284,14 @@ alone as sufficient transport security. In production, connect only through a
 trusted network or a TLS proxy/sidecar that validates the Nacos server
 certificate.
 
-## 9. Behavior control
+## 9. Error behavior
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_FAIL_FAST` | bool | `False` | no | When `True`, Nacos errors raise; when `False`, they are logged and safe defaults are returned. |
-
-See [API Reference](api-reference.md) for how `NACOS_FAIL_FAST` affects each
-method.
+There is no error-mode switch. Purely local configuration errors for active
+automatic registration fail transactionally during initialization; invalid
+explicit registration fails before changing lifecycle state. Runtime lifecycle
+failures stay in local status, while synchronous Client, Discovery, and Config
+operations raise their specific safe domain exceptions. See
+[API Reference](api-reference.md).
 
 ## Configuration center
 

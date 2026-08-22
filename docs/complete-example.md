@@ -85,7 +85,7 @@ same code target another Nacos deployment without hardcoding credentials.
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | Default config data ID. |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | Config group. |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | Config-read timeout in seconds. |
-| `NACOS_AUTO_DEREGISTER` | `true` | Allow this process to deregister its confirmed instance during shutdown. |
+| `NACOS_DEREGISTER_ON_EXIT` | `true` | Install normal process-exit cleanup for this process's confirmed instance. |
 | `NACOS_LOG_ENABLED` | `false` | Enable sanitized Flask-Nacos logging. |
 | `NACOS_LOG_CONSOLE_ENABLED` | `true` | Write logs to the console when logging is enabled. |
 | `NACOS_LOG_FILE_ENABLED` | `true` | Write a rotating file when logging is enabled. |
@@ -228,7 +228,6 @@ detection. If the application only reads configuration or discovers other
 services, disable automatic registration and omit the registration identity:
 
 ```python
-NACOS_REGISTER_ENABLED = False
 NACOS_AUTO_REGISTER = False
 ```
 
@@ -246,9 +245,10 @@ endpoint may therefore report `registered=false` briefly. The exit handler waits
 for an in-flight registration and deregisters only an instance successfully
 registered by this application when the process exits normally.
 
-The example deliberately uses `NACOS_FAIL_FAST=False`: a temporary Nacos outage
-does not prevent Flask from starting. Nacos-dependent example endpoints return
-a safe response instead of exposing credentials or an SDK traceback.
+Client construction and Nacos network work run outside the initialization
+thread, so a temporary outage does not block the application factory. The
+Nacos-dependent routes catch safe domain exceptions and return a controlled 503
+instead of exposing credentials or an SDK traceback.
 
 ## 6. Verify every integration point
 
@@ -287,10 +287,9 @@ curl http://127.0.0.1:5000/api/nacos/instances
 curl "http://127.0.0.1:5000/api/nacos/instances?service=user-service&cluster=CANARY"
 ```
 
-An empty instance list is a valid discovery result. With fail-fast disabled,
-SDK discovery failures also use the library's safe `[]` fallback; use logs and
-external monitoring when distinguishing an outage from an empty service is
-operationally important.
+An empty instance list is a valid discovery result. SDK or response-shape
+failures raise `NacosDiscoveryError`, which this example translates to a safe
+503 response, so an outage is not confused with an empty service.
 
 Stop the development server with `Ctrl+C`. On graceful interpreter shutdown the
 registered instance is deregistered. You can then stop local Nacos:
@@ -304,7 +303,7 @@ docker compose -f examples/docker-compose-nacos.yml down
 Run the factory with Gunicorn on platforms where Gunicorn is supported:
 
 ```bash
-export NACOS_AUTO_DEREGISTER="false"
+export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
@@ -312,8 +311,12 @@ Each worker executes `create_app()`. Registration is always per-app,
 per-process, single-flight, and inherited locks/state are recreated after a
 fork. Workers sharing one IP and port advertise the same Nacos
 instance identity, not one instance per worker. Set
-`NACOS_AUTO_DEREGISTER=False` for that shared endpoint, or use one external
+`NACOS_DEREGISTER_ON_EXIT=False` for that shared endpoint, or use one external
 coordinator to own registration and deregistration.
+
+This setting controls only the normal process-exit callback. Explicit
+`deregister_instance()` remains available, and forced termination cannot
+guarantee best-effort cleanup.
 
 Native SDK logging is always silent because it may include sensitive request or
 configuration data. `NACOS_LOG_*` controls only Flask-Nacos safety logs; by
@@ -330,7 +333,7 @@ For production:
 
 - advertise an IP or DNS endpoint reachable by consumers, not `127.0.0.1`;
 - store credentials in a secret manager and enable Nacos authentication;
-- choose fail-fast and retry settings according to application startup policy;
+- choose retry settings according to the application's resilience policy;
 - use readiness/monitoring that checks actual Nacos-dependent operations when
   remote availability matters;
 - do not use the bundled standalone Compose configuration.

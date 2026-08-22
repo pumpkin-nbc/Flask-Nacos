@@ -2,32 +2,37 @@
 
 English | [简体中文](service-registration.zh-CN.md)
 
-Flask-Nacos 1.1.0 uses a target-state lifecycle. `target_registered` is the
+Flask-Nacos 1.1.1 uses a target-state lifecycle. `target_registered` is the
 latest requested state; `registered` is the last locally confirmed Naming
 fact. One daemon convergence Worker moves the fact toward the latest target and
 exits as soon as convergence completes or can no longer continue safely.
 
 ## Automatic registration
 
-Both registration switches default to `True`:
+Automatic registration defaults to enabled:
 
 ```python
 app.config.update(
     NACOS_AUTO_REGISTER=True,
-    NACOS_REGISTER_ENABLED=True,
     NACOS_SERVICE_NAME="orders-api",
     NACOS_SERVICE_PORT=5000,
 )
 ```
 
-When both switches and `NACOS_ENABLED` are true, `init_app(app)` validates the
+When `NACOS_AUTO_REGISTER` and `NACOS_ENABLED` are true, `init_app(app)` validates the
 registration snapshot and calls public `register_instance(app)`. That command
 returns immediately; the Worker creates the Client and performs the Naming RPC.
 
-With `NACOS_FAIL_FAST=True`, invalid deterministic registration configuration
-raises during `init_app(app)` before extension state is committed. With false,
-initialization completes with `target_registered=True`, `registered=False`, and
-a safe `last_error`, without starting an invalid Worker.
+Invalid deterministic local registration configuration raises during
+`init_app(app)` before extension state is committed. Client construction,
+authentication I/O, and Naming RPCs are never performed by the initialization
+thread.
+
+When automatic registration is off, initialization does not validate
+registration-only settings. The first explicit registration performs the local
+deterministic validation, caches the app-state result, and then enters the same
+lifecycle transition. An invalid explicit command raises without changing the
+target, generation, error, operation, or Client state.
 
 ## Explicit registration
 
@@ -56,14 +61,13 @@ recovering from a verified transient failure remains the single owner.
 
 ```mermaid
 flowchart TD
-    A["init_app(app)"] --> B["Load and validate configuration"]
-    B --> C{"Deterministic auto-registration error?"}
-    C -- "yes, fail-fast" --> D["Raise before committing app state"]
-    C -- "yes, safe mode" --> E["Commit target=True and safe last_error"]
+    A["init_app(app)"] --> B["Load connection and extension configuration"]
+    B --> G{"Automatic registration enabled?"}
+    G -- "no" --> H["Initialization complete; registration validation deferred"]
+    G -- "yes" --> C{"Deterministic registration error?"}
+    C -- "yes" --> D["Raise before committing app state"]
     C -- "no" --> F["Commit PID Runtime with client=None"]
-    F --> G{"Automatic registration enabled?"}
-    G -- "no" --> H["Initialization complete"]
-    G -- "yes" --> I["Call register_instance(app)"]
+    F --> I["Call register_instance(app)"]
     I --> J["Publish one daemon Worker"]
     J --> H
 ```
@@ -137,9 +141,6 @@ normal deregistration safely returns `False` with
   call, or an obsolete call skipped after a newer register command.
 - `False` when deregistration is still needed but fails.
 
-`NACOS_REGISTER_ENABLED=False` prevents new registration but does not block
-cleanup of an existing registered instance.
-
 ## Retry, transient recovery, and target changes
 
 Every Client or Naming failure is classified immediately from structured
@@ -157,6 +158,14 @@ statuses. Each recovery round waits first, using bounded exponential backoff
 with jitter. It never retries more frequently than
 `max(NACOS_RETRY_INTERVAL, 1 second)`, and each failure is classified again.
 `NACOS_RETRY_ENABLED=False` means exactly one current attempt and no recovery.
+
+The classifier covers both lazy Client construction and Naming calls, while
+keeping their infrastructure separate: a Client construction failure never
+publishes Naming RPC metadata or a synthetic Naming outcome. For SDK `2.0.11`,
+the exact bare `nacos.exception.NacosRequestException` is verified as transient
+at `CLIENT_CREATE/register`; SDK `2.0.0` Client construction and unverified
+combinations remain unknown. Structured 401/403 authentication failures are
+deterministic and stop immediately.
 
 The retry/recovery phase belongs to the current Naming direction. Switching
 between register and compensating deregister resets that direction's phase;
@@ -180,12 +189,34 @@ RPC completes after the intermediate target change.
 Nacos SDK. `healthy=True` is only initial registration input; it does not replace
 heartbeat renewal. Persistent instances do not receive this heartbeat option.
 
+One Client-level Flask-Nacos wrapper observes these SDK calls without becoming
+a second heartbeat owner. Logging and the optional Runtime observer share that
+single wrapper, so one SDK call produces at most one observation and one log
+action. Valid identities are isolated by service, group, cluster, IP, and port:
+failures are warning-throttled per identity and the first later success emits
+one recovery `INFO`.
+
+For the currently registered ephemeral identity, `get_status()` also reports
+the latest local heartbeat observation. It starts as `unknown`, becomes
+`healthy` or `failing`, and is reset for every successful registration cycle.
+Monotonic cycle and completion gates reject late events from an earlier cycle
+and out-of-order callbacks, even when the same identity is registered again.
+These observations never modify the registration fact or trigger Recovery.
+
+If the verified SDK argument layout cannot produce a complete safe identity,
+the call uses stateless `<unknown>` logging and does not update Runtime status;
+it never stores a type-based placeholder that could collide. Instrumentation
+preserves the SDK result/exception and cannot change target, fact, generation,
+or Worker state.
+
 ## Fork and process servers
 
 Client, Worker, locks, events, and registration facts are PID-bound. After a
 fork, the parent Runtime is discarded and exactly one current-PID Runtime is
-published. Ordinary business requests and SDK operations may resume pending
-automatic registration. `get_status()`, `/health/nacos`, and `.client` do not.
+published. Explicit registration and real Client, Discovery, or Config SDK
+operations may resume pending automatic registration without waiting for it to
+converge. Ordinary business requests, `get_status()`, `/health/nacos`, and
+`.client` do not.
 
 Gunicorn `--preload` initializes the app in the master before workers fork. The
 recommended configuration is `NACOS_AUTO_REGISTER=False`, followed by
@@ -194,8 +225,10 @@ hook. Runtime rebuilding cannot undo a registration that the master already
 started before the fork.
 
 When multiple workers share the same service/group/cluster/IP/port, Nacos sees
-one remote instance. Set `NACOS_AUTO_DEREGISTER=False` so one exiting worker does
+one remote instance. Set `NACOS_DEREGISTER_ON_EXIT=False` so one exiting worker does
 not remove the shared endpoint, or use a single external coordinator.
+The setting controls only process-exit cleanup and never disables an explicit
+`deregister_instance()`.
 
 ## Old and new scheduling
 
@@ -211,7 +244,8 @@ not remove the shared endpoint, or use a single external coordinator.
 | Fork | Could inherit process resources | Entire Runtime rebuilt |
 | Exit | Could reuse normal deregistration | Dedicated shutdown path |
 
-The public status exposes only stable lifecycle meaning:
-`target_registered`, `registered`, `operation_running`, and `last_error`.
-Internal generation, Worker ownership, pending recovery, and RPC metadata remain
+The public status exposes stable lifecycle meaning through
+`target_registered`, `registered`, `operation_running`, and `last_error`, plus
+the current-cycle local heartbeat observation. Internal generation, Worker
+ownership, pending recovery, heartbeat monotonic gates, and RPC metadata remain
 private.

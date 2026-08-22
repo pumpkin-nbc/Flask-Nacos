@@ -12,7 +12,10 @@ If startup meets a verified transient network failure, the Worker first uses
 the configured finite retry budget and then remains as a low-frequency,
 interruptible lifecycle recovery owner. It stops when registration converges,
 the target changes, shutdown starts, or a later failure is no longer classified
-as transient. No request or readiness probe is required to trigger recovery.
+as transient. This includes verified failures while an authenticated SDK
+`2.0.11` Client is being constructed; no request or readiness probe is required
+to trigger recovery. Structured authentication rejection such as HTTP 401/403
+stops instead of entering long-lived Recovery.
 
 Configure the externally reachable `NACOS_SERVICE_IP` and
 `NACOS_SERVICE_PORT`; binding Flask to localhost does not make that advertised
@@ -39,6 +42,13 @@ def post_fork(server, worker):
     nacos.register_instance(app)
 ```
 
+Do not rely on the first business request to recover registration. Ordinary
+requests, health/status reads, and the cache-only `.client` property do not
+consume post-fork pending intent. An explicit `register_instance()` or a real
+Client, Discovery, or Config SDK operation may consume it non-blockingly; the
+triggering synchronous SDK operation then continues under its own contract
+without waiting for registration convergence.
+
 Flask-Nacos does not guess the server type or worker count and provides no
 Gunicorn-specific public API. PID Runtime rebuilding prevents workers from
 using a parent Client, lock, Event, or registration fact; it cannot undo work
@@ -52,28 +62,34 @@ Client. One worker must not delete that shared instance while others still
 serve traffic:
 
 ```python
-NACOS_AUTO_DEREGISTER = False
+NACOS_DEREGISTER_ON_EXIT = False
 ```
 
 Alternatively, let one external coordinator own registration and
 deregistration. When each worker advertises a distinct IP or port, the default
-`NACOS_AUTO_DEREGISTER=True` can be appropriate.
-
-`NACOS_REGISTER_ENABLED=False` prevents new registration but intentionally
-does not prevent cleanup of an instance already registered by the current
-Runtime.
+`NACOS_DEREGISTER_ON_EXIT=True` can be appropriate.
 
 ## Shutdown behavior
 
-The exit callback marks the current PID Runtime as shutting down and wakes any
-retry wait. Normal lifecycle paths cannot begin another Naming RPC afterward.
+With `NACOS_DEREGISTER_ON_EXIT=True`, the installed exit callback marks the
+current PID Runtime as shutting down and wakes any retry wait. Normal lifecycle
+paths cannot begin another Naming RPC afterward.
 
-- With `NACOS_AUTO_DEREGISTER=False`, exit returns without waiting or changing
-  the user's registration target.
+- With `NACOS_DEREGISTER_ON_EXIT=False`, no remote deregistration callback is
+  installed, so process exit performs no Naming wait or cleanup.
 - With `True`, exit may wait for only the already-active Naming RPC, using its
   remaining timeout plus a small scheduling allowance and a five-second wait
   cap. It then performs at most one exit deregistration with the cached exact
   identity.
+
+This setting never disables an explicit `deregister_instance()`. Exit cleanup
+is best-effort on normal interpreter shutdown; `SIGKILL`, forced container
+termination, and host failure cannot guarantee callback execution.
+
+The active RPC timeout snapshot comes from the actual SDK Client
+`default_timeout`, not `NACOS_REQUEST_TIMEOUT` (which is configuration-center
+only). A missing, raising, boolean, non-numeric, non-finite, or non-positive SDK
+value uses the three-second fallback.
 
 Exit deregistration never retries, schedules follow-up registration, or guesses
 a missing identity.
@@ -96,6 +112,30 @@ Native SDK logs are isolated and Flask-Nacos does not create
 is enabled, `NACOS_LOG_PATH` defaults to `./logs` and
 `NACOS_LOG_FILENAME` defaults to `flask-nacos.log`.
 
+Do not let multiple Gunicorn or Celery processes write to the same rotating log
+file. Prefer console output collected by the process supervisor, or configure a
+process-safe logging pipeline in the host application. Flask-Nacos does not
+remove, close, or take ownership of handlers installed by the host application;
+1.1.1 does not add a multi-process file-rotation mechanism.
+
+Choose exactly one non-duplicating topology:
+
+```python
+# Host application owns console/file handlers.
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = False
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = True
+```
+
+```python
+# Container stdout is the only output.
+NACOS_LOG_ENABLED = True
+NACOS_LOG_CONSOLE_ENABLED = True
+NACOS_LOG_FILE_ENABLED = False
+NACOS_LOG_PROPAGATE = False
+```
+
 Keep Nacos username/password or AK/SK in environment variables or a secret
 manager. Do not return complete application configuration or internal status
 from an unauthenticated endpoint.
@@ -109,8 +149,10 @@ verified transport boundary until the upstream SDK behavior meets your policy.
 
 ## Health and observability
 
-`/health/nacos` and `get_status()` report local lifecycle state only. They do not
-query Nacos or inspect SDK heartbeat success. Add a separate remote probe when
+`/health/nacos` reports local lifecycle state only. `get_status()` additionally
+reports the latest locally observed SDK heartbeat for the current ephemeral
+registration cycle. Neither endpoint queries Nacos, and neither observation
+proves that the remote instance still exists. Add a separate remote probe when
 your readiness policy requires current Nacos reachability.
 
 During transient startup recovery, `operation_running=True` can remain visible

@@ -7,6 +7,74 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.1
+
+### Fixed
+
+- Fixed registration lifecycle recovery when authenticated Nacos Client
+  construction fails during temporary server unavailability. The verified SDK
+  `2.0.11` `NacosRequestException` at the exact `CLIENT_CREATE/register` stage
+  now participates in the existing transient Recovery path.
+- Kept structured 401/403 authentication failures deterministic, while
+  unverified SDK versions, stages, directions, and exception types remain
+  `UNKNOWN` and stop after the finite retry budget.
+- Fixed heartbeat log-state cross-talk when one SDK Client sends beats for
+  multiple instances. Warning throttling and recovery are now isolated by the
+  exact service/group/cluster/IP/port identity; unsafe or incomplete identities
+  fall back to stateless `<unknown>` logging without collision-prone keys.
+- Fixed heartbeat observation cross-talk across repeated registrations of the
+  same identity. Private monotonic cycle and completion gates now reject stale
+  or out-of-order callbacks, while logging and Runtime observation share one
+  idempotently installed Client wrapper.
+- Fixed shutdown's active Naming RPC timeout snapshot to use the actual SDK
+  Client `default_timeout`. `NACOS_REQUEST_TIMEOUT` remains configuration-center
+  only, and invalid SDK timeout values retain the bounded three-second fallback.
+
+### Changed
+
+- Removed the no-op `NACOS_STATUS_ENABLED` setting without an alias or
+  migration branch; `get_status()` remains always available and side-effect-free.
+- Removed the configuration-driven error-mode switch without an alias or
+  migration branch. Active automatic registration now rejects purely local
+  deterministic configuration errors transactionally; explicit registration
+  rejects them before changing lifecycle state, while runtime failures remain
+  asynchronous Worker state.
+- Synchronous Client, Discovery, and Config operations now preserve their most
+  specific safe domain exception and cause instead of converting true failures
+  to empty results. Legitimate empty results and disabled-feature contracts are
+  unchanged.
+- Removed ordinary-request-driven post-fork recovery. Pending automatic
+  registration is consumed non-blockingly only by explicit registration or a
+  real Client, Discovery, or Config SDK operation, all sharing the existing
+  app/PID Client acquisition path.
+- Logging-disabled and file-output-disabled configurations ignore settings for
+  those unused capabilities; invalid enabled logging configuration or Handler
+  construction now raises `NacosLoggingError`.
+- Clarified process-exit cleanup with the sole
+  `NACOS_DEREGISTER_ON_EXIT` setting. Disabling it installs no remote cleanup
+  callback and never blocks an explicit `deregister_instance()`.
+- Reduced heartbeat log noise: ordinary success is `DEBUG`, first/type-changed
+  failure is `WARNING`, unchanged failures are warning-throttled for 60 seconds,
+  and the first per-identity success after failure is one recovery `INFO`.
+- Extended the side-effect-free `get_status()` snapshot from 12 to 16 fields
+  with the current ephemeral-registration cycle's local heartbeat state, last
+  success/failure Unix timestamps, and safe error type. Health remains the same
+  seven-field local lifecycle response and does not use heartbeat observations.
+- Added Python 3.8/Flask 1.1.4/gevent compatibility coverage and pinned the SDK
+  compatibility matrix to the explicitly verified `2.0.0` and `2.0.11`
+  releases.
+- Expanded concurrency, fork, heartbeat isolation, timeout, and opt-in real
+  Nacos regression coverage, including a test-only TCP recovery gate.
+
+### Compatibility
+
+- Public method signatures, the seven-field health schema, target-state
+  lifecycle, fork/shutdown behavior, and SDK heartbeat ownership are unchanged.
+  The local `get_status()` schema has the documented additive heartbeat fields.
+- Lifecycle Recovery still performs no remote-instance monitoring: after local
+  state converges, the Worker exits and the Nacos SDK remains responsible for
+  heartbeat and connection maintenance.
+
 ## 1.1.0
 
 ### Added
@@ -37,11 +105,17 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Removed the redundant initialization-specific auto-registration switch.
   `NACOS_AUTO_REGISTER` is now the single automatic-registration switch, and
   initialization calls the public registration command without waiting for Nacos.
+- Removed the redundant registration-permission switch. `NACOS_ENABLED` now
+  controls the integration, while `NACOS_AUTO_REGISTER` controls only automatic
+  registration; an explicit `register_instance()` remains the registration command.
+- Registration-only validation is lazy when automatic registration is disabled.
+  Automatic, explicit, and post-fork pending registration share one call-local
+  orchestration path without adding Runtime or public status fields.
 - Client creation is lazy and bound to one Flask app/PID. Status, health, and
   `.client` cache reads have no SDK side effects.
-- `deregister_instance(app=None)` preserves the last lifecycle command and can
-  still clean an existing instance when new registration is disabled.
-- `NACOS_AUTO_DEREGISTER` is the single exit deregistration switch.
+- `deregister_instance(app=None)` preserves the last lifecycle command and
+  keeps its idempotent, synchronous-cleanup contract.
+- `NACOS_DEREGISTER_ON_EXIT` is the single exit deregistration switch.
 - Kept retry/recovery ownership inside the Register Worker. Client creation and
   Naming failures share conservative classification without mixing Client state
   into Naming RPC outcome metadata, and successful convergence still hands
@@ -53,7 +127,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ### Compatibility
 
 - Lifecycle runtime failures are reported through safe local status and logs;
-  fail-fast remains limited to deterministic configuration failures.
+  purely local deterministic registration failures are raised before lifecycle
+  state is committed.
 - The runtime requirement remains Python `>=3.8`; Flask is now declared as
   `>=1.0` without an artificial upper bound.
 - Development type checking stays on mypy `<1.15`, the last line that can run
@@ -95,8 +170,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Fixed library and SDK logging side effects, duplicate handlers, unexpected
   log files, and potential leakage of credentials, request data, or config
   content through application, root, console, or file handlers.
-- Fixed fail-fast initialization leaving partial app or extension state.
-- Fixed non-fail-fast operations raising when the initialized client is
+- Fixed strict initialization errors leaving partial app or extension state.
+- Fixed tolerant operations raising when the initialized client is
   unavailable; these operations now return their documented safe defaults.
 - Fixed deregistration resolving a new identity instead of using the exact
   identity registered with Nacos.
@@ -112,7 +187,7 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ### Fixed
 
 - Preflighted active automatic-registration settings during `init_app()`, so
-  fail-fast validation errors occur before client creation or partial extension
+  deterministic validation errors occur before client creation or partial extension
   state is installed, while disabled auto-registration still supports
   config-center and discovery-only applications without a service name.
 
@@ -168,7 +243,7 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Treated SDK `False` registration and deregistration results as retryable
   failures without corrupting lifecycle state.
 - Rejected incomplete or mixed authentication credentials and invalid retry or
-  request-timeout numbers through the existing fail-fast behavior.
+  request-timeout numbers through the existing strict error behavior.
 - Skipped discovered instances with malformed endpoints, parsed string boolean
   fields correctly, and sanitized invalid weights.
 - Kept ephemeral service instances healthy by passing the heartbeat interval to
@@ -183,11 +258,6 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   per-app `RLock`, replacing inherited locks after a process ID change.
 - Prevented deterministic `NacosValidationError` failures from being retried.
 - Made `NACOS_CONFIG_ENABLED=False` skip configuration-center SDK calls.
-
-### Deprecated
-
-- `NACOS_STATUS_ENABLED` is retained as a no-op for 1.x compatibility and is
-  planned for removal in 2.0; `get_status()` remains consistently available.
 
 ### Stable APIs
 
@@ -394,7 +464,7 @@ The following APIs are considered stable in the 1.0 series:
 - Added idempotent handling for service registration.
 - Added idempotent handling for service deregistration.
 - Added improved service discovery behavior.
-- Added clearer fail-fast behavior for registration, deregistration, and discovery.
+- Added clearer error behavior for registration, deregistration, and discovery.
 - Added additional tests for service registration and discovery.
 
 ### Changed
@@ -421,7 +491,7 @@ The following APIs are considered stable in the 1.0 series:
   (`deregister_instance`).
 - Service discovery: `list_instances` and `get_one_healthy_instance`.
 - Configuration center read support: `get_config`.
-- `NACOS_FAIL_FAST` behavior control and a custom exception hierarchy.
+- Configurable error behavior and a custom exception hierarchy.
 - Standard `logging` integration that never emits secrets.
 - pytest test suite with a fully mocked Nacos SDK.
 - PyPI packaging via hatchling.

@@ -2,7 +2,7 @@
 
 English | [简体中文](api-reference.zh-CN.md)
 
-Flask-Nacos 1.1.0 keeps lifecycle commands small and context-safe. An explicit
+Flask-Nacos 1.1.1 keeps lifecycle commands small and context-safe. An explicit
 `app` always selects that application. Without `app`, an active Flask app or
 request context is required; there is no fallback to a previously initialized
 application.
@@ -33,9 +33,11 @@ get_client(app=None) -> Any
 ## `FlaskNacos(app=None)` and `init_app(app)`
 
 `FlaskNacos(app)` initializes one application immediately. `FlaskNacos()` plus
-`init_app(app)` supports application factories. Initialization validates
-deterministic configuration and installs local hooks, but never constructs a
-Nacos Client.
+`init_app(app)` supports application factories. Initialization validates its
+enabled responsibilities and installs local hooks, but never constructs a
+Nacos Client. Registration-only validation runs at initialization only when
+automatic registration is enabled; otherwise it is deferred to the first
+explicit registration command.
 
 When automatic registration is enabled, `init_app()` calls the same public
 `register_instance(app)` command used by application code. The network request
@@ -68,11 +70,11 @@ and returns `None` without waiting for Client creation or network I/O.
 - A call after an unknown/deterministic failed idle attempt starts a new finite
   attempt. Verified transient failures retain the existing Worker for
   low-frequency lifecycle recovery.
-- `NACOS_REGISTER_ENABLED=False` makes this command a no-op.
 - `NACOS_ENABLED=False` makes this command a side-effect-free no-op.
-- With `NACOS_FAIL_FAST=True`, a cached deterministic registration error may be
-  raised synchronously. Thread, Client, SDK, timeout, and connection failures
-  are recorded safely in local status and are not raised by this command.
+- A cached deterministic local registration error is raised synchronously
+  without committing a new lifecycle target. Thread, Client, SDK, timeout, and
+  connection failures are recorded safely in local status and are not raised
+  by this command.
 
 Registration success starts the SDK's heartbeat for ephemeral instances. The
 Flask-Nacos Worker then exits; it is not a permanent heartbeat thread.
@@ -93,9 +95,7 @@ Sets the target to unregistered. The return value is:
 - `False` when deregistration is still required but cannot be completed.
 
 An idle registered instance is deregistered synchronously. During an active
-Register Worker, the target change is handled by that Worker. Disabling new
-registration with `NACOS_REGISTER_ENABLED=False` does not prevent cleanup of an
-already registered instance.
+Register Worker, the target change is handled by that Worker.
 
 All deregistration paths use the exact identity cached by the last successful
 registration. They never guess a new IP or identity.
@@ -103,8 +103,9 @@ registration. They never guess a new IP or identity.
 ## `get_client(app=None)` and `.client`
 
 `get_client()` explicitly requests a usable Client for the selected app and
-current PID. It returns `None` only when Flask-Nacos is disabled. Creation
-failure raises a safe `FlaskNacosError` and preserves the original exception as
+current PID. It returns `None` only when Flask-Nacos is disabled. Invalid local
+configuration raises `NacosConfigError`/`NacosValidationError`; Client
+construction raises `NacosClientError` and preserves the original exception as
 its cause.
 
 Reading `.client` never creates a Client. It returns the current-context app's
@@ -115,7 +116,7 @@ fact, lifecycle generation, or lifecycle error.
 
 ## `get_status(app=None)`
 
-Returns exactly these 12 local-only fields:
+Returns exactly these 16 local-only fields:
 
 ```python
 {
@@ -131,6 +132,10 @@ Returns exactly these 12 local-only fields:
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
@@ -139,6 +144,21 @@ register/deregister call. It is not a live server query. `operation_running` is
 true for either a background registration lifecycle or a synchronous
 deregistration lifecycle. `last_error` contains only a safe exception type or
 internal error code.
+
+`heartbeat_state` is the latest accepted SDK heartbeat observation for the
+current local ephemeral-registration cycle:
+
+- `unknown`: registered ephemerally, but no heartbeat from this cycle has been
+  observed yet.
+- `healthy`: the latest accepted heartbeat succeeded.
+- `failing`: the latest accepted heartbeat failed.
+- `not_applicable`: disabled, unregistered, or registered persistently.
+
+The two heartbeat timestamps are Unix epoch seconds or `None`.
+`heartbeat_error_type` contains only a safe exception type and is cleared after
+recovery. Observations are isolated by app/PID, exact registered identity,
+registration cycle, and monotonic completion order. They never change
+Lifecycle state and are not proof of current remote health.
 
 Before registration, identity values come from the configuration snapshot and
 no IP detection occurs. While registered, the actual cached registration
@@ -158,13 +178,16 @@ starts a thread, or resumes pending post-fork registration.
 - `normalize_instance(instance)` returns a normalized dict or `None`.
 
 These operations use the current Flask context and lazily create the app/PID
-Client when needed. Flask-Nacos does not parse YAML or JSON configuration text.
+Client when needed. A legitimate empty discovery/config result remains `[]` or
+`None`; validation, Client, Discovery, and Config failures raise their most
+specific existing domain exception after the configured finite retry budget.
+Flask-Nacos does not parse YAML or JSON configuration text.
 
 ## Exceptions
 
-- `FlaskNacosError`: invalid application selection, initialization ownership,
-  or explicit Client creation failure.
+- `FlaskNacosError`: invalid application selection or initialization ownership.
 - `NacosConfigError`: deterministic extension configuration is invalid.
+- `NacosClientError`: the SDK Client cannot be constructed or used.
 - `NacosValidationError`: registration or discovery input is invalid.
 - `NacosRegistrationError` / `NacosDeregistrationError`: Naming SDK operation
   did not explicitly succeed.

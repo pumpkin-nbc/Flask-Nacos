@@ -83,7 +83,7 @@ Invoke-RestMethod -Method Post `
 | `NACOS_CONFIG_DATA_ID` | `flask-nacos-demo.properties` | 默认配置 data ID。 |
 | `NACOS_CONFIG_GROUP` | `DEFAULT_GROUP` | 配置 group。 |
 | `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置读取超时秒数。 |
-| `NACOS_AUTO_DEREGISTER` | `true` | 是否允许当前进程在退出时注销已确认的实例。 |
+| `NACOS_DEREGISTER_ON_EXIT` | `true` | 是否安装正常进程退出清理，以注销当前进程已确认的实例。 |
 | `NACOS_LOG_ENABLED` | `false` | 启用 Flask-Nacos 脱敏日志。 |
 | `NACOS_LOG_CONSOLE_ENABLED` | `true` | 日志启用时输出到控制台。 |
 | `NACOS_LOG_FILE_ENABLED` | `true` | 日志启用时写入轮转文件。 |
@@ -217,7 +217,6 @@ Nacos 配置应放在 Flask 配置类或环境变量中，不要写入 `app/exte
 本机 IP。如果应用只读取配置或发现其他服务，可以关闭自动注册并省略注册标识：
 
 ```python
-NACOS_REGISTER_ENABLED = False
 NACOS_AUTO_REGISTER = False
 ```
 
@@ -232,8 +231,8 @@ python examples/complete_factory_app.py
 因此状态接口最初可能短暂返回 `registered=false`。进程正常退出时，退出处理器会等待
 进行中的注册，并且只注销由当前应用成功注册的实例。
 
-示例特意设置 `NACOS_FAIL_FAST=False`：Nacos 暂时不可用时不会阻止 Flask 启动；依赖
-Nacos 的示例接口会返回安全响应，不会暴露凭据或 SDK traceback。
+Client构造与 Nacos网络操作不在初始化线程执行，因此暂时故障不会阻塞应用工厂；依赖
+Nacos 的示例接口会捕获安全领域异常并返回受控的 503，不暴露凭据或 SDK traceback。
 
 ## 6. 验证全部接入点
 
@@ -271,8 +270,8 @@ curl http://127.0.0.1:5000/api/nacos/instances
 curl "http://127.0.0.1:5000/api/nacos/instances?service=user-service&cluster=CANARY"
 ```
 
-空实例列表是合法的发现结果。关闭 fail-fast 时，SDK 发现失败也会使用库的安全返回值
-`[]`；如果运维上必须区分“服务为空”和“Nacos 故障”，应同时查看日志与外部监控。
+空实例列表是合法发现结果；SDK或响应结构失败会抛出 `NacosDiscoveryError`，由示例转换为
+安全的 503，因此不会把“Nacos故障”误判为“服务为空”。
 
 按 `Ctrl+C` 停止开发服务器。解释器正常退出时会注销已注册实例。随后可以停止本地
 Nacos：
@@ -286,14 +285,17 @@ docker compose -f examples/docker-compose-nacos.yml down
 在支持 Gunicorn 的平台上运行应用工厂：
 
 ```bash
-export NACOS_AUTO_DEREGISTER="false"
+export NACOS_DEREGISTER_ON_EXIT="false"
 gunicorn "examples.complete_factory_app:create_app()" -w 4 -b 0.0.0.0:5000
 ```
 
 每个 worker 都会执行 `create_app()`。注册生命周期始终按 app、按进程 single-flight，
 fork 后会重建继承的锁与本地状态。共享同一 IP 和端口的 worker
 在 Nacos 中对应同一个实例标识，而不是每个 worker 一个实例。请为该共享端点设置
-`NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册与注销。
+`NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册与注销。
+
+该配置只控制正常进程退出回调；显式 `deregister_instance()` 仍然可用，强制终止无法保证
+尽力清理能够执行。
 
 SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`NACOS_LOG_*` 只控制 Flask-Nacos
 安全日志；默认既不创建 `~/logs/nacos`，也不创建日志文件。设置
@@ -308,7 +310,7 @@ SDK 原生日志可能包含敏感请求或配置数据，因此始终静默。`
 
 - 发布消费者能够访问的 IP 或 DNS 地址，不要使用 `127.0.0.1`；
 - 使用密钥管理服务保存凭据，并开启 Nacos 认证；
-- 根据应用启动策略选择 fail-fast 和重试配置；
+- 根据应用韧性策略选择重试配置；
 - 需要判断远端可用性时，使用真正执行 Nacos 操作的 readiness/监控；
 - 不要使用仓库自带的单机 Compose 配置。
 

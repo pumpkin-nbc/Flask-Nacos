@@ -6,6 +6,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = ROOT / "scripts"
 DOCS_DIR = ROOT / "docs"
@@ -85,11 +87,10 @@ def test_service_registration_guides_include_lifecycle_flowcharts():
     shared_markers = (
         "register_instance(app)",
         "NACOS_AUTO_REGISTER",
-        "NACOS_FAIL_FAST",
         "target_registered",
         "operation_running",
         "last_error",
-        "NACOS_AUTO_DEREGISTER=False",
+        "NACOS_DEREGISTER_ON_EXIT=False",
         "SUCCEEDED",
         "FAILED",
         "SKIPPED",
@@ -115,13 +116,13 @@ def test_auto_register_default_is_documented_as_true():
         ROOT / "README.md": "`NACOS_AUTO_REGISTER` (default `True`)",
         DOCS_DIR / "configuration.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
         DOCS_DIR / "production.md": "`NACOS_AUTO_REGISTER=True`",
-        DOCS_DIR / "service-registration.md": "Both registration switches default to `True`",
+        DOCS_DIR / "service-registration.md": "Automatic registration defaults to enabled",
     }
     chinese = {
         ROOT / "README.zh-CN.md": "`NACOS_AUTO_REGISTER`（默认 `True`）",
         DOCS_DIR / "configuration.zh-CN.md": "| `NACOS_AUTO_REGISTER` | bool | `True` |",
         DOCS_DIR / "production.zh-CN.md": "`NACOS_AUTO_REGISTER=True`",
-        DOCS_DIR / "service-registration.zh-CN.md": "两个注册开关的默认值均为 `True`",
+        DOCS_DIR / "service-registration.zh-CN.md": "自动注册默认开启",
     }
 
     for path, marker in {**english, **chinese}.items():
@@ -177,7 +178,7 @@ def test_bilingual_release_guides_document_oidc_gates():
         "release.yml",
         "pumpkin-nbc",
         "Flask-Nacos",
-        "v1.1.0",
+        "v1.1.1",
         "twine check --strict",
         "FLASK_NACOS_RUN_AUTH_INTEGRATION",
         "FLASK_NACOS_RUN_HEARTBEAT_INTEGRATION",
@@ -202,7 +203,7 @@ def test_complete_example_guides_share_commands_and_defaults():
         "/api/nacos/config",
         "/api/nacos/instances",
         "/health/nacos",
-        "NACOS_AUTO_DEREGISTER",
+        "NACOS_DEREGISTER_ON_EXIT",
         "NACOS_LOG_CONSOLE_ENABLED",
         "NACOS_LOG_FILE_ENABLED",
         "NACOS_LOG_PATH",
@@ -235,7 +236,6 @@ def test_complete_guides_document_centralized_extension_initialization():
         "with app.app_context():",
         'app.extensions["nacos"]',
         "NACOS_SERVICE_IP",
-        "NACOS_REGISTER_ENABLED = False",
         "NACOS_AUTO_REGISTER = False",
     )
 
@@ -331,7 +331,6 @@ def test_bilingual_docs_describe_strict_runtime_validation():
         "NACOS_REQUEST_TIMEOUT",
         "NACOS_USERNAME",
         "NACOS_ACCESS_KEY",
-        "NACOS_FAIL_FAST",
     )
 
     for path in english_files + chinese_files:
@@ -354,7 +353,6 @@ def test_bilingual_docs_describe_auto_registration_preflight():
     shared_markers = (
         "NACOS_SERVICE_NAME",
         "NACOS_AUTO_REGISTER",
-        "NACOS_FAIL_FAST",
         "init_app(app)",
         "preload",
     )
@@ -365,8 +363,15 @@ def test_bilingual_docs_describe_auto_registration_preflight():
             assert marker in text
 
 
-def test_removed_auto_registration_key_is_absent_from_current_tree():
-    removed_key = "NACOS_AUTO_REGISTER_" + "ON_INIT"
+@pytest.mark.parametrize(
+    "removed_key",
+    (
+        "NACOS_AUTO_REGISTER_" + "ON_INIT",
+        "NACOS_REGISTER_" + "ENABLED",
+        "NACOS_FAIL_" + "FAST",
+    ),
+)
+def test_removed_registration_keys_are_absent_from_current_tree(removed_key):
     text_roots = (
         ROOT / "flask_nacos",
         ROOT / "examples",

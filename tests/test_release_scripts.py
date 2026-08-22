@@ -141,6 +141,14 @@ def test_scripts_are_import_safe(
     assert check_sdk_compatibility is not None
 
 
+def test_release_check_preserves_versioned_dist_archives():
+    script = (SCRIPTS_DIR / "release_check.sh").read_text(encoding="utf-8")
+
+    assert "rm -rf dist " not in script
+    assert "find dist -mindepth 1 -maxdepth 1 -type f" in script
+    assert "dist/*.whl dist/*.tar.gz" in script
+
+
 def test_version_check_passes_with_current_version(check_version):
     ok, versions, message = check_version.check(ROOT)
     assert ok, message
@@ -172,6 +180,8 @@ def test_examples_check_is_clean(check_examples):
 
 def test_smoke_test_package_has_entrypoint(smoke_test_package):
     assert callable(smoke_test_package.main)
+    script = (SCRIPTS_DIR / "smoke_test_package.py").read_text(encoding="utf-8")
+    assert '[str(py), "-m", "pip", "check"]' in script
 
 
 def test_sensitive_scan_is_clean(check_sensitive_info):
@@ -403,10 +413,14 @@ def test_ci_has_strict_package_and_sdk_compatibility_checks():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "twine check --strict dist/*" in workflow
     assert 'sdk_spec: "nacos-sdk-python==2.0.0"' in workflow
-    assert 'sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"' in workflow
+    assert 'sdk_spec: "nacos-sdk-python==2.0.11"' in workflow
+    assert 'expected_version: "2.0.11"' in workflow
     assert "python scripts/check_sdk_compatibility.py" in workflow
+    assert '"gevent==24.2.1"' in workflow
+    assert "pytest --no-cov tests/test_gevent_compatibility.py" in workflow
     assert "name: Required CI" in workflow
     assert "- sdk-compatibility" in workflow
+    assert "- gevent-compatibility" in workflow
     assert 'python-version: "3.14"' in workflow
     assert 'flask: "Flask==1.0.4 ' in workflow
     assert 'flask: "Flask==1.1.4 ' in workflow

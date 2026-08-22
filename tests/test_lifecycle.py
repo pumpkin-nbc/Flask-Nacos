@@ -2,8 +2,11 @@
 
 import gc
 import threading
+import time
 import weakref
 from types import SimpleNamespace
+
+import pytest
 
 import flask_nacos.extension as extension_module
 import flask_nacos.lifecycle as lifecycle_module
@@ -12,7 +15,7 @@ from tests.helpers import wait_registered, wait_until
 
 
 def test_pid_change_rebuilds_all_process_local_resources_once(
-    make_app, patched_create_client, monkeypatch
+    make_app, patched_create_client, fake_client, monkeypatch
 ):
     pid = [100]
     monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
@@ -21,8 +24,21 @@ def test_pid_change_rebuilds_all_process_local_resources_once(
     parent = app.extensions["nacos"]["_runtime"]
     nacos.get_client(app)
     parent.registered = True
-    parent.registered_identity = {"service_name": "parent"}
+    parent.registered_identity = {
+        "service_name": "parent",
+        "group_name": "DEFAULT_GROUP",
+        "cluster_name": "DEFAULT",
+        "ip": "127.0.0.1",
+        "port": 8000,
+        "ephemeral": True,
+    }
     parent.last_error = "ParentError"
+    parent.heartbeat_state = "failing"
+    parent.last_heartbeat_success_at = 100.0
+    parent.last_heartbeat_failure_at = 200.0
+    parent.heartbeat_error_type = "RuntimeError"
+    parent.heartbeat_cycle_started_monotonic = 10.0
+    parent.last_heartbeat_observed_monotonic = 20.0
 
     pid[0] = 200
     first = nacos.get_status(app)
@@ -36,14 +52,24 @@ def test_pid_change_rebuilds_all_process_local_resources_once(
     assert child.registered is False
     assert child.registered_identity is None
     assert child.last_error is None
+    assert child.heartbeat_state == "not_applicable"
+    assert child.last_heartbeat_success_at is None
+    assert child.last_heartbeat_failure_at is None
+    assert child.heartbeat_error_type is None
+    assert child.heartbeat_cycle_started_monotonic is None
+    assert child.last_heartbeat_observed_monotonic is None
     assert child.state_lock is not parent.state_lock
     assert child.client_lock is not parent.client_lock
     assert child.network_operation_lock is not parent.network_operation_lock
     assert child.operation_wakeup is not parent.operation_wakeup
     assert child.auto_register_pending is False
 
+    fake_client.send_heartbeat("parent", "127.0.0.1", 8000)
+    assert parent.heartbeat_state == "failing"
+    assert child.heartbeat_state == "not_applicable"
 
-def test_fork_auto_register_pending_is_not_consumed_by_status_health_or_client_property(
+
+def test_fork_pending_is_not_consumed_by_local_reads_or_plain_requests(
     make_app, patched_create_client, fake_client, monkeypatch
 ):
     pid = [100]
@@ -76,6 +102,10 @@ def test_fork_auto_register_pending_is_not_consumed_by_status_health_or_client_p
     assert patched_create_client["count"] == 1
 
     app.test_client().get("/business")
+    assert child.auto_register_pending is True
+    assert patched_create_client["count"] == 1
+
+    assert nacos.get_client(app) is not None
     wait_registered(nacos, app)
     assert child.auto_register_pending is False
     assert patched_create_client["count"] == 2
@@ -99,67 +129,114 @@ def test_public_get_client_atomically_consumes_fork_pending(
     assert patched_create_client["count"] == 2
 
 
-def test_fork_preserves_non_fail_fast_registration_config_error(
-    make_app, patched_create_client, monkeypatch
+@pytest.mark.parametrize("operation", ("client", "discovery", "config"))
+def test_sdk_operation_consumes_fork_pending_without_waiting_for_registration(
+    operation,
+    make_app,
+    patched_create_client,
+    fake_client,
+    monkeypatch,
 ):
     pid = [100]
     monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
-    app = make_app(
-        {
-            "NACOS_SERVICE_NAME": None,
-            "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": False,
-            "NACOS_HEALTH_CHECK_ENABLED": True,
-        }
-    )
+    app = make_app({"NACOS_AUTO_REGISTER": True})
     nacos = FlaskNacos(app)
+    wait_registered(nacos, app)
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocked_register(*_args, **_kwargs):
+        entered.set()
+        assert release.wait(2.0)
+        return True
+
+    fake_client.add_naming_instance.side_effect = blocked_register
+    pid[0] = 200
+    assert nacos.get_status(app)["client_created"] is False
+    child = app.extensions["nacos"]["_runtime"]
+    assert child.auto_register_pending is True
+
+    started = time.monotonic()
+    try:
+        if operation == "client":
+            result = nacos.get_client(app)
+            assert result is fake_client
+        else:
+            with app.app_context():
+                if operation == "discovery":
+                    result = nacos.list_instances("users")
+                    assert len(result) == 2
+                else:
+                    result = nacos.get_config("application.yaml")
+                    assert result == "server:\n  port: 8000\n"
+
+        assert time.monotonic() - started < 0.75
+        assert entered.wait(1.0)
+        assert child.auto_register_pending is False
+        assert nacos.get_status(app)["operation_running"] is True
+    finally:
+        release.set()
+
+    wait_registered(nacos, app)
+    assert patched_create_client["count"] == 2
+
+
+def test_pending_config_error_is_consumed_without_blocking_config_operation(
+    make_app, patched_create_client, fake_client, monkeypatch
+):
+    pid = [100]
+    monkeypatch.setattr(lifecycle_module, "current_pid", lambda: pid[0])
+    app = make_app({"NACOS_AUTO_REGISTER": True, "NACOS_HEALTH_CHECK_ENABLED": True})
+    nacos = FlaskNacos(app)
+    wait_registered(nacos, app)
+    state = app.extensions["nacos"]
+
+    # Simulate a new immutable configuration snapshot that has not yet been
+    # validated in the child process.
+    state["config"]["NACOS_SERVICE_NAME"] = None
+    state.pop(extension_module._REGISTRATION_ERROR_KEY)
 
     pid[0] = 200
-    status = nacos.get_status(app)
+    assert nacos.get_status(app)["target_registered"] is False
     child = app.extensions["nacos"]["_runtime"]
+    assert child.auto_register_pending is True
+
+    with app.app_context():
+        assert nacos.get_config("application.yaml") == "server:\n  port: 8000\n"
+
+    status = nacos.get_status(app)
     assert status["target_registered"] is True
     assert status["registered"] is False
     assert status["last_error"] == "NacosValidationError"
     assert child.auto_register_pending is False
     assert app.test_client().get("/health/nacos").get_json()["status"] == "error"
-    assert patched_create_client["count"] == 0
+    assert patched_create_client["count"] == 2
+    assert fake_client.add_naming_instance.call_count == 1
 
 
-def test_atexit_callback_is_always_installed_once(make_app, patched_create_client, monkeypatch):
+def test_atexit_callback_is_installed_once_when_enabled(
+    make_app, patched_create_client, monkeypatch
+):
     callbacks = []
     monkeypatch.setattr(
         extension_module,
         "atexit",
         SimpleNamespace(register=callbacks.append),
     )
-    app = make_app({"NACOS_AUTO_DEREGISTER": False})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.init_app(app)
     assert len(callbacks) == 1
 
 
-def test_auto_deregister_false_only_stops_lifecycle(make_app, patched_create_client, fake_client):
-    app = make_app({"NACOS_AUTO_DEREGISTER": False})
-    nacos = FlaskNacos(app)
-    nacos.register_instance(app)
-    wait_registered(nacos, app)
-    runtime = app.extensions["nacos"]["_runtime"]
-    target_before = runtime.target_registered
-
-    nacos._atexit_handler(app)
-
-    assert runtime.shutting_down is True
-    assert runtime.target_registered is target_before
-    fake_client.remove_naming_instance.assert_not_called()
-
-
-def test_auto_deregister_true_uses_cached_identity(
+def test_deregister_on_exit_uses_cached_identity(
     make_app, patched_create_client, fake_client, monkeypatch
 ):
     import flask_nacos.naming as naming_module
 
     monkeypatch.setattr(naming_module, "get_local_ip", lambda: "192.0.2.80")
-    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_SERVICE_IP": None, "NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     wait_registered(nacos, app)
@@ -185,7 +262,7 @@ def test_exit_waits_for_the_specific_active_rpc_then_deregisters(
         return True
 
     fake_client.add_naming_instance.side_effect = blocked_register
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     assert entered.wait(1.0)
@@ -271,7 +348,7 @@ def test_exit_handles_incomplete_rpc_metadata_and_missing_identity(
         "warning",
         lambda message, *_args: warnings.append(message),
     )
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     runtime = app.extensions["nacos"]["_runtime"]
     runtime.client = fake_client
@@ -295,10 +372,24 @@ def test_exit_handles_incomplete_rpc_metadata_and_missing_identity(
     assert any("registered identity is missing" in message for message in warnings)
 
 
+@pytest.mark.parametrize(
+    ("rpc_timeout", "started_at", "expected_wait"),
+    [
+        (None, None, 3.25),
+        (4.0, 98.0, 2.25),
+        (10.0, 100.0, 5.0),
+    ],
+)
 def test_exit_wait_timeout_is_bounded_and_does_not_race_rpc(
-    make_app, patched_create_client, fake_client, monkeypatch
+    make_app,
+    patched_create_client,
+    fake_client,
+    monkeypatch,
+    rpc_timeout,
+    started_at,
+    expected_wait,
 ):
-    app = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
     nacos = FlaskNacos(app)
     runtime = app.extensions["nacos"]["_runtime"]
     waits = []
@@ -327,11 +418,11 @@ def test_exit_wait_timeout_is_bounded_and_does_not_race_rpc(
     }
     runtime.naming_rpc_active = True
     runtime.naming_rpc_done = NeverDone()
-    runtime.naming_rpc_started_at = None
-    runtime.naming_rpc_timeout = None
+    runtime.naming_rpc_started_at = started_at
+    runtime.naming_rpc_timeout = rpc_timeout
     monkeypatch.setattr(extension_module.time, "monotonic", lambda: 100.0)
 
     nacos._atexit_handler(app)
-    assert waits == [3.25]
+    assert waits == [expected_wait]
     fake_client.remove_naming_instance.assert_not_called()
     assert any("timed out" in message for message in warnings)

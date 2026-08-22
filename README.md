@@ -7,7 +7,7 @@
 English | [简体中文](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/README.zh-CN.md)
 
 Flask-Nacos integrates Flask with Nacos service registration, discovery, and
-configuration center. Version 1.1.0 uses a target-state lifecycle, lazy
+configuration center. Version 1.1.1 uses a target-state lifecycle, lazy
 app/PID-bound Clients, and strict multi-application isolation.
 
 ## New users start here
@@ -60,7 +60,7 @@ dependency source because TestPyPI is not a complete mirror:
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 ```
 
 ## Quick start
@@ -93,8 +93,62 @@ init_app(app)
 ```
 
 `NACOS_AUTO_REGISTER` (default `True`) is the single automatic-registration
-switch. Automatic registration requires `NACOS_ENABLED`,
-`NACOS_REGISTER_ENABLED`, and `NACOS_AUTO_REGISTER` to be enabled.
+switch. Automatic registration runs when both `NACOS_ENABLED` and
+`NACOS_AUTO_REGISTER` are enabled. Turning automatic registration off does not
+block an explicit `register_instance(app)` command.
+
+## Configuration quick reference
+
+All settings are read from Flask `app.config`. This table matches the current
+code defaults; see the [configuration reference](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/configuration.md)
+for validation rules and complete examples.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `NACOS_ENABLED` | `True` | Master switch; when disabled, no Client is created and related operations are no-ops. |
+| `NACOS_SERVER_ADDR` | `"127.0.0.1:8848"` | Nacos Server address in `host:port` form. |
+| `NACOS_NAMESPACE_ID` | `""` | Namespace ID. |
+| `NACOS_USERNAME` | `None` | Username authentication value; configure it together with the password. |
+| `NACOS_PASSWORD` | `None` | Username authentication password; never commit it to source control. |
+| `NACOS_ACCESS_KEY` | `None` | AccessKey authentication value; configure it together with the SecretKey. |
+| `NACOS_SECRET_KEY` | `None` | SecretKey authentication value; never commit it to source control. |
+| `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | Default group fallback. |
+| `NACOS_AUTO_REGISTER` | `True` | Submit the registration target during initialization and post-fork recovery. |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | Install the best-effort normal-process-exit deregistration callback. |
+| `NACOS_SERVICE_NAME` | `None` | Service name; required when registering. |
+| `NACOS_SERVICE_IP` | `None` | Registered instance IP; auto-detected when unset. |
+| `NACOS_SERVICE_PORT` | `None` | Registered instance port in `1-65535`; required when registering. |
+| `NACOS_SERVICE_GROUP` | `"DEFAULT_GROUP"` | Group used for service registration. |
+| `NACOS_SERVICE_CLUSTER` | `"DEFAULT"` | Cluster used for service registration. |
+| `NACOS_SERVICE_WEIGHT` | `1.0` | Finite load-balancing weight greater than `0`. |
+| `NACOS_SERVICE_METADATA` | `{}` | Registered instance metadata. |
+| `NACOS_SERVICE_EPHEMERAL` | `True` | Register as an ephemeral instance. |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | SDK heartbeat interval in seconds for ephemeral instances. |
+| `NACOS_SERVICE_HEALTHY` | `True` | Initial health flag sent during registration. |
+| `NACOS_SERVICE_ENABLED` | `True` | Whether the registered instance is enabled. |
+| `NACOS_CONFIG_ENABLED` | `True` | Enable configuration-center features. |
+| `NACOS_CONFIG_DATA_ID` | `None` | Default used when `get_config()` receives no `data_id`. |
+| `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | Default configuration-center group. |
+| `NACOS_RETRY_ENABLED` | `True` | Enable finite retry and registration lifecycle recovery. |
+| `NACOS_RETRY_TIMES` | `3` | Maximum finite-stage attempts; integer `>=1`. |
+| `NACOS_RETRY_INTERVAL` | `1.0` | Finite delay between attempts in seconds; must be `>=0`. |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | Configuration-center read timeout; does not override Naming Client timeout. |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | Register the Flask health-check route. |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | Health-check route path. |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | Healthy-instance strategy: `first`, `random`, or `weight`. |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | Default discovery cluster filter. |
+| `NACOS_DISCOVERY_METADATA` | `{}` | Default discovery metadata filter. |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | Return normalized instance dictionaries and skip malformed endpoints. |
+| `NACOS_LOG_ENABLED` | `False` | Master switch for Flask-Nacos safety logs. |
+| `NACOS_LOG_LEVEL` | `"INFO"` | Safety-log level. |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Emit console records when logging is enabled. |
+| `NACOS_LOG_FILE_ENABLED` | `True` | Write file records when logging is enabled. |
+| `NACOS_LOG_PATH` | `"./logs"` | Log file directory. |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | Log filename inside `NACOS_LOG_PATH`. |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Format used by Flask-Nacos handlers. |
+| `NACOS_LOG_PROPAGATE` | `True` | Propagate records to parent loggers. |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | Rotating-file size limit; `None` selects a plain file handler. |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | Number of rotated log backups to retain. |
 
 ## Application factory
 
@@ -135,8 +189,7 @@ network retry, Naming RPC, and SDK heartbeat startup never delay the caller.
 `deregister_instance(app=None) -> bool` changes the final target to
 unregistered. It returns `True` for an idempotent/accepted/successful cleanup or
 when a newer register command makes the RPC unnecessary, and `False` when
-cleanup is still required but fails. `NACOS_REGISTER_ENABLED=False` prevents
-new registration but does not prevent cleanup of an existing instance.
+cleanup is still required but fails.
 
 The Worker continually re-reads the latest target. A sequence such as register
 → deregister → register therefore ends at the final register target; an old
@@ -157,14 +210,16 @@ When automatic registration is enabled, `init_app(app)` validates
 `NACOS_SERVICE_NAME`, port, weight, metadata, ephemeral/heartbeat settings,
 authentication, and retry settings before creating extension state.
 
-- `NACOS_FAIL_FAST=True`: deterministic automatic-registration errors raise
-  before `app.extensions["nacos"]` is committed.
-- `NACOS_FAIL_FAST=False`: initialization succeeds with a safe local error and
-  no invalid Worker.
+When automatic registration is disabled, initialization skips registration-only
+validation. The first explicit `register_instance(app)` performs that local,
+deterministic validation and caches its result without creating a Client or
+performing network I/O.
 
-`NACOS_FAIL_FAST` does not turn lifecycle runtime failures into synchronous
-registration exceptions. Thread creation/start, Client creation, timeout,
-connection, and SDK failures are recorded by safe type/code in `last_error`.
+Deterministic local errors for active automatic registration raise before
+`app.extensions["nacos"]` is committed. An invalid explicit registration also
+raises synchronously without changing the lifecycle target. Thread
+creation/start, Client construction, timeout, connection, and SDK failures stay
+inside the lifecycle Worker and are recorded by safe type/code in `last_error`.
 
 Registration lifecycle failures are classified immediately and conservatively:
 
@@ -176,19 +231,37 @@ Registration lifecycle failures are classified immediately and conservatively:
   with bounded backoff and jitter until the target changes, shutdown begins, a
   later failure is no longer transient, or registration succeeds.
 
+Recovery covers both lazy Client construction and Naming registration when the
+failure has verified transient evidence. In SDK `2.0.11`, the exact bare
+`nacos.exception.NacosRequestException` raised while an authenticated Client is
+constructed is covered only for the register direction. Structured 401/403
+authentication failures remain deterministic and stop immediately.
+
 `NACOS_RETRY_ENABLED=False` disables both finite retry and lifecycle recovery.
 Recovery applies only to proven transient failures and does not poll remote
 state. Once `registered == target_registered`, the Worker exits and the Nacos
 SDK continues to own heartbeat and connection maintenance.
+
+Heartbeat observability is Client-local: failures are throttled separately for
+each service/group/cluster/IP/port identity, and the first successful beat after
+a failure emits one recovery record. If a complete safe identity cannot be
+extracted, logging falls back to stateless `<unknown>` records rather than a
+possibly colliding key. These records never change Lifecycle state or trigger
+registration.
 
 `NACOS_RETRY_TIMES` must be an integer `>=1`; `NACOS_RETRY_INTERVAL` must be a
 finite number `>=0`; `NACOS_REQUEST_TIMEOUT` must be finite and `>0` when the
 configuration center is enabled. Numeric strings are accepted. Booleans, NaN,
 Infinity, fractional attempt counts, and out-of-range values are rejected.
 
+`NACOS_REQUEST_TIMEOUT` applies only to configuration-center reads. Naming RPCs
+use the SDK Client's own `default_timeout`; shutdown snapshots that actual value
+and waits for its remaining budget plus a small allowance, capped at five
+seconds. It falls back to three seconds when no valid SDK timeout is available.
+
 ## Local status
 
-`get_status(app=None)` returns exactly 12 local fields:
+`get_status(app=None)` returns exactly 16 local fields:
 
 ```python
 {
@@ -204,15 +277,27 @@ Infinity, fractional attempt counts, and out-of-range values are rejected.
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
 `registered` is the most recent local fact confirmed by a successful Naming
-RPC, not a live Nacos query. Status does not create a Client, contact Nacos,
-detect an IP, start a thread, or resume post-fork registration.
+RPC, not a live Nacos query. `heartbeat_state` is the most recent local SDK
+heartbeat observation for the current ephemeral registration cycle:
+`unknown` before the first observed beat, `healthy` after success, `failing`
+after failure, and `not_applicable` while disabled, unregistered, or persistent.
+Heartbeat timestamps are Unix epoch seconds; the error field contains only a
+safe exception type. These fields do not prove that the remote instance still
+exists and never drive Lifecycle recovery.
+
+Status does not create a Client, contact Nacos, detect an IP, start a thread,
+or resume post-fork registration.
 
 `get_client(app)` explicitly creates or returns the app/PID Client and raises a
-safe `FlaskNacosError` if creation fails. The `.client` property is cache-only
+safe `NacosConfigError` or `NacosClientError` if preparation fails. The `.client` property is cache-only
 and requires a current Flask context.
 
 ## Health route
@@ -263,26 +348,25 @@ authentication methods are mutually exclusive. Never commit real credentials.
 ## Logging
 
 `NACOS_LOG_ENABLED=False` by default. SDK-native logs are isolated, so
-Flask-Nacos does not create `~/logs/nacos` or an SDK log file. Safe extension
-logging supports:
-
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `NACOS_LOG_ENABLED` | `False` | Master switch. |
-| `NACOS_LOG_CONSOLE_ENABLED` | `True` | Colored console output when enabled. |
-| `NACOS_LOG_FILE_ENABLED` | `True` | Rotating file output when enabled. |
-| `NACOS_LOG_PATH` | `./logs` | Log directory. |
-| `NACOS_LOG_FILENAME` | `flask-nacos.log` | Log filename. |
+Flask-Nacos does not create `~/logs/nacos` or an SDK log file. The complete
+logging settings and defaults are listed in the quick-reference table above.
 
 Console records use blue DEBUG, green INFO, yellow WARNING, red ERROR, and bold
 red CRITICAL. File records contain no ANSI colors. When logging is disabled,
 configured paths are not created.
 
+Choose one logging topology to avoid duplicate output: either disable the
+extension console/file handlers and keep `NACOS_LOG_PROPAGATE=True` so the host
+owns all output, or enable the extension console handler with file output off
+and set `NACOS_LOG_PROPAGATE=False` for container stdout. Do not let multiple
+processes share one rotating file handler.
+
 ## Fork, Gunicorn, and shutdown
 
 Runtime resources are bound to one Flask app and PID. After fork, the entire
-parent Runtime is discarded; ordinary business requests or explicit SDK
-operations may resume automatic registration, while status, health, and
+parent Runtime is discarded. Explicit registration or a real Client,
+Discovery, or Config SDK operation may resume automatic registration without
+waiting for convergence; ordinary business requests, status, health, and
 `.client` reads do not.
 
 For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER=False` and call
@@ -290,12 +374,15 @@ For Gunicorn `--preload`, use `NACOS_AUTO_REGISTER=False` and call
 starting SDK runtime in the preload master.
 
 Workers advertising the same service/group/cluster with the same IP and port
-represent one Nacos instance. Set `NACOS_AUTO_DEREGISTER=False` for a shared
+represent one Nacos instance. Set `NACOS_DEREGISTER_ON_EXIT=False` for a shared
 endpoint so one exiting worker cannot delete it while others remain alive.
 
-`NACOS_AUTO_DEREGISTER=True` is the only exit-deregistration switch. Shutdown
+`NACOS_DEREGISTER_ON_EXIT=True` installs the process-exit deregistration
+callback; `False` installs no remote-cleanup callback. The setting never blocks
+an explicit `deregister_instance()`. On a normal interpreter exit, cleanup
 never changes the user's target, never starts normal retry, and waits only a
 bounded time for an already-active Naming RPC before one best-effort cleanup.
+Forced termination such as `SIGKILL` cannot guarantee callback execution.
 
 ## Security note
 

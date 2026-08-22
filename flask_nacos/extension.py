@@ -7,12 +7,14 @@ import os
 import random
 import time
 import weakref
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
+from numbers import Real
 from threading import Event, Lock, RLock, Thread, current_thread
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import current_app, has_app_context, request
+from flask import current_app, has_app_context
 
 from . import config as config_module
 from . import config_center, discovery, lifecycle, naming
@@ -23,9 +25,9 @@ from ._recovery import (
     _LifecycleFailureStage,
     _synthetic_lifecycle_failure,
 )
-from .client import create_client
-from .exceptions import FlaskNacosError, NacosConfigError
-from .health import HEALTH_ENDPOINT, register_health_route
+from .client import _HeartbeatIdentity, _set_heartbeat_observer, create_client
+from .exceptions import FlaskNacosError, NacosClientError, NacosConfigError
+from .health import register_health_route
 from .logging import (
     cleanup_sdk_default_handlers,
     configure_logger,
@@ -40,7 +42,6 @@ EXTENSION_KEY = "nacos"
 _OWNER_KEY = "_extension"
 _RUNTIME_KEY = "_runtime"
 _AUTO_REGISTER_KEY = "_auto_register_enabled"
-_REGISTRATION_VALID_KEY = "_registration_config_valid"
 _REGISTRATION_ERROR_KEY = "_registration_config_error"
 _CONNECTION_ERROR_KEY = "_connection_config_error"
 _RUNTIME_STALE_KEY = "_runtime_stale"
@@ -48,7 +49,7 @@ _RUNTIME_REBUILD_LOCK_KEY = "_runtime_rebuild_lock"
 _RUNTIME_REBUILD_PID_KEY = "_runtime_rebuild_pid"
 _ATEXIT_REGISTERED_KEY = "_atexit_registered"
 _FORK_HOOK_REGISTERED_KEY = "_fork_hook_registered"
-_REQUEST_HOOK_REGISTERED_KEY = "_request_hook_registered"
+_APP_REF_KEY = "_app_ref"
 
 _INIT_LOCK = RLock()
 _NAMING_RPC_TIMEOUT_FALLBACK = 3.0
@@ -65,6 +66,36 @@ class _NamingResult(Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+class _RegistrationSource(Enum):
+    """Identity of the call that entered registration orchestration."""
+
+    EXPLICIT_REGISTER = "explicit_register"
+    AUTO_REGISTER = "auto_register"
+    PENDING_RECOVERY = "pending_recovery"
+
+
+_REGISTRATION_SOURCE_CONTEXT: ContextVar[_RegistrationSource] = ContextVar(
+    "flask_nacos_registration_source",
+    default=_RegistrationSource.EXPLICIT_REGISTER,
+)
+
+
+@dataclass(frozen=True)
+class _RegisterContext:
+    """Immutable call-local registration metadata."""
+
+    source: _RegistrationSource
+
+
+@dataclass(frozen=True)
+class _RegistrationPolicy:
+    """Pure, call-local decisions derived from a registration source."""
+
+    propagate_config_error: bool
+    consume_pending: bool
+    log_label: str
 
 
 @dataclass(frozen=True)
@@ -113,11 +144,31 @@ class _AppRuntimeState:
     shutting_down: bool = False
     auto_register_pending: bool = False
 
+    heartbeat_state: str = "not_applicable"
+    last_heartbeat_success_at: Optional[float] = None
+    last_heartbeat_failure_at: Optional[float] = None
+    heartbeat_error_type: Optional[str] = None
+    heartbeat_cycle_started_monotonic: Optional[float] = None
+    last_heartbeat_observed_monotonic: Optional[float] = None
+
     naming_rpc_active: bool = False
     naming_rpc_seq: int = 0
     naming_rpc_started_at: Optional[float] = None
     naming_rpc_timeout: Optional[float] = None
     naming_rpc_done: Any = None
+
+
+@dataclass(frozen=True)
+class _PendingRegistrationSnapshot:
+    """Call-local proof that one PID's pending recovery is still current."""
+
+    runtime: _AppRuntimeState
+    pid: int
+    generation: int
+    target_registered: bool
+    operation_kind: Optional[str]
+    operation_thread: Any
+    shutting_down: bool
 
 
 class FlaskNacos:
@@ -172,25 +223,16 @@ class FlaskNacos:
 
         auto_register_enabled = self._should_auto_register(cfg)
         connection_error = self._connection_config_error(cfg)
-        registration_error = self._registration_config_error(cfg, connection_error)
+        registration_error = (
+            self._registration_config_error(cfg, connection_error)
+            if auto_register_enabled
+            else None
+        )
 
-        if connection_error is not None and cfg.get("NACOS_FAIL_FAST", False):
-            raise connection_error
-        if (
-            auto_register_enabled
-            and registration_error is not None
-            and cfg.get("NACOS_FAIL_FAST", False)
-        ):
+        if auto_register_enabled and registration_error is not None:
             raise registration_error
 
         configure_logger(app, cfg)
-
-        if auto_register_enabled and registration_error is not None:
-            logger.error(
-                "Automatic Nacos registration is unavailable (error_type=%s, field=%s)",
-                type(registration_error).__name__,
-                self._registration_error_field(registration_error),
-            )
 
         runtime = self._create_runtime(
             cfg,
@@ -202,18 +244,20 @@ class FlaskNacos:
         state: Dict[str, Any] = {
             "config": cfg,
             _OWNER_KEY: self,
+            _APP_REF_KEY: weakref.ref(app),
             _RUNTIME_KEY: runtime,
             _AUTO_REGISTER_KEY: auto_register_enabled,
-            _REGISTRATION_VALID_KEY: registration_error is None,
-            _REGISTRATION_ERROR_KEY: registration_error,
             _CONNECTION_ERROR_KEY: connection_error,
             _RUNTIME_STALE_KEY: False,
             _RUNTIME_REBUILD_LOCK_KEY: Lock(),
             _RUNTIME_REBUILD_PID_KEY: current_pid,
             _ATEXIT_REGISTERED_KEY: False,
             _FORK_HOOK_REGISTERED_KEY: False,
-            _REQUEST_HOOK_REGISTERED_KEY: False,
         }
+        if auto_register_enabled:
+            # Key presence is the private three-state cache: absent means not
+            # validated, ``None`` means valid, and an exception means invalid.
+            state[_REGISTRATION_ERROR_KEY] = registration_error
 
         try:
             app.extensions[EXTENSION_KEY] = state
@@ -221,14 +265,19 @@ class FlaskNacos:
             if cfg.get("NACOS_HEALTH_CHECK_ENABLED"):
                 register_health_route(app, self)
 
-            self._register_request_recovery_hook(app, state)
             self._register_fork_hook(app, state)
             self._register_atexit(app, state)
 
             if auto_register_enabled:
                 # Automatic and explicit registration intentionally share the
                 # same public entry point and atomic preparation logic.
-                self.register_instance(app)
+                token = _REGISTRATION_SOURCE_CONTEXT.set(
+                    _RegistrationSource.AUTO_REGISTER
+                )
+                try:
+                    self.register_instance(app)
+                finally:
+                    _REGISTRATION_SOURCE_CONTEXT.reset(token)
         except Exception:
             installed = app.extensions.get(EXTENSION_KEY)
             if installed is state:
@@ -244,7 +293,6 @@ class FlaskNacos:
     def _should_auto_register(cfg: Dict[str, Any]) -> bool:
         return bool(
             cfg.get("NACOS_ENABLED", True)
-            and cfg.get("NACOS_REGISTER_ENABLED", True)
             and cfg.get("NACOS_AUTO_REGISTER", True)
         )
 
@@ -266,7 +314,7 @@ class FlaskNacos:
     def _registration_config_error(
         cfg: Dict[str, Any], connection_error: Optional[NacosConfigError]
     ) -> Optional[NacosConfigError]:
-        if not cfg.get("NACOS_ENABLED", True) or not cfg.get("NACOS_REGISTER_ENABLED", True):
+        if not cfg.get("NACOS_ENABLED", True):
             return None
         if connection_error is not None:
             return connection_error
@@ -279,29 +327,6 @@ class FlaskNacos:
             logger.error("Nacos registration configuration is invalid: %s", exc)
             return exc
         return None
-
-    @staticmethod
-    def _registration_error_field(error: BaseException) -> str:
-        """Return a safe configuration field label for diagnostics."""
-        message = str(error)
-        for field_name in (
-            "NACOS_SERVICE_NAME",
-            "NACOS_SERVICE_PORT",
-            "NACOS_SERVICE_WEIGHT",
-            "NACOS_SERVICE_METADATA",
-            "NACOS_SERVICE_EPHEMERAL",
-            "NACOS_SERVICE_HEARTBEAT_INTERVAL",
-            "NACOS_RETRY_TIMES",
-            "NACOS_RETRY_INTERVAL",
-            "NACOS_SERVER_ADDR",
-            "NACOS_USERNAME",
-            "NACOS_PASSWORD",
-            "NACOS_ACCESS_KEY",
-            "NACOS_SECRET_KEY",
-        ):
-            if field_name in message:
-                return field_name
-        return "registration_config"
 
     def _create_runtime(
         self,
@@ -333,11 +358,14 @@ class FlaskNacos:
             return None
 
         self._resume_auto_register_if_pending(app, state, runtime)
+        app, state, runtime = self._require_state(app)
         try:
             return self._get_or_create_client(state, runtime)
+        except (NacosConfigError, NacosClientError):
+            raise
         except Exception as exc:
             logger.error("Failed to create Nacos client (error_type=%s)", type(exc).__name__)
-            raise FlaskNacosError("Failed to create Nacos client") from exc
+            raise NacosClientError("Failed to create Nacos client") from exc
 
     def _get_or_create_client(self, state: Dict[str, Any], runtime: _AppRuntimeState) -> Any:
         """Create and cache one client without consuming auto-register pending."""
@@ -355,90 +383,455 @@ class FlaskNacos:
                 raise connection_error
             config_module.validate_connection_config(cfg)
             client = create_client(cfg)
+            try:
+                app_ref = state.get(_APP_REF_KEY)
+                app = app_ref() if callable(app_ref) else None
+                if app is not None:
+                    _set_heartbeat_observer(
+                        client,
+                        self._make_heartbeat_observer(app, runtime),
+                    )
+            except Exception:
+                # Heartbeat observation is optional and must not make a usable
+                # SDK client unavailable.
+                pass
             cleanup_sdk_default_handlers(cfg)
             runtime.client = client
             return client
 
-    def _client_for_operation(self, app, state: Dict[str, Any], runtime: _AppRuntimeState) -> Any:
+    def _make_heartbeat_observer(self, app, runtime: _AppRuntimeState):
+        """Return a non-owning observer for one app/PID Runtime."""
+        extension_ref = weakref.ref(self)
+        app_ref = weakref.ref(app)
+        runtime_ref = weakref.ref(runtime)
+
+        def _observe(
+            identity: Optional[_HeartbeatIdentity],
+            succeeded: bool,
+            started_monotonic: float,
+            observed_monotonic: float,
+            observed_at: float,
+            error_type: Optional[str],
+        ) -> None:
+            extension = extension_ref()
+            target_app = app_ref()
+            target_runtime = runtime_ref()
+            if extension is None or target_app is None or target_runtime is None:
+                return
+            extension._record_heartbeat_observation(
+                target_app,
+                target_runtime,
+                identity,
+                succeeded=succeeded,
+                started_monotonic=started_monotonic,
+                observed_monotonic=observed_monotonic,
+                observed_at=observed_at,
+                error_type=error_type,
+            )
+
+        return _observe
+
+    def _record_heartbeat_observation(
+        self,
+        app,
+        runtime: _AppRuntimeState,
+        identity: Optional[_HeartbeatIdentity],
+        *,
+        succeeded: bool,
+        started_monotonic: float,
+        observed_monotonic: float,
+        observed_at: float,
+        error_type: Optional[str],
+    ) -> None:
+        """Commit one sanitized heartbeat event if it belongs to the current cycle."""
+        started_value = self._heartbeat_time_value(started_monotonic)
+        observed_value = self._heartbeat_time_value(observed_monotonic)
+        observed_wall_time = self._heartbeat_time_value(observed_at)
+        if (
+            started_value is None
+            or observed_value is None
+            or observed_wall_time is None
+        ):
+            return
+
+        state = app.extensions.get(EXTENSION_KEY)
+        if (
+            not self._is_owned_state(state)
+            or state.get(_RUNTIME_KEY) is not runtime
+            or state.get(_RUNTIME_STALE_KEY, False)
+            or runtime.pid != self._current_pid()
+        ):
+            return
+
+        with runtime.state_lock:
+            # Recheck the app/PID authority inside the same critical section as
+            # the observation commit. A fork or state replacement invalidates
+            # the old callback even when the registered identity is unchanged.
+            current_state = app.extensions.get(EXTENSION_KEY)
+            if (
+                current_state is not state
+                or not self._is_owned_state(current_state)
+                or current_state.get(_RUNTIME_KEY) is not runtime
+                or current_state.get(_RUNTIME_STALE_KEY, False)
+                or runtime.pid != self._current_pid()
+                or runtime.shutting_down
+                or not runtime.registered
+            ):
+                return
+
+            registered_identity = runtime.registered_identity
+            if (
+                registered_identity is None
+                or registered_identity.get("ephemeral") is not True
+                or not self._heartbeat_identity_matches_registered(
+                    identity, registered_identity
+                )
+            ):
+                return
+
+            cycle_started = runtime.heartbeat_cycle_started_monotonic
+            if cycle_started is None or started_value < cycle_started:
+                return
+            last_observed = runtime.last_heartbeat_observed_monotonic
+            if last_observed is not None and observed_value < last_observed:
+                return
+
+            runtime.last_heartbeat_observed_monotonic = observed_value
+            if succeeded:
+                runtime.heartbeat_state = "healthy"
+                runtime.last_heartbeat_success_at = observed_wall_time
+                runtime.heartbeat_error_type = None
+            else:
+                runtime.heartbeat_state = "failing"
+                runtime.last_heartbeat_failure_at = observed_wall_time
+                runtime.heartbeat_error_type = (
+                    error_type
+                    if type(error_type) is str and bool(error_type)
+                    else "Exception"
+                )
+
+    @staticmethod
+    def _heartbeat_time_value(value: Any) -> Optional[float]:
+        try:
+            if isinstance(value, bool) or not isinstance(value, Real):
+                return None
+            converted = float(value)
+            return converted if math.isfinite(converted) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _heartbeat_identity_matches_registered(
+        identity: Optional[_HeartbeatIdentity],
+        registered_identity: Dict[str, Any],
+    ) -> bool:
+        """Compare SDK and registration identities with shared default semantics."""
+        try:
+            if identity is None:
+                return False
+            service_name, group_name, cluster_name, ip, port = identity
+            observed = FlaskNacos._normalize_heartbeat_instance_identity(
+                service_name,
+                group_name,
+                cluster_name,
+                ip,
+                port,
+            )
+            registered = FlaskNacos._normalize_heartbeat_instance_identity(
+                registered_identity.get("service_name"),
+                registered_identity.get("group_name"),
+                registered_identity.get("cluster_name"),
+                registered_identity.get("ip"),
+                registered_identity.get("port"),
+            )
+            return observed is not None and observed == registered
+        except Exception:
+            return False
+
+    @staticmethod
+    def _normalize_heartbeat_instance_identity(
+        service_name: Any,
+        group_name: Any,
+        cluster_name: Any,
+        ip: Any,
+        port: Any,
+    ) -> Optional[Tuple[str, str, str, str, int]]:
+        """Normalize both SDK and registered identities without string coercion."""
+        try:
+            normalized_group = "DEFAULT_GROUP" if group_name is None else group_name
+            normalized_cluster = "DEFAULT" if cluster_name is None else cluster_name
+            if (
+                type(service_name) is not str
+                or not service_name.strip()
+                or type(normalized_group) is not str
+                or not normalized_group.strip()
+                or type(normalized_cluster) is not str
+                or not normalized_cluster.strip()
+                or type(ip) is not str
+                or not ip.strip()
+                or type(port) is not int
+                or not 1 <= port <= 65535
+            ):
+                return None
+            return service_name, normalized_group, normalized_cluster, ip, port
+        except Exception:
+            return None
+
+    @staticmethod
+    def _clear_heartbeat_observation_locked(runtime: _AppRuntimeState) -> None:
+        runtime.heartbeat_state = "not_applicable"
+        runtime.last_heartbeat_success_at = None
+        runtime.last_heartbeat_failure_at = None
+        runtime.heartbeat_error_type = None
+        runtime.heartbeat_cycle_started_monotonic = None
+        runtime.last_heartbeat_observed_monotonic = None
+
+    @staticmethod
+    def _start_heartbeat_observation_locked(
+        runtime: _AppRuntimeState, identity: Dict[str, Any]
+    ) -> None:
+        cycle_started: Optional[float] = None
+        try:
+            candidate = time.monotonic()
+            if (
+                not isinstance(candidate, bool)
+                and isinstance(candidate, Real)
+                and math.isfinite(float(candidate))
+            ):
+                cycle_started = float(candidate)
+        except Exception:
+            pass
+
+        runtime.heartbeat_state = (
+            "unknown" if identity.get("ephemeral") is True else "not_applicable"
+        )
+        runtime.last_heartbeat_success_at = None
+        runtime.last_heartbeat_failure_at = None
+        runtime.heartbeat_error_type = None
+        runtime.heartbeat_cycle_started_monotonic = cycle_started
+        runtime.last_heartbeat_observed_monotonic = None
+
+    def _client_for_operation(self, app) -> Tuple[Dict[str, Any], _AppRuntimeState, Any]:
+        _, state, runtime = self._require_state(app)
         cfg = state["config"]
         if not cfg.get("NACOS_ENABLED", True):
-            return None
+            return state, runtime, None
         self._resume_auto_register_if_pending(app, state, runtime)
+        _, state, runtime = self._require_state(app)
         try:
-            return self._get_or_create_client(state, runtime)
+            return state, runtime, self._get_or_create_client(state, runtime)
+        except (NacosConfigError, NacosClientError):
+            raise
         except Exception as exc:
             logger.error("Nacos client is unavailable (error_type=%s)", type(exc).__name__)
-            if cfg.get("NACOS_FAIL_FAST", False):
-                raise FlaskNacosError("Failed to create Nacos client") from exc
-            return None
+            raise NacosClientError("Failed to create Nacos client") from exc
 
     # -- Registration lifecycle ------------------------------------------
 
     def register_instance(self, app=None) -> None:
         """Set the registration target and start non-blocking convergence."""
-        app, state, runtime = self._require_state(app)
-        cfg = state["config"]
-        if not cfg.get("NACOS_ENABLED", True):
-            return None
-        if not cfg.get("NACOS_REGISTER_ENABLED", True):
-            return None
-
-        thread, config_error = self._prepare_registration(
-            app, state, runtime, explicit=True, consume_pending=False
-        )
-        self._start_registration_thread(app, state, runtime, thread)
-
-        if config_error is not None and cfg.get("NACOS_FAIL_FAST", False):
-            raise config_error
+        source = _REGISTRATION_SOURCE_CONTEXT.get()
+        context = _RegisterContext(source=source)
+        self._prepare_registration(app, context, new_command=True)
         return None
 
     def _prepare_registration(
         self,
         app,
-        state: Dict[str, Any],
-        runtime: _AppRuntimeState,
+        context: _RegisterContext,
         *,
-        explicit: bool,
-        consume_pending: bool,
-    ) -> Tuple[Any, Optional[BaseException]]:
-        """Run the sole atomic register preparation state transition."""
-        with runtime.state_lock:
-            return self._prepare_register_locked(
-                app,
-                state,
-                runtime,
-                explicit=explicit,
-                consume_pending=consume_pending,
-            )
+        new_command: bool,
+    ) -> None:
+        """Validate, arbitrate, and enter the sole register state transition."""
+        while True:
+            target_app, state, runtime = self._require_state(app)
+            cfg = state["config"]
+            if not cfg.get("NACOS_ENABLED", True):
+                return
 
-    def _prepare_register_locked(
+            pending_snapshot: Optional[_PendingRegistrationSnapshot] = None
+            with runtime.state_lock:
+                if runtime.shutting_down:
+                    return
+                if context.source is _RegistrationSource.PENDING_RECOVERY:
+                    pending_snapshot = self._pending_snapshot_locked(runtime)
+                    if pending_snapshot is None:
+                        return
+                cache_present = _REGISTRATION_ERROR_KEY in state
+                registration_error = state.get(_REGISTRATION_ERROR_KEY)
+
+            if not cache_present:
+                # This is intentionally outside the lifecycle lock. Validation
+                # is deterministic and local: it creates no client or Worker
+                # and performs no SDK or network operation.
+                candidate = self._registration_config_error(
+                    cfg,
+                    state.get(_CONNECTION_ERROR_KEY),
+                )
+                current_app, current_state, current_runtime = self._require_state(
+                    target_app
+                )
+                if (
+                    current_state is not state
+                    or current_state.get("config") is not cfg
+                    or current_runtime is not runtime
+                ):
+                    continue
+
+                restart = False
+                with current_runtime.state_lock:
+                    if not self._registration_state_is_current(
+                        current_app,
+                        current_state,
+                        cfg,
+                        current_runtime,
+                    ):
+                        restart = True
+                    else:
+                        # Compare-and-set: the first completed candidate owns
+                        # this app state's immutable validation result.
+                        if _REGISTRATION_ERROR_KEY not in current_state:
+                            current_state[_REGISTRATION_ERROR_KEY] = candidate
+                        registration_error = current_state[_REGISTRATION_ERROR_KEY]
+                if restart:
+                    continue
+
+            policy = self._registration_policy(context)
+            current_app, current_state, current_runtime = self._require_state(target_app)
+            if (
+                current_state is not state
+                or current_state.get("config") is not cfg
+                or current_runtime is not runtime
+            ):
+                continue
+
+            restart = False
+            thread = None
+            error_to_raise: Optional[BaseException] = None
+            with current_runtime.state_lock:
+                if not self._registration_state_is_current(
+                    current_app,
+                    current_state,
+                    cfg,
+                    current_runtime,
+                ):
+                    restart = True
+                elif current_runtime.shutting_down:
+                    return
+                elif policy.consume_pending and not self._pending_snapshot_matches_locked(
+                    current_runtime,
+                    pending_snapshot,
+                ):
+                    # The deterministic cache may remain, but a stale pending
+                    # recovery must not submit lifecycle state.
+                    return
+                elif registration_error is not None and policy.propagate_config_error:
+                    error_to_raise = registration_error
+                else:
+                    # Pending handling is source policy, not part of the
+                    # lifecycle transition. Both branches finish before the
+                    # source-blind state machine is entered.
+                    current_runtime.auto_register_pending = False
+                    thread, _ = self._prepare_register_locked(
+                        current_state,
+                        current_runtime,
+                        new_command=new_command,
+                    )
+
+            if restart:
+                continue
+            if error_to_raise is not None:
+                raise error_to_raise
+            self._start_registration_thread(
+                current_app,
+                current_state,
+                current_runtime,
+                thread,
+            )
+            return
+
+    @staticmethod
+    def _registration_policy(
+        context: _RegisterContext,
+    ) -> _RegistrationPolicy:
+        """Return immutable entry behavior without touching lifecycle state."""
+        source = context.source
+        return _RegistrationPolicy(
+            propagate_config_error=source is not _RegistrationSource.PENDING_RECOVERY,
+            consume_pending=source is _RegistrationSource.PENDING_RECOVERY,
+            log_label=source.value,
+        )
+
+    def _registration_state_is_current(
         self,
         app,
         state: Dict[str, Any],
+        cfg: Dict[str, Any],
+        runtime: _AppRuntimeState,
+    ) -> bool:
+        """Return whether call-local objects still own the current app/PID."""
+        return bool(
+            app.extensions.get(EXTENSION_KEY) is state
+            and state.get(_OWNER_KEY) is self
+            and state.get("config") is cfg
+            and state.get(_RUNTIME_KEY) is runtime
+            and not state.get(_RUNTIME_STALE_KEY, False)
+            and runtime.pid == self._current_pid()
+        )
+
+    @staticmethod
+    def _pending_snapshot_locked(
+        runtime: _AppRuntimeState,
+    ) -> Optional[_PendingRegistrationSnapshot]:
+        if runtime.shutting_down or not runtime.auto_register_pending:
+            return None
+        return _PendingRegistrationSnapshot(
+            runtime=runtime,
+            pid=runtime.pid,
+            generation=runtime.operation_generation,
+            target_registered=runtime.target_registered,
+            operation_kind=runtime.operation_kind,
+            operation_thread=runtime.operation_thread,
+            shutting_down=runtime.shutting_down,
+        )
+
+    @staticmethod
+    def _pending_snapshot_matches_locked(
+        runtime: _AppRuntimeState,
+        snapshot: Optional[_PendingRegistrationSnapshot],
+    ) -> bool:
+        return bool(
+            snapshot is not None
+            and snapshot.runtime is runtime
+            and snapshot.pid == runtime.pid
+            and snapshot.generation == runtime.operation_generation
+            and snapshot.target_registered == runtime.target_registered
+            and snapshot.operation_kind == runtime.operation_kind
+            and snapshot.operation_thread is runtime.operation_thread
+            and snapshot.shutting_down == runtime.shutting_down
+            and not runtime.shutting_down
+            and runtime.auto_register_pending
+        )
+
+    def _prepare_register_locked(
+        self,
+        state: Dict[str, Any],
         runtime: _AppRuntimeState,
         *,
-        explicit: bool,
-        consume_pending: bool,
+        new_command: bool,
     ) -> Tuple[Any, Optional[BaseException]]:
         """Prepare one register Worker while ``runtime.state_lock`` is held."""
-        del app  # the argument documents which app owns the prepared Worker
         cfg = state["config"]
-        if not cfg.get("NACOS_ENABLED", True) or not cfg.get("NACOS_REGISTER_ENABLED", True):
+        if not cfg.get("NACOS_ENABLED", True):
             return None, None
         if runtime.shutting_down:
             return None, None
-
-        if consume_pending:
-            if not runtime.auto_register_pending:
-                return None, None
-            runtime.auto_register_pending = False
-        elif explicit:
-            runtime.auto_register_pending = False
 
         target_changed = not runtime.target_registered
         if target_changed:
             runtime.target_registered = True
             runtime.operation_generation += 1
+            runtime.operation_wakeup.set()
 
         if runtime.registered:
             runtime.last_error = None
@@ -452,10 +845,11 @@ class FlaskNacos:
         if runtime.operation_kind is not None:
             return None, None
 
-        if explicit and not target_changed:
-            # An explicit call retries an unmet idle target. Pure duplicate
-            # calls while an operation is active never reach this branch.
+        if new_command and not target_changed:
+            # Any new registration command retries an unmet idle target. The
+            # transition is deliberately identical for all call sources.
             runtime.operation_generation += 1
+            runtime.operation_wakeup.set()
 
         try:
             thread = Thread(
@@ -978,13 +1372,12 @@ class FlaskNacos:
                 )
 
             if schedule_register:
-                thread, _ = self._prepare_registration(
-                    app,
-                    state,
-                    runtime,
-                    explicit=False,
-                    consume_pending=False,
-                )
+                with runtime.state_lock:
+                    thread, _ = self._prepare_register_locked(
+                        state,
+                        runtime,
+                        new_command=False,
+                    )
                 self._start_registration_thread(app, state, runtime, thread)
 
         return outcome.result is not _NamingResult.FAILED
@@ -1083,6 +1476,7 @@ class FlaskNacos:
                 )
                 return _NamingOutcome(_NamingResult.FAILED, failure, False, stage)
 
+            naming_rpc_timeout = self._naming_timeout_seconds(client)
             with runtime.state_lock:
                 gate = self._naming_rpc_gate_locked(runtime, rpc_type, allow_during_shutdown)
                 if gate is _NamingResult.SKIPPED:
@@ -1092,7 +1486,7 @@ class FlaskNacos:
                 runtime.naming_rpc_active = True
                 runtime.naming_rpc_done = rpc_done
                 runtime.naming_rpc_started_at = time.monotonic()
-                runtime.naming_rpc_timeout = self._naming_timeout_seconds(state["config"])
+                runtime.naming_rpc_timeout = naming_rpc_timeout
 
             rpc_failure: Optional[_LifecycleFailure] = None
             try:
@@ -1132,9 +1526,13 @@ class FlaskNacos:
                             committed_identity = dict(actual_identity)
                             runtime.registered_identity = committed_identity
                             runtime.registered = True
+                            self._start_heartbeat_observation_locked(
+                                runtime, committed_identity
+                            )
                         else:
                             runtime.registered = False
                             runtime.registered_identity = None
+                            self._clear_heartbeat_observation_locked(runtime)
                         runtime.last_error = None
                     elif record_lifecycle_error and rpc_failure is not None:
                         self._record_rpc_error_locked(
@@ -1236,9 +1634,12 @@ class FlaskNacos:
             runtime.last_error = None
 
     @staticmethod
-    def _naming_timeout_seconds(cfg: Dict[str, Any]) -> Optional[float]:
-        value = cfg.get("NACOS_REQUEST_TIMEOUT")
-        if value is None or isinstance(value, bool):
+    def _naming_timeout_seconds(client: Any) -> Optional[float]:
+        try:
+            value = client.default_timeout
+        except Exception:
+            return None
+        if isinstance(value, bool) or not isinstance(value, Real):
             return None
         try:
             parsed = float(value)
@@ -1259,16 +1660,16 @@ class FlaskNacos:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Return instances for ``service_name`` using the current app."""
-        app, state, runtime = self._require_state()
+        app, state, _ = self._require_state()
+        state, _, client = self._client_for_operation(app)
         cfg = state["config"]
-        client = self._client_for_operation(app, state, runtime)
         if client is None:
             return []
         if cluster is None:
             cluster = cfg.get("NACOS_DISCOVERY_CLUSTER")
         if metadata is None:
             metadata = cfg.get("NACOS_DISCOVERY_METADATA") or {}
-        result = self._safe(
+        result = self._run_sync_operation(
             lambda: naming.list_instances(
                 client,
                 cfg,
@@ -1280,7 +1681,6 @@ class FlaskNacos:
             ),
             cfg,
             "Service discovery failed",
-            default=[],
         )
         return result if result is not None else []
 
@@ -1303,11 +1703,10 @@ class FlaskNacos:
             metadata=metadata,
         )
         strategy_name = strategy or cfg.get("NACOS_DISCOVERY_STRATEGY", "first")
-        return self._safe(
+        return self._run_sync_operation(
             lambda: discovery.select_instance(instances, strategy_name),
             cfg,
             "Failed to select a healthy instance",
-            default=None,
             retry=False,
         )
 
@@ -1323,20 +1722,20 @@ class FlaskNacos:
         self, data_id: Optional[str] = None, group: Optional[str] = None
     ) -> Optional[str]:
         """Fetch raw configuration content for the current application."""
-        app, state, runtime = self._require_state()
+        app, state, _ = self._require_state()
         cfg = state["config"]
         if not cfg.get("NACOS_CONFIG_ENABLED", True):
             logger.info("Nacos config center is disabled (NACOS_CONFIG_ENABLED=False)")
             return None
-        client = self._client_for_operation(app, state, runtime)
+        state, _, client = self._client_for_operation(app)
+        cfg = state["config"]
         if client is None:
             return None
         effective_data_id = data_id or cfg.get("NACOS_CONFIG_DATA_ID")
-        return self._safe(
+        return self._run_sync_operation(
             lambda: config_center.get_config(client, cfg, effective_data_id, group=group),
             cfg,
             "Failed to get config from Nacos",
-            default=None,
         )
 
     # -- Local status and health support ----------------------------------
@@ -1358,6 +1757,14 @@ class FlaskNacos:
             last_error = runtime.last_error if enabled else None
             pid = runtime.pid
             client_created = bool(runtime.client is not None) if enabled else False
+            heartbeat_state = runtime.heartbeat_state if enabled else "not_applicable"
+            last_heartbeat_success_at = (
+                runtime.last_heartbeat_success_at if enabled else None
+            )
+            last_heartbeat_failure_at = (
+                runtime.last_heartbeat_failure_at if enabled else None
+            )
+            heartbeat_error_type = runtime.heartbeat_error_type if enabled else None
 
         if identity is None:
             service_name = cfg.get("NACOS_SERVICE_NAME")
@@ -1385,6 +1792,10 @@ class FlaskNacos:
             "registered": registered,
             "operation_running": operation_running,
             "last_error": last_error,
+            "heartbeat_state": heartbeat_state,
+            "last_heartbeat_success_at": last_heartbeat_success_at,
+            "last_heartbeat_failure_at": last_heartbeat_failure_at,
+            "heartbeat_error_type": heartbeat_error_type,
         }
 
     # -- Fork recovery -----------------------------------------------------
@@ -1447,40 +1858,21 @@ class FlaskNacos:
     def _resume_auto_register_if_pending(
         self, app, state: Dict[str, Any], runtime: _AppRuntimeState
     ) -> None:
-        thread, _ = self._prepare_registration(
+        del state
+        with runtime.state_lock:
+            if runtime.shutting_down or not runtime.auto_register_pending:
+                return
+        self._prepare_registration(
             app,
-            state,
-            runtime,
-            explicit=False,
-            consume_pending=True,
+            _RegisterContext(source=_RegistrationSource.PENDING_RECOVERY),
+            new_command=True,
         )
-        self._start_registration_thread(app, state, runtime, thread)
-
-    def _register_request_recovery_hook(self, app, state: Dict[str, Any]) -> None:
-        if state.get(_REQUEST_HOOK_REGISTERED_KEY):
-            return
-        extension_ref = weakref.ref(self)
-
-        def _resume_after_fork_request():
-            extension = extension_ref()
-            if extension is None:
-                return None
-            target_app = current_app._get_current_object()
-            target_state = target_app.extensions.get(EXTENSION_KEY)
-            if not extension._is_owned_state(target_state):
-                return None
-            runtime = extension._ensure_current_runtime(target_state)
-            if request.endpoint == HEALTH_ENDPOINT:
-                return None
-            extension._resume_auto_register_if_pending(target_app, target_state, runtime)
-            return None
-
-        app.before_request(_resume_after_fork_request)
-        state[_REQUEST_HOOK_REGISTERED_KEY] = True
 
     # -- Process exit ------------------------------------------------------
 
     def _register_atexit(self, app, state: Dict[str, Any]) -> None:
+        if not state["config"]["NACOS_DEREGISTER_ON_EXIT"]:
+            return
         if state.get(_ATEXIT_REGISTERED_KEY):
             return
         extension_ref = weakref.ref(self)
@@ -1531,8 +1923,6 @@ class FlaskNacos:
         del rpc_seq, registered_identity
 
         runtime.operation_wakeup.set()
-        if not state["config"].get("NACOS_AUTO_DEREGISTER", True):
-            return
 
         if rpc_active:
             if rpc_done is None:
@@ -1614,24 +2004,21 @@ class FlaskNacos:
     def _current_pid() -> int:
         return lifecycle.current_pid()
 
-    def _safe(
+    def _run_sync_operation(
         self,
         func,
         cfg: Dict[str, Any],
         message: str,
-        default: Any = None,
         retry: bool = True,
     ) -> Any:
-        """Run non-lifecycle SDK work with the existing fail-fast contract."""
+        """Run synchronous SDK work and preserve its domain exception."""
         try:
             if retry:
                 return run_with_retry(func, message, cfg)
             return func()
         except Exception as exc:
             logger.error("%s (error_type=%s)", message, type(exc).__name__)
-            if cfg.get("NACOS_FAIL_FAST", False):
-                raise
-            return default
+            raise
 
 
 __all__ = ["FlaskNacos", "EXTENSION_KEY"]

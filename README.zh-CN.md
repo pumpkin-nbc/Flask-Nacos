@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Flask-Nacos 为 Flask 提供 Nacos 服务注册、服务发现与配置中心接入。1.1.0 使用目标状态
+Flask-Nacos 为 Flask 提供 Nacos 服务注册、服务发现与配置中心接入。1.1.1 使用目标状态
 生命周期、按 app/PID 惰性创建 Client，并严格隔离多个 Flask 应用。
 
 ## 新手从这里开始
@@ -53,7 +53,7 @@ python -m pip install flask-nacos
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 ```
 
 ## 快速开始
@@ -85,8 +85,61 @@ init_app(app)
   -> daemon Worker创建 Client并执行 Naming I/O，初始化线程直接返回
 ```
 
-`NACOS_AUTO_REGISTER`（默认 `True`）是唯一的自动注册开关。自动注册要求
-`NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与 `NACOS_AUTO_REGISTER` 同时开启。
+`NACOS_AUTO_REGISTER`（默认 `True`）是唯一的自动注册开关。`NACOS_ENABLED` 与
+`NACOS_AUTO_REGISTER` 同时开启时执行自动注册；关闭自动注册不影响显式调用
+`register_instance(app)`。
+
+## 配置项速查
+
+所有配置都从 Flask `app.config` 读取。下表与当前代码默认值保持一致；参数约束和完整示例见
+[配置项参考](docs/configuration.zh-CN.md)。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `NACOS_ENABLED` | `True` | Nacos 总开关；关闭后不创建 Client，相关操作为 no-op。 |
+| `NACOS_SERVER_ADDR` | `"127.0.0.1:8848"` | Nacos Server 地址，格式为 `host:port`。 |
+| `NACOS_NAMESPACE_ID` | `""` | 命名空间 ID。 |
+| `NACOS_USERNAME` | `None` | 用户名认证的用户名，必须与密码成对配置。 |
+| `NACOS_PASSWORD` | `None` | 用户名认证的密码，请勿提交到源码库。 |
+| `NACOS_ACCESS_KEY` | `None` | AccessKey 认证信息，必须与 SecretKey 成对配置。 |
+| `NACOS_SECRET_KEY` | `None` | SecretKey 认证信息，请勿提交到源码库。 |
+| `NACOS_GROUP_NAME` | `"DEFAULT_GROUP"` | 默认 group 回退值。 |
+| `NACOS_AUTO_REGISTER` | `True` | 初始化及 fork 后恢复时自动提交注册目标。 |
+| `NACOS_DEREGISTER_ON_EXIT` | `True` | 是否安装正常进程退出时的尽力注销回调。 |
+| `NACOS_SERVICE_NAME` | `None` | 注册服务名；执行注册时必填。 |
+| `NACOS_SERVICE_IP` | `None` | 注册实例 IP；未设置时自动识别。 |
+| `NACOS_SERVICE_PORT` | `None` | 注册实例端口，范围 `1-65535`；执行注册时必填。 |
+| `NACOS_SERVICE_GROUP` | `"DEFAULT_GROUP"` | 服务注册所用 group。 |
+| `NACOS_SERVICE_CLUSTER` | `"DEFAULT"` | 服务注册所用 cluster。 |
+| `NACOS_SERVICE_WEIGHT` | `1.0` | 实例负载均衡权重，必须为大于 `0` 的有限数字。 |
+| `NACOS_SERVICE_METADATA` | `{}` | 注册实例 metadata。 |
+| `NACOS_SERVICE_EPHEMERAL` | `True` | 是否注册为临时实例。 |
+| `NACOS_SERVICE_HEARTBEAT_INTERVAL` | `5.0` | 临时实例的 SDK 心跳间隔，单位为秒。 |
+| `NACOS_SERVICE_HEALTHY` | `True` | 注册时的初始健康标识。 |
+| `NACOS_SERVICE_ENABLED` | `True` | 注册实例是否启用。 |
+| `NACOS_CONFIG_ENABLED` | `True` | 是否启用配置中心能力。 |
+| `NACOS_CONFIG_DATA_ID` | `None` | `get_config()` 未传 `data_id` 时使用的默认值。 |
+| `NACOS_CONFIG_GROUP` | `"DEFAULT_GROUP"` | 配置中心默认 group。 |
+| `NACOS_RETRY_ENABLED` | `True` | 是否启用有限重试和注册生命周期恢复。 |
+| `NACOS_RETRY_TIMES` | `3` | 有限阶段最大尝试次数，必须为整数且 `>=1`。 |
+| `NACOS_RETRY_INTERVAL` | `1.0` | 尝试间隔秒数，必须为有限数字且 `>=0`。 |
+| `NACOS_REQUEST_TIMEOUT` | `5.0` | 配置中心读取超时；不覆盖 Naming Client timeout。 |
+| `NACOS_HEALTH_CHECK_ENABLED` | `False` | 是否注册 Flask 健康检查路由。 |
+| `NACOS_HEALTH_CHECK_PATH` | `"/health/nacos"` | 健康检查路由路径。 |
+| `NACOS_DISCOVERY_STRATEGY` | `"first"` | 健康实例选择策略：`first`、`random` 或 `weight`。 |
+| `NACOS_DISCOVERY_CLUSTER` | `None` | 服务发现默认 cluster 过滤条件。 |
+| `NACOS_DISCOVERY_METADATA` | `{}` | 服务发现默认 metadata 过滤条件。 |
+| `NACOS_INSTANCE_NORMALIZE` | `True` | 是否返回标准化实例字典并跳过非法端点。 |
+| `NACOS_LOG_ENABLED` | `False` | Flask-Nacos 安全日志总开关。 |
+| `NACOS_LOG_LEVEL` | `"INFO"` | 安全日志级别。 |
+| `NACOS_LOG_CONSOLE_ENABLED` | `True` | 日志启用后是否输出到控制台。 |
+| `NACOS_LOG_FILE_ENABLED` | `True` | 日志启用后是否写入文件。 |
+| `NACOS_LOG_PATH` | `"./logs"` | 日志文件目录。 |
+| `NACOS_LOG_FILENAME` | `"flask-nacos.log"` | `NACOS_LOG_PATH` 内的日志文件名。 |
+| `NACOS_LOG_FORMAT` | `"%(asctime)s [%(levelname)s] %(name)s: %(message)s"` | Flask-Nacos handler 使用的日志格式。 |
+| `NACOS_LOG_PROPAGATE` | `True` | 是否将记录传播给父级 logger。 |
+| `NACOS_LOG_MAX_BYTES` | `10485760` | 轮转文件大小上限；设为 `None` 时使用普通文件 Handler。 |
+| `NACOS_LOG_BACKUP_COUNT` | `5` | 轮转日志保留的备份文件数。 |
 
 ## 应用工厂
 
@@ -124,7 +177,6 @@ Worker。Client 构造、网络重试、Naming RPC 与 SDK 心跳启动都不会
 
 `deregister_instance(app=None) -> bool` 将最终目标设为未注册。幂等/接受/成功清理，或新的
 注册命令使 RPC 不再需要时返回 `True`；清理仍有必要但失败时返回 `False`。
-`NACOS_REGISTER_ENABLED=False` 只阻止新注册，不会阻止清理已有实例。
 
 Worker持续读取最新目标，因此 register → deregister → register 最终服从最后一次 register；
 旧命令不会永久覆盖它。注册、普通注销、补偿注销与退出注销共享同一 Naming single-flight
@@ -140,11 +192,13 @@ Worker持续读取最新目标，因此 register → deregister → register 最
 启用自动注册时，`init_app(app)` 会在创建扩展状态前校验 `NACOS_SERVICE_NAME`、端口、权重、
 metadata、ephemeral/心跳、认证与重试配置。
 
-- `NACOS_FAIL_FAST=True`：确定性自动注册错误在提交 `app.extensions["nacos"]` 前抛出。
-- `NACOS_FAIL_FAST=False`：保留可用扩展状态与安全错误，不启动无效 Worker。
+关闭自动注册时，初始化会跳过仅服务于注册的校验。首次显式调用
+`register_instance(app)` 时才执行并缓存纯本地确定性校验；该过程不创建 Client，也不执行
+网络 I/O。
 
-`NACOS_FAIL_FAST` 不会把生命周期运行时失败变成同步注册异常。Thread 创建/启动、Client
-创建、超时、连接与 SDK失败只以安全类型/错误码写入 `last_error`。
+启用自动注册时，纯本地确定性错误会在提交 `app.extensions["nacos"]` 前抛出；显式注册
+遇到同类错误也会同步抛出，且不改变生命周期目标。Thread 创建/启动、Client构造、超时、
+连接与 SDK失败仍由生命周期 Worker处理，只以安全类型/错误码写入 `last_error`。
 
 注册生命周期失败会立即、保守地分类：
 
@@ -153,17 +207,29 @@ metadata、ephemeral/心跳、认证与重试配置。
 - 有结构化证据确认的瞬时传输故障先使用相同有限预算，耗尽后进入低频、可中断、带有界
   退避与抖动的生命周期自恢复，直到目标变化、进程退出、后续失败不再属于瞬时故障，或注册成功。
 
+自恢复同时覆盖惰性 Client 构造与 Naming 注册，但只处理经过验证的瞬时证据。SDK `2.0.11`
+在认证 Client 构造期间抛出的精确裸 `nacos.exception.NacosRequestException`，仅在 register
+方向进入自恢复；结构化 401/403 认证失败仍属于确定性错误并立即停止。
+
 `NACOS_RETRY_ENABLED=False` 会同时关闭有限重试和生命周期自恢复。自恢复仅处理已确认的
 瞬时故障，也不轮询远端状态；`registered == target_registered` 后 Worker立即退出，心跳与
 连接维护仍完全由 Nacos SDK负责。
+
+心跳可观测状态也只属于当前 Client：失败按 service/group/cluster/IP/port 身份独立节流，
+失败后的首次成功只记录一次恢复日志。若无法安全提取完整身份，则退化为无状态
+`<unknown>` 日志，不构造可能碰撞的 key。该日志状态不会修改 Lifecycle，也不会触发注册。
 
 `NACOS_RETRY_TIMES` 必须是 `>=1` 的整数；`NACOS_RETRY_INTERVAL` 必须是 `>=0` 的有限
 数字；配置中心开启时 `NACOS_REQUEST_TIMEOUT` 必须是 `>0` 的有限数字。支持数字字符串，
 拒绝布尔值、NaN、Infinity、小数尝试次数和越界值。
 
+`NACOS_REQUEST_TIMEOUT` 只控制配置中心读取。Naming RPC 使用 SDK Client 自身的
+`default_timeout`；退出清理快照实际 timeout，只等待剩余预算加少量调度余量，并设置五秒
+上限。SDK timeout 不可用时回退为三秒。
+
 ## 本地状态
 
-`get_status(app=None)` 固定返回 12 个本地字段：
+`get_status(app=None)` 固定返回 16 个本地字段：
 
 ```python
 {
@@ -179,13 +245,23 @@ metadata、ephemeral/心跳、认证与重试配置。
     "registered": True,
     "operation_running": False,
     "last_error": None,
+    "heartbeat_state": "healthy",
+    "last_heartbeat_success_at": 1770000000.25,
+    "last_heartbeat_failure_at": None,
+    "heartbeat_error_type": None,
 }
 ```
 
-`registered` 是最近一次 Naming RPC 成功确认的本地事实，不是实时 Nacos 查询。状态读取不
-创建 Client、不访问 Nacos、不探测 IP、不启动线程，也不恢复 fork 后注册。
+`registered` 是最近一次 Naming RPC 成功确认的本地事实，不是实时 Nacos 查询。
+`heartbeat_state` 是当前临时注册周期最近一次 SDK 心跳的本地观测：首次观测前为
+`unknown`，成功后为 `healthy`，失败后为 `failing`，扩展禁用、未注册或持久实例为
+`not_applicable`。心跳时间使用 Unix epoch秒，错误字段只保存安全异常类型。这些字段不证明
+远端实例仍然存在，也不会驱动 Lifecycle Recovery。
 
-`get_client(app)` 显式创建或返回 app/PID Client，失败时抛出安全 `FlaskNacosError`。
+状态读取不创建 Client、不访问 Nacos、不探测 IP、不启动线程，也不恢复 fork 后注册。
+
+`get_client(app)` 显式创建或返回 app/PID Client，准备失败时抛出安全的
+`NacosConfigError` 或 `NacosClientError`。
 `.client` 属性只读缓存，并要求当前 Flask context。
 
 ## 健康检查
@@ -231,33 +307,32 @@ with app.app_context():
 ## 日志
 
 `NACOS_LOG_ENABLED=False` 为默认值。SDK 原生日志被隔离，因此 Flask-Nacos 不创建
-`~/logs/nacos` 或 SDK 日志文件。安全扩展日志配置：
-
-| 配置 | 默认值 | 说明 |
-| --- | --- | --- |
-| `NACOS_LOG_ENABLED` | `False` | 日志总开关。 |
-| `NACOS_LOG_CONSOLE_ENABLED` | `True` | 启用后输出彩色控制台日志。 |
-| `NACOS_LOG_FILE_ENABLED` | `True` | 启用后输出轮转文件。 |
-| `NACOS_LOG_PATH` | `./logs` | 日志目录。 |
-| `NACOS_LOG_FILENAME` | `flask-nacos.log` | 日志文件名。 |
+`~/logs/nacos` 或 SDK 日志文件。全部日志配置和默认值见上方“配置项速查”。
 
 控制台 DEBUG 蓝色、INFO 绿色、WARNING 黄色、ERROR 红色、CRITICAL 加粗红色；文件不含
 ANSI 颜色。日志总开关关闭时，即使配置路径也不会创建目录。
 
+为避免重复输出，请只选择一种日志拓扑：关闭扩展 console/file handler 并保持
+`NACOS_LOG_PROPAGATE=True`，由宿主统一处理；或在容器 stdout 场景开启扩展 console、
+关闭 file，并设置 `NACOS_LOG_PROPAGATE=False`。多个进程不要共享同一轮转文件 handler。
+
 ## Fork、Gunicorn 与退出
 
-Runtime资源绑定 Flask app 与 PID。fork 后父 Runtime整体作废；普通业务请求或显式 SDK
-操作可以恢复自动注册，但状态、健康和 `.client` 读取不会。
+Runtime资源绑定 Flask app 与 PID。fork 后父 Runtime整体作废；显式注册或真实的 Client、
+Discovery、Config SDK操作可以非阻塞恢复自动注册，但普通业务请求、状态、健康和 `.client`
+读取不会消费 pending。
 
 Gunicorn `--preload` 推荐设置 `NACOS_AUTO_REGISTER=False`，并在 post-fork/
 worker-init hook中调用 `nacos.register_instance(app)`，避免 preload master启动 SDK Runtime。
 
 多个 worker使用相同服务身份与 IP:port（相同 service/group/cluster/IP/port）时，是同一个
-Nacos 实例。共享端点应设置 `NACOS_AUTO_DEREGISTER=False`，防止一个 worker退出时删除
+Nacos 实例。共享端点应设置 `NACOS_DEREGISTER_ON_EXIT=False`，防止一个 worker退出时删除
 仍由其他 worker提供服务的实例。
 
-`NACOS_AUTO_DEREGISTER=True` 是唯一退出注销开关。退出不会修改用户目标，不启动正常重试，
-只会有限等待已经活跃的一笔 Naming RPC，随后最多执行一次尽力清理。
+`NACOS_DEREGISTER_ON_EXIT=True` 会安装进程退出注销回调；设为 `False` 时不安装远端清理
+回调。该配置不影响显式 `deregister_instance()`。解释器正常退出时，清理不会修改用户目标、
+不会启动正常重试，只会有限等待已经活跃的一笔 Naming RPC，随后最多执行一次尽力清理。
+`SIGKILL` 等强制终止无法保证回调执行。
 
 ## 安全说明
 

@@ -101,7 +101,7 @@ defaults to `1.0`; instances with weight `<= 0` are ignored; if all weights are
 `<= 0` the strategy degrades to `first`).
 
 When there are no healthy instances, `None` is returned. An unsupported strategy
-follows `NACOS_FAIL_FAST`.
+raises `NacosDiscoveryError`.
 
 > This version provides simple client-side selection strategies only; it does
 > not provide full service-governance capabilities.

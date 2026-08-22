@@ -19,6 +19,7 @@ def no_sleep(monkeypatch):
 def fake_client():
     """A MagicMock standing in for the synchronous Nacos client."""
     client = MagicMock(name="NacosClient")
+    client.default_timeout = 3.0
     client.add_naming_instance.return_value = True
     client.remove_naming_instance.return_value = True
     client.list_naming_instance.return_value = {
@@ -72,7 +73,7 @@ def base_config():
         "NACOS_SERVICE_IP": "127.0.0.1",
         "NACOS_SERVICE_PORT": 8000,
         "NACOS_AUTO_REGISTER": False,
-        "NACOS_AUTO_DEREGISTER": False,
+        "NACOS_DEREGISTER_ON_EXIT": False,
     }
 
 

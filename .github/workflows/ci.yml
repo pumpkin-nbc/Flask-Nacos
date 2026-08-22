@@ -114,9 +114,9 @@ jobs:
           - label: "minimum 2.0.0"
             sdk_spec: "nacos-sdk-python==2.0.0"
             expected_version: "2.0.0"
-          - label: "latest 2.x"
-            sdk_spec: "nacos-sdk-python>=2.0.0,<3.0.0"
-            expected_version: ""
+          - label: "verified 2.0.11"
+            sdk_spec: "nacos-sdk-python==2.0.11"
+            expected_version: "2.0.11"
 
     steps:
       - uses: actions/checkout@v4
@@ -156,6 +156,27 @@ jobs:
             tests/test_lifecycle_recovery.py \
             tests/test_logging.py
 
+  gevent-compatibility:
+    runs-on: ubuntu-latest
+    name: Python 3.8 / Flask 1.1.4 / gevent 24.2.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Install compatible runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install "Flask==1.1.4" "Werkzeug<2.0" "Jinja2<3.0" \
+            "MarkupSafe<2.1" "ItsDangerous<2.0" "Click<8.0" "gevent==24.2.1"
+
+      - name: Run monkey-patched lifecycle smoke
+        run: pytest --no-cov tests/test_gevent_compatibility.py
+
   required-ci:
     runs-on: ubuntu-latest
     name: Required CI
@@ -164,13 +185,16 @@ jobs:
       - quality
       - test
       - sdk-compatibility
+      - gevent-compatibility
     steps:
       - name: Require every CI job to pass
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           TEST_RESULT: ${{ needs.test.result }}
           SDK_RESULT: ${{ needs.sdk-compatibility.result }}
+          GEVENT_RESULT: ${{ needs.gevent-compatibility.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$TEST_RESULT" = "success"
           test "$SDK_RESULT" = "success"
+          test "$GEVENT_RESULT" = "success"

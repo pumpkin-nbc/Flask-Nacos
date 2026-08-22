@@ -5,7 +5,7 @@ English | [简体中文](compatibility.zh-CN.md)
 This page documents the supported runtime versions and the compatibility
 guarantees of flask-nacos.
 
-`1.1.0` is the current supported release surface. Its API snapshot is enforced
+`1.1.1` is the current supported release surface. Its API snapshot is enforced
 by the release checks.
 
 See also: [Quickstart](quickstart.md) - [Configuration](configuration.md) -
@@ -60,10 +60,38 @@ The classic SDK's bare `nacos.exception.NacosRequestException` contains no
 structured cause in a verified node-unavailable path. Flask-Nacos therefore has
 a narrow private compatibility rule for Naming register and compensating
 deregister in SDK `2.0.0` and `2.0.11`. The rule requires the installed exact
-type and exact failure stage. It does not apply during Client construction,
-synchronous/exit deregistration, to a same-named replacement type, or to an
-unverified SDK release. Other 2.x exception systems remain supported through
-their own structured evidence; no common exception hierarchy is assumed.
+type and exact failure stage. SDK `2.0.11` additionally has one verified rule
+for the same exact exception during authenticated Client construction in the
+register direction. SDK `2.0.0` Client construction, synchronous/exit
+deregistration, same-named replacement types, other directions, and unverified
+SDK releases do not match that rule. Other 2.x exception systems remain
+supported through their own structured evidence; no common exception hierarchy
+is assumed. Structured 401/403 evidence always remains deterministic.
+
+## Heartbeat observability compatibility
+
+The synchronous SDK 2.x `send_heartbeat` layout is used only by one private,
+best-effort identity extractor. Keyword arguments take precedence over the
+verified positional fallback. A complete safe service/group/cluster/IP/port
+identity gets independent warning throttling and one recovery record. Missing,
+duplicated, unknown, or complex fields produce stateless `<unknown>` logging;
+Flask-Nacos does not stringify/hash user objects or invent a collision-prone
+key. The wrapper always preserves the SDK return value or original exception.
+
+This remains an instrumentation compatibility layer, not remote monitoring.
+Each Client has exactly one Flask-Nacos heartbeat wrapper shared by logging and
+the optional Runtime observer. Per-identity log throttling belongs to that
+Client and is discarded with it. `get_status()` exposes only the latest
+sanitized observation for the current app/PID ephemeral-registration cycle;
+health omits it. Neither path can trigger Lifecycle Recovery, and the SDK
+remains the only post-registration heartbeat owner.
+
+## Timeout compatibility
+
+`NACOS_REQUEST_TIMEOUT` remains the configuration-center read timeout. Naming
+uses the actual SDK Client `default_timeout`, and shutdown snapshots that value
+for its bounded active-RPC wait. This separation avoids silently rewriting
+shared SDK Client behavior.
 
 ## Nacos SDK response-shape compatibility
 
@@ -83,11 +111,9 @@ accepts both `dict` and attribute-style objects and both camelCase
 (`serviceName`, `clusterName`) and snake_case (`service_name`, `cluster_name`)
 field names, filling missing fields with sensible defaults.
 
-A minor difference in the SDK response does not fail discovery as a whole. When
-the response shape is fundamentally unrecognized, behavior follows
-`NACOS_FAIL_FAST`: with `NACOS_FAIL_FAST=False` (default) an empty list is
-returned and the issue is logged; with `NACOS_FAIL_FAST=True` an exception is
-raised.
+A minor difference in the SDK response does not fail discovery as a whole. A
+fundamentally unrecognized response shape raises `NacosDiscoveryError`; only a
+legitimate empty response returns `[]`.
 
 ## Gunicorn / uWSGI multi-worker notes
 

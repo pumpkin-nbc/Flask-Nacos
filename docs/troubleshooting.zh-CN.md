@@ -10,9 +10,9 @@
 ## 1. 应用启动后没有注册到 Nacos
 
 - 现象：Flask 应用已运行，但实例没有出现在 Nacos 中。
-- 可能原因：某个注册开关被显式关闭、确定性注册预检失败，或后台注册操作失败。
-- 排查方法：检查 `NACOS_ENABLED`、`NACOS_REGISTER_ENABLED` 与
-  `NACOS_AUTO_REGISTER`；查看日志和 `get_status()`。
+- 可能原因：Nacos 或自动注册被显式关闭、确定性注册预检失败，或后台注册操作失败。
+- 排查方法：检查 `NACOS_ENABLED` 与 `NACOS_AUTO_REGISTER`；查看日志和
+  `get_status()`。
 - 解决建议：恢复预期的开关（`NACOS_AUTO_REGISTER` 默认值为 `True`），或修复状态中报告的原因后
   显式调用 `nacos.register_instance(app)`。
 - 若 `operation_running=True`，生命周期仍在收敛。已确认的瞬时网络故障会让 Worker保持低频
@@ -24,8 +24,8 @@
 
 - 可能原因：1.1 的注册始终是后台生命周期命令。
 - 解决建议：通过 `get_status()` 与日志查看 Nacos 超时、有限重试与瞬时故障生命周期自恢复。
-  `NACOS_FAIL_FAST=True` 只同步抛出缓存的确定性注册错误。Thread 创建/启动、Client、
-  SDK、超时与连接错误都安全写入状态，不会从 `register_instance()` 抛出。
+  纯本地确定性注册错误会在提交目标前同步抛出；Thread 创建/启动、Client、SDK、超时与
+  连接错误都安全写入状态，不会从 `register_instance()` 抛出。
 
 ## 为什么有限重试后 `operation_running=True` 仍持续存在？
 
@@ -34,8 +34,8 @@
 - 排查方法：安全 WARNING 会标明错误类型和 recovery阶段；`get_status()` 仍是无副作用的
   本地视图。
 - 解决建议：通常无需额外触发，只需恢复 Nacos/网络。注销或 shutdown 会立即唤醒等待。
-  如果进程必须在当前一次失败后停止，可设置 `NACOS_RETRY_ENABLED=False`。认证、参数和
-  UNKNOWN SDK失败不会持续进入生命周期自恢复。
+  如果进程必须在当前一次失败后停止，可设置 `NACOS_RETRY_ENABLED=False`。结构化认证拒绝、
+  参数错误和 UNKNOWN SDK失败不会持续进入生命周期自恢复。
 
 ## 2. 注册失败：`NACOS_SERVICE_NAME` 为空
 
@@ -61,11 +61,12 @@
 ## 5. Nacos Client 创建失败
 
 - 现象：`client_created` 一直为 `False`、注册以安全 `last_error` 结束，或显式
-  `get_client()` 抛出 `FlaskNacosError`。
+  `get_client()` 抛出 `NacosConfigError`/`NacosClientError`。
 - 可能原因：`NACOS_SERVER_ADDR` 错误、网络问题或认证失败。
 - 排查方法：核对服务地址与连通性；查看日志。
-- 解决建议：修正地址/凭据。认证结构属于确定性配置，可用 `NACOS_FAIL_FAST=True` 在启动
-  阶段暴露；运行期连接错误仍是后台生命周期错误。
+- 解决建议：修正地址/凭据。启用自动注册时，本地认证结构错误会在启动阶段直接暴露；
+  运行期连接错误仍是后台生命周期错误。SDK `2.0.11` 在认证 Client构造期间遇到
+  经过验证的节点暂不可用错误时，会在有限预算后继续生命周期 Recovery；HTTP 401/403 会立即停止。
 
 ## 6. 用户名 / 密码错误
 
@@ -78,7 +79,8 @@
 
 - 可能原因：`NACOS_USERNAME`/`NACOS_PASSWORD` 或
   `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` 缺少一项、同时配置两种认证，或凭据不是字符串。
-- 解决建议：只配置一组完整凭据；可临时启用 `NACOS_FAIL_FAST=True` 查看安全的配置错误。
+- 解决建议：只配置一组完整凭据。启用自动注册时会在启动阶段报告安全错误；否则首次
+  `get_client()` 或显式注册时抛出。
 
 ## 7. namespace 配置错误
 
@@ -117,9 +119,9 @@
 - 现象：服务出现在 Nacos 中，但健康实例数为 0，稍后实例被删除。
 - 可能原因：临时实例没有持续发送心跳、Flask 进程已停止，或查询使用了不同的
   namespace/group。
-- 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志，确认
+- 排查方法：保持 Flask 进程运行，检查 SDK 心跳日志和 `get_status()` 心跳字段，确认
   `NACOS_SERVICE_EPHEMERAL=True`、namespace 与 group。`/health/nacos` 只反映本地
-  生命周期状态，不是远端心跳探测。
+  生命周期状态；两个接口都不是远端心跳探测。
 - 解决建议：使用 Flask-Nacos 默认的 `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`，或设置
   另一个大于 0 的有限间隔。不要用初始 `healthy=True` 代替持续心跳。
 
@@ -137,20 +139,19 @@
 - 可能原因：Nacos 使用 service/group/cluster/IP/port 标识实例。多个 worker 公布相同 IP
   和端口时共享同一个实例，尽管 Flask-Nacos 会分别维护它们的本地状态。
 - 排查方法：比较完整的注册地址，不要仅比较 worker 数量。
-- 解决建议：共享端点设置 `NACOS_AUTO_DEREGISTER=False`，或由单一外部协调者负责注册
+- 解决建议：共享端点设置 `NACOS_DEREGISTER_ON_EXIT=False`，或由单一外部协调者负责注册
   与注销。详见[生产部署](production.zh-CN.md)。
 
-## 12. `NACOS_FAIL_FAST=True` 导致启动失败
+## 12. 本地注册配置导致启动失败
 
-- 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间崩溃，或采用延迟加载的 WSGI
-  服务器直到第一次请求才显示异常。
-- 可能原因：`NACOS_FAIL_FAST=True` 会把确定性配置错误变成异常。启用自动注册时，会在
-  创建 Client 前校验缺失或非法的注册配置。
+- 现象：应用在 `FlaskNacos(app)` / `init_app(app)` 期间抛出异常。
+- 可能原因：启用自动注册时，会在创建 Client 与提交扩展状态前校验缺失或非法的本地
+  注册配置。
 - 排查方法：查看异常并确认应用工厂何时执行。启用自动注册时，`NACOS_SERVICE_NAME` 必须
   是非空且不能只包含空白字符的字符串。
-- 解决建议：修正非法配置，或使用 `NACOS_FAIL_FAST=False`（默认），让安全错误保持可见
-  并继续启动。Gunicorn `--preload` 应设置 `NACOS_AUTO_REGISTER=False`，并在 fork
-  后的 worker hook 中注册。
+- 解决建议：修正非法配置；如果当前进程只使用 Discovery 或 Config，可设置
+  `NACOS_AUTO_REGISTER=False`，之后显式注册仍会按需校验并抛出。Gunicorn `--preload`
+  应在 fork 后的 worker hook 中注册。
 
 ## 13. `get_config()` 返回的是字符串而不是 dict
 
@@ -182,8 +183,8 @@
 ## 16. 如何关闭 Flask-Nacos 日志
 
 - 现象：希望扩展完全不产生日志。
-- 可能原因：Flask-Nacos 安全日志默认开启（`INFO`，并向你的 handler 传播）；SDK 原生日志
-  已始终静默。
+- 可能原因：Flask-Nacos 安全日志默认关闭；若已开启，扩展 handler 与宿主 handler 的
+  propagation 拓扑可能同时输出。SDK 原生日志始终静默。
 - 排查方法：检查 `NACOS_LOG_ENABLED`。
 - 解决建议：设置 `NACOS_LOG_ENABLED=False`。不再添加或传播 Flask-Nacos console/file
   handler；SDK 原生日志仍保持静默。
@@ -206,7 +207,7 @@
 - 可能原因：使用了旧版 flask-nacos，或其他组件在 flask-nacos 配置日志之前就创建了 client。
 - 排查方法：确保 `FlaskNacos(app)` / `init_app(app)` 在任何直接构造 `nacos.NacosClient`
   的代码之前执行。
-- 解决建议：使用 1.1.0。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
+- 解决建议：使用 1.1.1。Flask-Nacos 会在创建 client 前静默 SDK logger，并使 SDK
   初始化不使用用户主目录。直接创建的 SDK client 不受 Flask-Nacos 控制。
 
 ## 19. flask-nacos 日志重复输出
@@ -241,5 +242,24 @@
 - 现象：多次调用 `init_app(app)` 导致 handler / 日志行成倍增加。
 - 可能原因：简单的 handler 设置会在每次调用时重复添加。
 - 排查方法：统计 `logging.getLogger("flask_nacos")` 上的 handler 数量。
-- 解决建议：1.1.0 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
+- 解决建议：1.1.1 无需处理。flask-nacos 会对 handler 去重，重复 `init_app(app)` 不会
   添加第二个 console 或 file handler。
+
+## 23. Heartbeat 警告重复或没有看到恢复日志
+
+- 完整 service/group/cluster/IP/port 身份首次失败立即记录 `WARNING`；异常类型不变时最多
+  每 60 秒再次警告一次，类型变化则立即警告。随后首次成功记录一次恢复 `INFO`，普通成功
+  保持 `DEBUG`。
+- SDK 调用无法提供完整、已验证的安全标量身份时，日志使用 `<unknown>` 并有意保持无状态：
+  每次失败均警告，也不推断恢复 `INFO`，避免两个实例共享可能碰撞的占位 key。
+- 对于当前准确注册的临时实例身份，`get_status()` 会把最近一次有效调用记录为 `unknown`、
+  `healthy` 或 `failing`，并提供 Unix 时间和安全错误类型。新注册周期会重置观测，迟到或乱序
+  回调不会覆盖当前周期。
+- 无法识别身份的调用仍然只记录日志。任何心跳观测都不会更新 `registered`、启动 Worker 或
+  证明远端健康。
+
+## 24. 修改 `NACOS_REQUEST_TIMEOUT` 没有改变 Naming timeout
+
+- 这是预期行为：`NACOS_REQUEST_TIMEOUT` 只控制配置中心读取。
+- Naming 使用 `client.default_timeout`。shutdown 快照实际活动 Naming timeout，等待剩余预算
+  加 `0.25` 秒，最多五秒；SDK 值不可用或非法时使用三秒回退值。

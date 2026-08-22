@@ -7,6 +7,56 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## 1.1.1
+
+### 修复
+
+- 修复启用认证时，Nacos 暂不可用导致 Client 构造失败后注册生命周期无法自行恢复的问题。
+  SDK `2.0.11` 在精确 `CLIENT_CREATE/register` 阶段抛出的
+  `NacosRequestException` 现在进入既有瞬时故障 Recovery。
+- 保持结构化 401/403 认证失败为确定性错误；未经验证的 SDK版本、阶段、方向和异常类型仍为
+  `UNKNOWN`，只使用有限重试预算。
+- 修复同一 SDK Client 为多个实例发送心跳时日志状态串扰。警告节流与恢复现在按准确的
+  service/group/cluster/IP/port 身份隔离；不安全或不完整身份退化为无状态 `<unknown>`
+  日志，不构造可能碰撞的 key。
+- 修复相同实例身份重复注册时的心跳观测串扰。私有 monotonic周期与完成顺序门禁会拒绝迟到
+  或乱序回调；日志与 Runtime观测共用一个幂等安装的 Client wrapper。
+- 修复 shutdown 活动 Naming RPC timeout 快照，改为读取实际 SDK Client 的
+  `default_timeout`。`NACOS_REQUEST_TIMEOUT` 继续只属于配置中心，非法 SDK timeout 仍使用
+  有界三秒回退值。
+
+### 变更
+
+- 删除无实际作用的 `NACOS_STATUS_ENABLED`，不保留别名或迁移分支；
+  `get_status()` 仍始终可用且无副作用。
+- 删除配置驱动的错误模式开关，不保留别名或迁移分支。启用自动注册时，纯本地确定性配置
+  错误会使初始化事务失败；显式注册会在改变生命周期状态前拒绝该错误，运行期失败仍保留为
+  Worker异步状态。
+- 同步 Client、Discovery与Config操作不再把真实失败伪装为空结果，而是保留最具体的安全
+  领域异常与 cause；合法空结果和能力禁用契约不变。
+- 删除普通请求驱动的 fork后恢复。pending自动注册仅由显式注册或真实 Client、Discovery、
+  Config SDK操作非阻塞消费，并继续共用现有 app/PID Client acquisition路径。
+- 日志总开关或文件输出关闭时忽略对应未使用配置；已启用日志能力的非法配置或 Handler构造
+  失败统一抛出 `NacosLoggingError`。
+- 使用唯一的 `NACOS_DEREGISTER_ON_EXIT` 配置明确进程退出清理职责；关闭时不安装远端
+  清理回调，也不会阻止显式 `deregister_instance()`。
+- 降低 SDK heartbeat wrapper 日志噪声：普通成功为 `DEBUG`，首次/类型变化失败为
+  `WARNING`，相同失败 60 秒内节流，失败后每个身份的首次成功记录一次恢复 `INFO`。
+- 将无副作用的 `get_status()` 快照从 12 个字段扩展为 16 个，增加当前临时注册周期的本地
+  心跳状态、最近成功/失败 Unix时间和安全错误类型。health仍保持七字段本地生命周期响应，
+  不使用心跳观测判断状态。
+- 增加 Python 3.8/Flask 1.1.4/gevent兼容测试，并将 SDK兼容矩阵固定为明确验证的
+  `2.0.0` 与 `2.0.11`。
+- 扩展高并发、fork、heartbeat 隔离、timeout 与显式启用的真实 Nacos 回归，包含仅用于
+  测试的 TCP 恢复 gate。
+
+### 兼容性
+
+- 公共方法签名、七字段 health结构、目标状态生命周期、fork/shutdown行为及 SDK心跳归属
+  保持不变；本地 `get_status()` 结构按文档增加四个 heartbeat字段。
+- 生命周期自恢复仍不执行远端实例监控；本地状态收敛后 Worker退出，心跳与连接维护继续由
+  Nacos SDK负责。
+
 ## 1.1.0
 
 ### 新增
@@ -29,10 +79,13 @@
   生命周期重试与心跳启动均由具名 daemon 线程执行。
 - 删除重复的初始化专用自动注册开关；`NACOS_AUTO_REGISTER` 现在是唯一自动注册开关，
   初始化通过公开注册命令调度后台工作且不等待 Nacos。
+- 删除重复的注册权限开关。`NACOS_ENABLED` 负责控制整体集成，`NACOS_AUTO_REGISTER`
+  只控制自动注册；显式 `register_instance()` 继续表达注册命令。
+- 关闭自动注册时按需执行注册专用校验；自动、显式与 fork 后 pending 恢复共享同一调用期
+  编排流程，且不增加 Runtime 或公开状态字段。
 - Client 按 Flask app/PID惰性创建；状态、健康与 `.client` 缓存读取无 SDK副作用。
-- `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并且在禁止新注册后仍可
-  清理已有实例。
-- `NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
+- `deregister_instance(app=None)` 保证最后一次生命周期命令生效，并保持幂等与同步清理契约。
+- `NACOS_DEREGISTER_ON_EXIT` 是唯一退出注销开关。
 - 有限重试与自恢复继续统一由 Register Worker负责。Client 创建和 Naming失败共用保守分类，
   但 Client状态不会混入 Naming RPC Outcome元数据；收敛成功后心跳仍完全交由 Nacos SDK。
 - 同步双语 Quickstart 与可运行的 beginner 示例，补齐完整工厂案例实际读取的全部环境变量，
@@ -40,7 +93,8 @@
 
 ### 兼容性
 
-- 生命周期运行时错误通过安全本地状态与日志观测；fail-fast 仅控制确定性配置失败。
+- 生命周期运行时错误通过安全本地状态与日志观测；纯本地确定性注册错误会在提交生命周期
+  状态前抛出。
 - Python 运行要求继续为 `>=3.8`；Flask 依赖改为无额外上限的 `>=1.0`。
 - 开发类型检查固定使用 mypy `<1.15`，这是仍能在 Python 3.8 运行并明确以其为检查
   目标的最后一个版本系列。
@@ -76,8 +130,8 @@
 
 - 修复库与 SDK 的日志副作用、重复 handler、意外日志文件，以及凭据、请求数据或配置
   正文可能通过应用、root、控制台或文件 handler 泄露的问题。
-- 修复 fail-fast 初始化失败后残留部分应用或扩展状态的问题。
-- 修复 client 已初始化但不可用时，非 fail-fast 操作仍抛出异常的问题；这些操作现在返回
+- 修复严格初始化失败后残留部分应用或扩展状态的问题。
+- 修复 client 已初始化但不可用时，容错操作仍抛出异常的问题；这些操作现在返回
   文档约定的安全默认值。
 - 修复注销时重新解析服务身份、没有使用实际注册身份的问题。
 
@@ -90,7 +144,7 @@
 
 ### 修复
 
-- 在 `init_app()` 中预检已启用的自动注册配置，使 fail-fast 校验错误在创建 client 或写入
+- 在 `init_app()` 中预检已启用的自动注册配置，使确定性校验错误在创建 client 或写入
   部分扩展状态之前抛出；关闭自动注册时，未配置服务名的应用仍可仅使用配置中心和服务发现。
 
 ## 1.0.0
@@ -137,7 +191,7 @@
 ### 修复
 
 - 将 SDK 返回 `False` 的注册/注销结果视为可重试失败，且不破坏生命周期状态。
-- 通过现有 fail-fast 行为拒绝不完整或混用的认证凭据，以及非法重试和请求超时数字。
+- 通过现有严格错误行为拒绝不完整或混用的认证凭据，以及非法重试和请求超时数字。
 - 跳过端点异常的发现实例，正确解析字符串布尔值，并处理非法权重。
 - 向 Nacos SDK 2.x 传递心跳间隔，使临时服务实例保持健康；持久实例注册行为不变。
 - 将初学者示例的注册端口和监听端口统一为 `3000`，并删除硬编码连接与认证信息。
@@ -146,11 +200,6 @@
 - 使用每应用 `RLock` 串行化并发注册/注销状态转换，并在进程 ID 改变后替换继承的锁。
 - 确定性的 `NacosValidationError` 不再执行重试。
 - `NACOS_CONFIG_ENABLED=False` 时跳过配置中心 SDK 调用。
-
-### 弃用
-
-- `NACOS_STATUS_ENABLED` 在 1.x 中保留为无操作兼容项，计划在 2.0 删除；
-  `get_status()` 始终可用。
 
 ### 稳定 API
 
@@ -353,7 +402,7 @@
 - 新增服务注册幂等处理。
 - 新增服务注销幂等处理。
 - 改进服务发现行为。
-- 明确注册、注销和服务发现的 fail-fast 行为。
+- 明确注册、注销和服务发现的错误行为。
 - 新增服务注册和发现测试。
 
 ### 变更
@@ -378,7 +427,7 @@
 - 支持通过 `atexit` 自动注销和手动注销 `deregister_instance`。
 - 支持服务发现：`list_instances` 和 `get_one_healthy_instance`。
 - 支持配置中心读取：`get_config`。
-- 支持 `NACOS_FAIL_FAST` 行为控制和自定义异常体系。
+- 支持可配置错误行为和自定义异常体系。
 - 集成标准 `logging`，且日志绝不输出敏感信息。
 - 提供完全模拟 Nacos SDK 的 pytest 测试套件。
 - 使用 Hatchling 构建 PyPI 安装包。

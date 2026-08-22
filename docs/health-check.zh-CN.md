@@ -38,6 +38,10 @@ operation 正在运行且没有生命周期错误           -> ok
 生命周期已经收敛，或正在无记录错误地收敛；两者都不代表 Nacos 当前一定可达，也不保证远端
 实例此刻仍存在。
 
+`get_status()` 会暴露当前临时注册周期的四个本地心跳观测字段；本健康响应有意不包含这些
+字段，也不把心跳观测用于 `status` 判断。心跳日志与观测不会修改 `registered`，也不会唤醒
+或创建 Lifecycle Worker。需要实时 Nacos 就绪性时，应使用独立远端探针。
+
 健康路由不会创建 Client、执行 SDK/Nacos I/O、探测 IP、启动线程或恢复 fork 后待执行的
 自动注册。因此完全惰性的启用状态（`client_created=false`，目标与事实均为 false）仍然健康。
 

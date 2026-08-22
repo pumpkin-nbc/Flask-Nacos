@@ -61,8 +61,11 @@ export FLASK_NACOS_TEST_NAMESPACE_ID="<optional-namespace-id>"
 .venv/bin/python -m pytest tests/test_authenticated_integration.py tests/test_heartbeat_integration.py -v
 ```
 
-认证测试会发布、读取并删除唯一临时配置；心跳测试会注册唯一临时服务，默认等待
-35 秒，确认实例仍保持健康，并在 `finally` 中注销。
+认证测试组会发布/读取/删除唯一配置，验证配置不存在和错误凭据，并通过仅用于测试的标准库
+TCP gate 证明 SDK `2.0.11` Client 构造无需 HTTP、第二次注册或 `get_client()` 即可自恢复；
+gate 场景要求单一 server地址。心跳测试使用唯一服务和 metadata，覆盖自动/显式注册、发现、
+多个心跳周期、第二个 SDK Client 外部删除、SDK 管理的恢复与有界清理。默认心跳观察窗口仍为
+35 秒。
 
 ## 4. 本地干净验收
 
@@ -73,8 +76,10 @@ bash scripts/release_check.sh
 ```
 
 脚本会运行 Ruff、mypy、pytest、版本、敏感信息、文档、兼容性、API 和示例检查；
-清理旧产物；构建 wheel 与 sdist；执行 `twine check --strict`；校验元数据、包内容和
-源码新鲜度；最后在两个独立临时环境中分别安装两种产物。
+只清理 `dist/` 根目录旧产物并保留 `dist/1.1.0/` 等版本化归档；构建 wheel 与 sdist；
+执行 `twine check --strict`；校验元数据、包内容、源码新鲜度及已删除配置键零引用；
+最后在两个独立临时环境中分别安装两种产物，并检查固定公开状态结构及禁用/惰性生命周期
+smoke。
 
 确认 `git status` 中没有非预期的发布输入。Hatch 显式包含列表之外的本地笔记不会
 进入源码包，但仍应人工确认。
@@ -87,14 +92,14 @@ bash scripts/release_check.sh
 ## 6. TestPyPI 预演
 
 在 `master` 的 Actions 页面手动运行 **Release** 工作流。手动触发只会发布到
-TestPyPI；工作流会拒绝其他分支，从干净 checkout 重建，检查 `1.1.0` 尚不存在，并
+TestPyPI；工作流会拒绝其他分支，从干净 checkout 重建，检查 `1.1.1` 尚不存在，并
 通过 `testpypi` Environment 和 OIDC 上传。
 
 在全新的 Python 3.8、3.14 环境中验证：
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
@@ -108,8 +113,8 @@ python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_n
 ```bash
 git switch master
 git pull --ff-only origin master
-git tag -a v1.1.0 -m "Flask-Nacos v1.1.0"
-git push origin v1.1.0
+git tag -a v1.1.1 -m "Flask-Nacos v1.1.1"
+git push origin v1.1.1
 ```
 
 tag 工作流会确认提交属于 `master`，并且 tag 与所有版本声明完全一致。重新构建和
@@ -121,12 +126,12 @@ Action 默认生成 PEP 740 provenance。
 在干净环境中从 PyPI 安装：
 
 ```bash
-python -m pip install flask-nacos==1.1.0
+python -m pip install flask-nacos==1.1.1
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 确认 PyPI 文件、哈希、provenance、许可证表达式、许可文件、项目 URL、README 链接和
-版本号。随后从 `v1.1.0` 创建名为 `Flask-Nacos v1.1.0` 的 GitHub Release，说明使用
+版本号。随后从 `v1.1.1` 创建名为 `Flask-Nacos v1.1.1` 的 GitHub Release，说明使用
 对应 Changelog 章节。
 
 ## 9. 失败处理

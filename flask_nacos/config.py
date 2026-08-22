@@ -29,9 +29,8 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_SECRET_KEY": None,
     "NACOS_GROUP_NAME": "DEFAULT_GROUP",
     # Service registration.
-    "NACOS_REGISTER_ENABLED": True,
     "NACOS_AUTO_REGISTER": True,
-    "NACOS_AUTO_DEREGISTER": True,
+    "NACOS_DEREGISTER_ON_EXIT": True,
     "NACOS_SERVICE_NAME": None,
     "NACOS_SERVICE_IP": None,
     "NACOS_SERVICE_PORT": None,
@@ -56,8 +55,6 @@ DEFAULTS: Dict[str, Any] = {
     # Health check route (0.3.0).
     "NACOS_HEALTH_CHECK_ENABLED": False,
     "NACOS_HEALTH_CHECK_PATH": "/health/nacos",
-    # Deprecated compatibility setting; get_status() is always available.
-    "NACOS_STATUS_ENABLED": True,
     # Service discovery selection strategy (0.4.0).
     "NACOS_DISCOVERY_STRATEGY": "first",
     # Service discovery filtering (0.4.0).
@@ -65,8 +62,6 @@ DEFAULTS: Dict[str, Any] = {
     "NACOS_DISCOVERY_METADATA": {},
     # Instance normalization (0.4.0).
     "NACOS_INSTANCE_NORMALIZE": True,
-    # Behavior control.
-    "NACOS_FAIL_FAST": False,
     # Safe Flask-Nacos logging control. Raw SDK logs stay silent.
     "NACOS_LOG_ENABLED": False,
     "NACOS_LOG_LEVEL": "INFO",
@@ -97,17 +92,14 @@ def load_config(app) -> Dict[str, Any]:
     # bool and is validated strictly at registration time.
     bool_keys = (
         "NACOS_ENABLED",
-        "NACOS_REGISTER_ENABLED",
         "NACOS_AUTO_REGISTER",
-        "NACOS_AUTO_DEREGISTER",
+        "NACOS_DEREGISTER_ON_EXIT",
         "NACOS_SERVICE_HEALTHY",
         "NACOS_SERVICE_ENABLED",
         "NACOS_CONFIG_ENABLED",
         "NACOS_RETRY_ENABLED",
         "NACOS_HEALTH_CHECK_ENABLED",
-        "NACOS_STATUS_ENABLED",
         "NACOS_INSTANCE_NORMALIZE",
-        "NACOS_FAIL_FAST",
         "NACOS_LOG_ENABLED",
         "NACOS_LOG_CONSOLE_ENABLED",
         "NACOS_LOG_FILE_ENABLED",
@@ -118,7 +110,7 @@ def load_config(app) -> Dict[str, Any]:
 
     # Logging file-rotation numbers may arrive as strings (e.g. env vars).
     # Coerce when possible; leave the original value otherwise so logging
-    # setup can decide how to degrade (honoring NACOS_FAIL_FAST).
+    # setup can report an enabled capability's invalid configuration.
     max_bytes_coerced = to_int(merged["NACOS_LOG_MAX_BYTES"], None)
     if max_bytes_coerced is not None:
         merged["NACOS_LOG_MAX_BYTES"] = max_bytes_coerced
@@ -156,8 +148,8 @@ def load_config(app) -> Dict[str, Any]:
         if isinstance(merged[key], dict):
             merged[key] = dict(merged[key])
 
-    # Metadata validation is deferred to registration so a bad value honors
-    # NACOS_FAIL_FAST rather than crashing init_app unconditionally.
+    # Registration-only validation remains deferred until registration is an
+    # actual responsibility (automatic or explicit).
     return merged
 
 

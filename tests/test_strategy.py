@@ -70,16 +70,8 @@ def test_default_strategy_from_config(make_app, patched_create_client, monkeypat
     assert instance["port"] == 8001
 
 
-def test_unsupported_strategy_returns_none_when_not_fail_fast(make_app, patched_create_client):
-    app = make_app({"NACOS_FAIL_FAST": False})
-    nacos = FlaskNacos(app)
-
-    with app.app_context():
-        assert nacos.get_one_healthy_instance("user-service", strategy="bogus") is None
-
-
-def test_unsupported_strategy_raises_when_fail_fast(make_app, patched_create_client):
-    app = make_app({"NACOS_FAIL_FAST": True})
+def test_unsupported_strategy_raises(make_app, patched_create_client):
+    app = make_app()
     nacos = FlaskNacos(app)
 
     with app.app_context(), pytest.raises(NacosDiscoveryError):

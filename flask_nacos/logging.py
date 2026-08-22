@@ -34,7 +34,6 @@ _LEVEL_COLORS = {
 }
 _ANSI_RESET = "\033[0m"
 _CONFIG_LOCK = RLock()
-_internal_logger = logging.getLogger(FLASK_NACOS_LOGGER_NAME)
 
 
 class _ConsoleColorFormatter(logging.Formatter):
@@ -52,28 +51,23 @@ class _ConsoleColorFormatter(logging.Formatter):
         return f"{color}{message}{_ANSI_RESET}"
 
 
-def _warn_or_raise(message: str, fail_fast: bool) -> None:
-    if fail_fast:
-        raise NacosLoggingError(message)
-    _internal_logger.warning("%s; using a safe fallback", message)
-
-
-def get_log_level(level_name: Any, fail_fast: bool = False) -> int:
+def get_log_level(level_name: Any) -> int:
     """Resolve a textual Flask-Nacos log level."""
-    name = str(level_name or "").strip().upper()
+    if not isinstance(level_name, str):
+        raise NacosLoggingError(
+            "NACOS_LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+        )
+    name = level_name.strip().upper()
     if name in _VALID_LEVELS:
         return int(getattr(logging, name))
-    _warn_or_raise(
-        f"Invalid NACOS_LOG_LEVEL {level_name!r}; expected one of {sorted(_VALID_LEVELS)}",
-        fail_fast,
+    raise NacosLoggingError(
+        "NACOS_LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR, or CRITICAL"
     )
-    return logging.INFO
 
 
-def _make_formatter(fmt: Any, fail_fast: bool) -> logging.Formatter:
+def _make_formatter(fmt: Any) -> logging.Formatter:
     if not isinstance(fmt, str) or not fmt:
-        _warn_or_raise("NACOS_LOG_FORMAT must be a non-empty string", fail_fast)
-        fmt = DEFAULT_LOG_FORMAT
+        raise NacosLoggingError("NACOS_LOG_FORMAT must be a non-empty string")
     try:
         formatter = logging.Formatter(fmt)
         formatter.format(
@@ -81,41 +75,30 @@ def _make_formatter(fmt: Any, fail_fast: bool) -> logging.Formatter:
         )
         return formatter
     except Exception as exc:
-        if fail_fast:
-            raise NacosLoggingError(f"Invalid NACOS_LOG_FORMAT {fmt!r}: {exc}") from exc
-        _internal_logger.warning("Invalid NACOS_LOG_FORMAT %r; using the default format", fmt)
-        return logging.Formatter(DEFAULT_LOG_FORMAT)
+        raise NacosLoggingError("NACOS_LOG_FORMAT is invalid") from exc
 
 
 def _optional_non_negative_int(
-    value: Any, key: str, default: Optional[int], fail_fast: bool
+    value: Any, key: str, default: Optional[int]
 ) -> Optional[int]:
     if value is None:
         return default
     if isinstance(value, bool):
-        _warn_or_raise(f"{key} must be a non-negative integer or None", fail_fast)
-        return default
+        raise NacosLoggingError(f"{key} must be a non-negative integer or None")
     if isinstance(value, float) and not value.is_integer():
-        _warn_or_raise(f"{key} must be a non-negative integer or None", fail_fast)
-        return default
+        raise NacosLoggingError(f"{key} must be a non-negative integer or None")
     try:
         parsed = int(value)
     except (TypeError, ValueError, OverflowError):
-        _warn_or_raise(f"{key} must be a non-negative integer or None", fail_fast)
-        return default
+        raise NacosLoggingError(f"{key} must be a non-negative integer or None")
     if parsed < 0:
-        _warn_or_raise(f"{key} must be greater than or equal to 0", fail_fast)
-        return default
+        raise NacosLoggingError(f"{key} must be greater than or equal to 0")
     return parsed
 
 
-def _normalize_log_file(path: Any, filename: Any, fail_fast: bool) -> Optional[str]:
+def _normalize_log_file(path: Any, filename: Any) -> str:
     if not isinstance(path, str) or not path.strip():
-        _warn_or_raise(
-            "NACOS_LOG_PATH must be a non-empty directory path",
-            fail_fast,
-        )
-        return None
+        raise NacosLoggingError("NACOS_LOG_PATH must be a non-empty directory path")
     if (
         not isinstance(filename, str)
         or not filename.strip()
@@ -124,24 +107,18 @@ def _normalize_log_file(path: Any, filename: Any, fail_fast: bool) -> Optional[s
         or "\\" in filename
         or os.path.basename(filename.strip()) != filename.strip()
     ):
-        _warn_or_raise(
-            "NACOS_LOG_FILENAME must be a non-empty filename without a path",
-            fail_fast,
+        raise NacosLoggingError(
+            "NACOS_LOG_FILENAME must be a non-empty filename without a path"
         )
-        return None
     log_directory = os.path.abspath(os.path.expanduser(path.strip()))
     if os.path.exists(log_directory) and not os.path.isdir(log_directory):
-        _warn_or_raise(
-            "NACOS_LOG_PATH must point to a directory, but an existing file "
-            f"was found at {log_directory!r}",
-            fail_fast,
+        raise NacosLoggingError(
+            "NACOS_LOG_PATH must point to a directory, not an existing file"
         )
-        return None
     return os.path.join(log_directory, filename.strip())
 
 
 def _build_settings(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    fail_fast = bool(cfg.get("NACOS_FAIL_FAST", False))
     enabled = bool(cfg.get("NACOS_LOG_ENABLED", False))
     if not enabled:
         return {
@@ -154,36 +131,34 @@ def _build_settings(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "propagate": False,
             "max_bytes": None,
             "backup_count": 0,
-            "fail_fast": fail_fast,
         }
-    max_bytes = _optional_non_negative_int(
-        cfg.get("NACOS_LOG_MAX_BYTES"), "NACOS_LOG_MAX_BYTES", None, fail_fast
-    )
-    backup_count = _optional_non_negative_int(
-        cfg.get("NACOS_LOG_BACKUP_COUNT", 5),
-        "NACOS_LOG_BACKUP_COUNT",
-        5,
-        fail_fast,
-    )
+    file_enabled = bool(cfg.get("NACOS_LOG_FILE_ENABLED", True))
+    max_bytes: Optional[int] = None
+    backup_count: Optional[int] = 0
+    log_file = None
+    if file_enabled:
+        max_bytes = _optional_non_negative_int(
+            cfg.get("NACOS_LOG_MAX_BYTES"), "NACOS_LOG_MAX_BYTES", None
+        )
+        backup_count = _optional_non_negative_int(
+            cfg.get("NACOS_LOG_BACKUP_COUNT", 5),
+            "NACOS_LOG_BACKUP_COUNT",
+            5,
+        )
+        log_file = _normalize_log_file(
+            cfg.get("NACOS_LOG_PATH", "./logs"),
+            cfg.get("NACOS_LOG_FILENAME", FLASK_NACOS_LOG_FILENAME),
+        )
     return {
         "enabled": True,
-        "level": get_log_level(cfg.get("NACOS_LOG_LEVEL", "INFO"), fail_fast),
-        "formatter": _make_formatter(cfg.get("NACOS_LOG_FORMAT"), fail_fast),
+        "level": get_log_level(cfg.get("NACOS_LOG_LEVEL", "INFO")),
+        "formatter": _make_formatter(cfg.get("NACOS_LOG_FORMAT")),
         "console_enabled": bool(cfg.get("NACOS_LOG_CONSOLE_ENABLED", True)),
-        "file_enabled": bool(cfg.get("NACOS_LOG_FILE_ENABLED", True)),
-        "file": (
-            _normalize_log_file(
-                cfg.get("NACOS_LOG_PATH", "./logs"),
-                cfg.get("NACOS_LOG_FILENAME", FLASK_NACOS_LOG_FILENAME),
-                fail_fast,
-            )
-            if cfg.get("NACOS_LOG_FILE_ENABLED", True)
-            else None
-        ),
+        "file_enabled": file_enabled,
+        "file": log_file,
         "propagate": bool(cfg.get("NACOS_LOG_PROPAGATE", True)),
         "max_bytes": max_bytes,
         "backup_count": backup_count,
-        "fail_fast": fail_fast,
     }
 
 
@@ -262,7 +237,6 @@ def add_file_handler_once(
     level: int,
     max_bytes: Optional[int],
     backup_count: Optional[int],
-    fail_fast: bool = False,
 ) -> bool:
     """Attach or update one owned file handler for ``log_file``."""
     resolved = os.path.abspath(os.path.expanduser(str(log_file)))
@@ -274,15 +248,7 @@ def add_file_handler_once(
     try:
         logger.addHandler(_create_file_handler(resolved, formatter, level, max_bytes, backup_count))
     except Exception as exc:
-        if fail_fast:
-            raise NacosLoggingError(
-                f"Failed to create log file handler for {resolved!r}: {exc}"
-            ) from exc
-        _internal_logger.warning(
-            "Failed to create log file handler for %r; file logging disabled",
-            resolved,
-        )
-        return False
+        raise NacosLoggingError("Failed to create Flask-Nacos log file handler") from exc
     return True
 
 
@@ -291,7 +257,7 @@ def _points_to_default_sdk_log(handler: logging.Handler) -> bool:
     return bool(base and os.path.abspath(base) == DEFAULT_SDK_LOG_PATH)
 
 
-def remove_nacos_default_file_handlers(logger: logging.Logger, fail_fast: bool = False) -> None:
+def remove_nacos_default_file_handlers(logger: logging.Logger) -> None:
     """Remove only the SDK's exact default log handler."""
     for handler in list(logger.handlers):
         if _is_owned(handler) or not _points_to_default_sdk_log(handler):
@@ -300,10 +266,9 @@ def remove_nacos_default_file_handlers(logger: logging.Logger, fail_fast: bool =
             logger.removeHandler(handler)
             handler.close()
         except Exception as exc:  # pragma: no cover - defensive
-            if fail_fast:
-                raise NacosLoggingError(
-                    "Failed to remove nacos-sdk-python default file handler"
-                ) from exc
+            raise NacosLoggingError(
+                "Failed to remove nacos-sdk-python default file handler"
+            ) from exc
 
 
 def _remove_owned_handlers(logger: logging.Logger) -> None:
@@ -338,16 +303,11 @@ def _desired_handlers(settings: Dict[str, Any]) -> List[logging.Handler]:
                 )
             )
         except Exception as exc:
-            if settings["fail_fast"]:
-                for handler in owned:
-                    handler.close()
-                raise NacosLoggingError(
-                    f"Failed to create log file handler for {settings['file']!r}: {exc}"
-                ) from exc
-            _internal_logger.warning(
-                "Failed to create log file handler for %r; file logging disabled",
-                settings["file"],
-            )
+            for handler in owned:
+                handler.close()
+            raise NacosLoggingError(
+                "Failed to create Flask-Nacos log file handler"
+            ) from exc
     if not owned:
         owned.append(_mark_owned(logging.NullHandler(), "null"))
     return owned

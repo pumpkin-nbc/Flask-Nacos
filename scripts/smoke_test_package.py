@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 
 _CHECK_SCRIPT = """
+import os
+import sysconfig
+import compileall
+from importlib import metadata
 from pathlib import Path
 
 import flask_nacos
@@ -22,19 +26,43 @@ from flask import Flask
 from flask_nacos import FlaskNacos
 
 expected = {expected!r}
+source_root = Path({source_root!r}).resolve()
+module_path = Path(flask_nacos.__file__).resolve()
+purelib_path = Path(sysconfig.get_paths()["purelib"]).resolve()
+assert os.path.commonpath([str(module_path), str(purelib_path)]) == str(purelib_path), (
+    "flask_nacos was not imported from this environment's purelib: %s" % module_path
+)
+try:
+    imported_from_source = (
+        os.path.commonpath([str(module_path), str(source_root)]) == str(source_root)
+    )
+except ValueError:
+    imported_from_source = False
+assert not imported_from_source, (
+    "flask_nacos was imported from the source checkout: %s" % module_path
+)
+distribution = metadata.distribution("flask-nacos")
+assert distribution.metadata["Name"] == "flask-nacos"
+assert distribution.version == expected
 assert flask_nacos.__version__ == expected, (
     "version mismatch: %r != %r" % (flask_nacos.__version__, expected)
 )
 assert Path(flask_nacos.__file__).with_name("py.typed").is_file(), "py.typed missing"
+assert compileall.compile_dir(str(module_path.parent), quiet=1), "package compileall failed"
 
 app = Flask(__name__)
-app.config.update(NACOS_ENABLED=False)
+app.config.update(
+    NACOS_ENABLED=False,
+    NACOS_HEALTH_CHECK_ENABLED=True,
+    UNSUPPORTED_TEST_OPTION=True,
+)
 nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
 with app.app_context():
     assert nacos.config["NACOS_AUTO_REGISTER"] is True, (
         "NACOS_AUTO_REGISTER must default to True"
     )
+    assert "UNSUPPORTED_TEST_OPTION" not in nacos.config
     assert nacos.client is None, "cache-only client property must remain lazy"
 
 assert nacos.register_instance(app) is None, "registration command must return None"
@@ -43,6 +71,8 @@ assert set(status) == {{
     "enabled", "pid", "client_created", "service_name", "group_name",
     "cluster_name", "service_ip", "service_port", "target_registered",
     "registered", "operation_running", "last_error",
+    "heartbeat_state", "last_heartbeat_success_at",
+    "last_heartbeat_failure_at", "heartbeat_error_type",
 }}
 assert status["enabled"] is False
 assert status["client_created"] is False
@@ -50,8 +80,21 @@ assert status["target_registered"] is False
 assert status["registered"] is False
 assert status["operation_running"] is False
 assert status["last_error"] is None
+assert status["heartbeat_state"] == "not_applicable"
+assert status["last_heartbeat_success_at"] is None
+assert status["last_heartbeat_failure_at"] is None
+assert status["heartbeat_error_type"] is None
 
-print("[smoke] import + typing marker + init + registration API OK (version=%s)" % expected)
+health = app.test_client().get("/health/nacos")
+assert health.status_code == 200
+health_data = health.get_json()
+assert set(health_data) == {{
+    "status", "enabled", "client_created", "target_registered",
+    "registered", "operation_running", "last_error",
+}}
+assert health_data["status"] == "disabled"
+
+print("[smoke] installed import + compile + init + status/health OK (version=%s)" % expected)
 """
 
 
@@ -111,7 +154,26 @@ def _test_artifact(kind: str, artifact: str, expected: str, parent: Path) -> boo
         )
         return False
 
-    check = subprocess.run([str(py), "-c", _CHECK_SCRIPT.format(expected=expected)], check=False)
+    dependency_check = subprocess.run(
+        [str(py), "-m", "pip", "check"],
+        check=False,
+    )
+    if dependency_check.returncode != 0:
+        print(
+            f"[smoke_test_package] FAILED - {kind} dependency check failed",
+            file=sys.stderr,
+        )
+        return False
+
+    check = subprocess.run(
+        [
+            str(py),
+            "-c",
+            _CHECK_SCRIPT.format(expected=expected, source_root=str(ROOT)),
+        ],
+        check=False,
+        cwd=str(parent),
+    )
     if check.returncode != 0:
         print(
             f"[smoke_test_package] FAILED - {kind} import/init check failed",

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import flask_nacos.client as client_module
 import flask_nacos.extension as extension_module
 from flask_nacos import FlaskNacos
 from flask_nacos.exceptions import FlaskNacosError
@@ -92,6 +93,40 @@ def test_registration_and_clients_are_isolated(make_app, monkeypatch):
     assert nacos.get_client(app_b) is client_b
 
 
+def test_heartbeat_observability_state_is_isolated_between_apps(make_app, monkeypatch):
+    app_a_failing = [True]
+
+    def app_a_heartbeat(*_args, **_kwargs):
+        if app_a_failing[0]:
+            raise RuntimeError("private")
+        return "a-ok"
+
+    client_a = SimpleNamespace(send_heartbeat=app_a_heartbeat)
+    client_b = SimpleNamespace(send_heartbeat=lambda *_a, **_k: "b-ok")
+    client_module._install_heartbeat_logging(client_a)
+    client_module._install_heartbeat_logging(client_b)
+    clients = iter([client_a, client_b])
+    safe_logger = MagicMock()
+    monkeypatch.setattr(client_module, "logger", safe_logger)
+    monkeypatch.setattr(extension_module, "create_client", lambda _cfg: next(clients))
+    app_a = make_app({"NACOS_SERVICE_NAME": "service-a"})
+    app_b = make_app({"NACOS_SERVICE_NAME": "service-b"})
+    nacos = FlaskNacos(app_a)
+    nacos.init_app(app_b)
+    sdk_a = nacos.get_client(app_a)
+    sdk_b = nacos.get_client(app_b)
+    args = ("shared-name", "10.0.0.8", 8080)
+
+    with pytest.raises(RuntimeError):
+        sdk_a.send_heartbeat(*args)
+    assert sdk_b.send_heartbeat(*args) == "b-ok"
+    safe_logger.info.assert_not_called()
+
+    app_a_failing[0] = False
+    assert sdk_a.send_heartbeat(*args) == "a-ok"
+    safe_logger.info.assert_called_once()
+
+
 def test_extension_slot_collision_and_owner_mismatch_are_explicit(make_app, patched_create_client):
     app = make_app()
     owner = FlaskNacos(app)
@@ -114,7 +149,7 @@ def test_uninitialized_current_app_does_not_use_another_app(make_app, patched_cr
         nacos.register_instance()
 
 
-def test_each_atexit_callback_only_operates_its_app(make_app, monkeypatch):
+def test_atexit_installation_and_cleanup_are_isolated_per_app(make_app, monkeypatch):
     callbacks = []
     client_a = _client()
     client_b = _client()
@@ -126,15 +161,16 @@ def test_each_atexit_callback_only_operates_its_app(make_app, monkeypatch):
         SimpleNamespace(register=callbacks.append),
     )
 
-    app_a = make_app({"NACOS_AUTO_DEREGISTER": True})
-    app_b = make_app({"NACOS_AUTO_DEREGISTER": True})
+    app_a = make_app({"NACOS_DEREGISTER_ON_EXIT": True})
+    app_b = make_app({"NACOS_DEREGISTER_ON_EXIT": False})
     nacos = FlaskNacos(app_a)
     nacos.init_app(app_b)
     nacos.register_instance(app_a)
+    nacos.register_instance(app_b)
     wait_registered(nacos, app_a)
+    wait_registered(nacos, app_b)
 
-    assert len(callbacks) == 2
-    callbacks[1]()
+    assert len(callbacks) == 1
     callbacks[0]()
     client_b.remove_naming_instance.assert_not_called()
     client_a.remove_naming_instance.assert_called_once()

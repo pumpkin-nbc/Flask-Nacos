@@ -11,10 +11,10 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 ## 1. App starts but nothing registers in Nacos
 
 - Symptom: the Flask app runs, but the instance does not appear in Nacos.
-- Cause: one of the registration switches was explicitly disabled, deterministic
+- Cause: Nacos or automatic registration was explicitly disabled, deterministic
   registration preflight failed, or the background operation failed.
-- Investigate: check `NACOS_ENABLED`, `NACOS_REGISTER_ENABLED`, and
-  `NACOS_AUTO_REGISTER`; inspect logs and `get_status()`.
+- Investigate: check `NACOS_ENABLED` and `NACOS_AUTO_REGISTER`; inspect logs and
+  `get_status()`.
 - Fix: restore the intended switches (`NACOS_AUTO_REGISTER` defaults to `True`),
   or call `nacos.register_instance(app)` explicitly after fixing the reported cause.
 - If `operation_running=True`, the lifecycle is still converging. A verified
@@ -29,9 +29,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: 1.1 registration is always a background lifecycle command.
 - Fix: use `get_status()` and logs for Nacos timeouts, finite retries, and
   transient lifecycle recovery.
-  `NACOS_FAIL_FAST=True` only raises cached deterministic registration errors.
-  Thread creation/start, Client, SDK, timeout, and connection failures are
-  safely recorded and never escape `register_instance()`.
+  Purely local deterministic registration errors raise before a target is
+  submitted. Thread creation/start, Client, SDK, timeout, and connection
+  failures are safely recorded and never escape `register_instance()`.
 
 ## Why does `operation_running=True` remain after finite retries?
 
@@ -42,8 +42,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   `get_status()` remains a local, side-effect-free view.
 - Fix: normally none—restore Nacos/network availability. Deregistration or
   shutdown wakes the wait immediately. Set `NACOS_RETRY_ENABLED=False` when the
-  process must stop after its current attempt. Authentication, parameter, and
-  unknown SDK failures do not remain in lifecycle recovery.
+  process must stop after its current attempt. Structured authentication
+  rejection, parameter failures, and unknown SDK failures do not remain in
+  lifecycle recovery.
 
 ## 2. Registration fails: `NACOS_SERVICE_NAME` empty
 
@@ -69,12 +70,16 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 ## 5. Nacos Client creation fails
 
 - Symptom: `client_created` remains `False`, registration stops with a safe
-  `last_error`, or explicit `get_client()` raises `FlaskNacosError`.
+  `last_error`, or explicit `get_client()` raises `NacosConfigError` or
+  `NacosClientError`.
 - Cause: bad `NACOS_SERVER_ADDR`, network issues, or auth failure.
 - Investigate: verify the server address and connectivity; read logs.
-- Fix: correct the address/credentials. Authentication shape is deterministic
-  and can be surfaced during startup with `NACOS_FAIL_FAST=True`; runtime
-  connection failure remains a background lifecycle error.
+- Fix: correct the address/credentials. Active automatic registration rejects
+  an invalid local authentication shape during startup; runtime connection
+  failure remains a background lifecycle error. With SDK `2.0.11`,
+  a verified temporary node-unavailable failure during authenticated Client
+  construction continues through lifecycle Recovery after the finite budget;
+  HTTP 401/403 stops immediately.
 
 ## 6. Wrong username / password
 
@@ -88,8 +93,9 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Cause: `NACOS_USERNAME`/`NACOS_PASSWORD` or
   `NACOS_ACCESS_KEY`/`NACOS_SECRET_KEY` is incomplete, both authentication
   methods are configured, or a credential is not a string.
-- Fix: configure exactly one complete credential pair. Temporarily enable
-  `NACOS_FAIL_FAST=True` to surface the safe configuration error.
+- Fix: configure exactly one complete credential pair. Active automatic
+  registration reports the safe local error during startup; otherwise
+  `get_client()` or explicit registration raises it on first use.
 
 ## 7. Wrong namespace
 
@@ -129,9 +135,10 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   removed after a short delay.
 - Cause: the ephemeral instance is not renewing its heartbeat, the Flask
   process stopped, or the query uses a different namespace/group.
-- Investigate: keep the Flask process alive; inspect SDK heartbeat logs; confirm
-  `NACOS_SERVICE_EPHEMERAL=True`, the namespace, and the group. `/health/nacos`
-  only reports local lifecycle state and is not a remote heartbeat probe.
+- Investigate: keep the Flask process alive; inspect SDK heartbeat logs and the
+  `get_status()` heartbeat fields; confirm `NACOS_SERVICE_EPHEMERAL=True`, the
+  namespace, and the group. `/health/nacos` only reports local lifecycle state,
+  and neither endpoint is a remote heartbeat probe.
 - Fix: use flask-nacos with the default
   `NACOS_SERVICE_HEARTBEAT_INTERVAL=5.0`, or set another finite positive interval.
   Do not use the initial `healthy=True` flag as a substitute for heartbeats.
@@ -151,24 +158,23 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   advertising the same IP and port share one instance even though Flask-Nacos
   tracks their local state separately.
 - Investigate: compare the complete advertised identities, not the worker count.
-- Fix: for a shared endpoint set `NACOS_AUTO_DEREGISTER=False`, or let one
+- Fix: for a shared endpoint set `NACOS_DEREGISTER_ON_EXIT=False`, or let one
   external coordinator own registration and deregistration. See
   [Production](production.md).
 
-## 12. `NACOS_FAIL_FAST=True` prevents startup
+## 12. Local registration configuration prevents startup
 
-- Symptom: the app crashes during `FlaskNacos(app)` / `init_app(app)`, or a
-  lazy-loading WSGI server shows the error on the first request.
-- Cause: `NACOS_FAIL_FAST=True` turns deterministic configuration errors into
-  exceptions. When automatic registration is active, missing or invalid
-  registration settings are checked before Client creation.
+- Symptom: the app raises during `FlaskNacos(app)` / `init_app(app)`.
+- Cause: when automatic registration is active, missing or invalid local
+  registration settings are checked before Client creation and extension-state
+  commit.
 - Investigate: read the exception and confirm when the application factory is
   executed. `NACOS_SERVICE_NAME` must be a non-empty, non-whitespace string when
   automatic registration is active.
-- Fix: correct the invalid configuration, or use `NACOS_FAIL_FAST=False`
-  (default) so the safe error remains observable while startup continues. For
-  Gunicorn `--preload`, set `NACOS_AUTO_REGISTER=False` and register in
-  the worker hook after fork.
+- Fix: correct the invalid configuration. If this process only uses Discovery
+  or Config, set `NACOS_AUTO_REGISTER=False`; explicit registration will still
+  validate and raise later. For Gunicorn `--preload`, register in the worker
+  hook after fork.
 
 ## 13. `get_config()` returns a string, not a dict
 
@@ -232,7 +238,7 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
   client before flask-nacos configured logging.
 - Investigate: ensure `FlaskNacos(app)` / `init_app(app)` runs before any code
   that constructs a `nacos.NacosClient` directly.
-- Fix: use 1.1.0. Flask-Nacos silences SDK loggers before creating the
+- Fix: use 1.1.1. Flask-Nacos silences SDK loggers before creating the
   client and directs SDK setup away from the home directory. A directly created
   SDK client is outside Flask-Nacos control.
 
@@ -269,5 +275,31 @@ See also: [Configuration](configuration.md) - [API Reference](api-reference.md) 
 - Symptom: calling `init_app(app)` more than once multiplies handlers/log lines.
 - Cause: naive handler setup re-adds handlers on every call.
 - Investigate: count handlers on `logging.getLogger("flask_nacos")`.
-- Fix: none needed on 1.1.0. flask-nacos de-duplicates handlers, so repeated
+- Fix: none needed on 1.1.1. flask-nacos de-duplicates handlers, so repeated
   `init_app(app)` never adds a second console or file handler.
+
+## 23. Heartbeat warnings are repeated or recovery looks missing
+
+- A complete service/group/cluster/IP/port identity gets an immediate first
+  `WARNING`, then at most one warning per 60 seconds while the exception type is
+  unchanged. A changed exception type warns immediately. The first later
+  success emits one recovery `INFO`; ordinary successes remain `DEBUG`.
+- If the SDK call does not expose a complete verified scalar identity, records
+  use `<unknown>` and deliberately remain stateless. Every failure warns and no
+  recovery `INFO` is inferred, preventing two instances from sharing a
+  collision-prone placeholder key.
+- For the exact currently registered ephemeral identity, `get_status()` records
+  the latest accepted call as `unknown`, `healthy`, or `failing`, together with
+  Unix timestamps and a safe error type. The observation resets on a new
+  registration cycle and rejects late or out-of-order callbacks.
+- Calls with an unknown identity remain log-only. No heartbeat observation
+  updates `registered`, starts a Worker, or proves remote health.
+
+## 24. Changing `NACOS_REQUEST_TIMEOUT` does not change Naming timeout
+
+- This is expected: `NACOS_REQUEST_TIMEOUT` controls only configuration-center
+  reads.
+- Naming uses `client.default_timeout`. Shutdown snapshots the actual active
+  Naming timeout and waits for the remaining budget plus `0.25` seconds, capped
+  at five seconds. If the SDK value is unavailable or invalid, the wait uses the
+  three-second fallback.

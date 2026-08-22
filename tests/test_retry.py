@@ -34,7 +34,6 @@ def test_register_worker_retries_sdk_false_and_reports_exhaustion(
         {
             "NACOS_RETRY_TIMES": 2,
             "NACOS_RETRY_INTERVAL": 0,
-            "NACOS_FAIL_FAST": True,
         }
     )
     nacos = FlaskNacos(app)
@@ -96,11 +95,10 @@ def test_explicit_register_retries_after_previous_exhaustion(
     assert fake_client.add_naming_instance.call_count == 2
 
 
-@pytest.mark.parametrize("fail_fast", [False, True])
 def test_sync_deregister_runtime_failure_returns_false_without_retry_or_raise(
-    make_app, patched_create_client, fake_client, fail_fast
+    make_app, patched_create_client, fake_client
 ):
-    app = make_app({"NACOS_FAIL_FAST": fail_fast, "NACOS_RETRY_TIMES": 5})
+    app = make_app({"NACOS_RETRY_TIMES": 5})
     nacos = FlaskNacos(app)
     nacos.register_instance(app)
     wait_registered(nacos, app)

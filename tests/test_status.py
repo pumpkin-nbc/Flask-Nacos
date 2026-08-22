@@ -17,6 +17,10 @@ EXPECTED_KEYS = {
     "registered",
     "operation_running",
     "last_error",
+    "heartbeat_state",
+    "last_heartbeat_success_at",
+    "last_heartbeat_failure_at",
+    "heartbeat_error_type",
 }
 
 
@@ -46,6 +50,10 @@ def test_get_status_has_exact_fields_and_configuration_identity(make_app, patche
         "registered": False,
         "operation_running": False,
         "last_error": None,
+        "heartbeat_state": "not_applicable",
+        "last_heartbeat_success_at": None,
+        "last_heartbeat_failure_at": None,
+        "heartbeat_error_type": None,
     }
     assert patched_create_client["count"] == 0
 
@@ -101,6 +109,10 @@ def test_get_status_disabled_is_fixed(make_app, patched_create_client):
     assert status["registered"] is False
     assert status["operation_running"] is False
     assert status["last_error"] is None
+    assert status["heartbeat_state"] == "not_applicable"
+    assert status["last_heartbeat_success_at"] is None
+    assert status["last_heartbeat_failure_at"] is None
+    assert status["heartbeat_error_type"] is None
     assert patched_create_client["count"] == 0
 
 

@@ -67,10 +67,14 @@ export FLASK_NACOS_TEST_NAMESPACE_ID="<optional-namespace-id>"
 .venv/bin/python -m pytest tests/test_authenticated_integration.py tests/test_heartbeat_integration.py -v
 ```
 
-The authentication test publishes, reads, and removes a unique temporary
-configuration. The heartbeat test registers a unique ephemeral service, waits
-35 seconds by default, confirms it remains healthy, and deregisters it in a
-`finally` block.
+The authenticated suite publishes/reads/removes a unique config, verifies a
+missing config and bad credentials, and uses a test-only standard-library TCP
+gate to prove SDK `2.0.11` Client-construction Recovery without HTTP, a second
+register call, or `get_client()`. The gate case requires one server address.
+The heartbeat suite uses a unique service and metadata to cover automatic and
+explicit registration, discovery, several heartbeat periods, out-of-band
+deletion through a second SDK Client, SDK-managed recovery, and bounded cleanup.
+The default heartbeat observation window remains 35 seconds.
 
 ## 4. Clean local verification
 
@@ -82,9 +86,11 @@ bash scripts/release_check.sh
 
 The script runs Ruff, mypy, pytest, version, sensitive-information,
 documentation, compatibility, API and example checks; removes old build
-artifacts; builds wheel and sdist; runs `twine check --strict`; verifies
-metadata, contents and source freshness; then installs both artifacts in
-separate temporary environments.
+artifacts from the `dist/` root while preserving versioned archives such as
+`dist/1.1.0/`; builds wheel and sdist; runs `twine check --strict`; verifies
+metadata, contents, source freshness, and the absence of removed configuration
+keys; then installs both artifacts in separate temporary environments and
+checks the fixed public status schema and disabled/lazy lifecycle smoke.
 
 Confirm that `git status` contains no unintended tracked or untracked release
 input. Local notes outside Hatch's explicit sdist include list do not enter the
@@ -100,14 +106,14 @@ job pass on the resulting `master` commit.
 
 From the Actions tab on `master`, run the **Release** workflow manually. Manual
 dispatch is TestPyPI-only; the workflow rejects any branch other than `master`,
-rebuilds from a clean checkout, verifies that `1.1.0` does not already exist,
+rebuilds from a clean checkout, verifies that `1.1.1` does not already exist,
 and publishes the checked artifacts through the `testpypi` environment.
 
 Verify installation in clean Python 3.8 and 3.14 environments:
 
 ```bash
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.0
+  --extra-index-url https://pypi.org/simple/ flask-nacos==1.1.1
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
@@ -122,8 +128,8 @@ Create the protected tag on the verified `master` commit and push it:
 ```bash
 git switch master
 git pull --ff-only origin master
-git tag -a v1.1.0 -m "Flask-Nacos v1.1.0"
-git push origin v1.1.0
+git tag -a v1.1.1 -m "Flask-Nacos v1.1.1"
+git push origin v1.1.1
 ```
 
 The tag workflow checks that the tag is on `master` and exactly matches all
@@ -137,13 +143,13 @@ default.
 Install from PyPI in a fresh environment:
 
 ```bash
-python -m pip install flask-nacos==1.1.0
+python -m pip install flask-nacos==1.1.1
 python -c "from flask_nacos import FlaskNacos; import flask_nacos; print(flask_nacos.__version__)"
 ```
 
 Confirm the PyPI files, hashes, provenance, license expression, license files,
 project URLs, README links, and version. Then create a GitHub Release named
-`Flask-Nacos v1.1.0` from `v1.1.0`, using the matching changelog section as the
+`Flask-Nacos v1.1.1` from `v1.1.1`, using the matching changelog section as the
 release notes.
 
 ## 9. Failure handling

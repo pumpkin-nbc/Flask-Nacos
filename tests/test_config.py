@@ -13,7 +13,7 @@ def test_defaults_loaded():
     assert cfg["NACOS_ENABLED"] is True
     assert cfg["NACOS_SERVER_ADDR"] == "127.0.0.1:8848"
     assert cfg["NACOS_GROUP_NAME"] == "DEFAULT_GROUP"
-    assert cfg["NACOS_FAIL_FAST"] is False
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
     assert cfg["NACOS_SERVICE_HEARTBEAT_INTERVAL"] == 5.0
     assert cfg["NACOS_LOG_ENABLED"] is False
     assert cfg["NACOS_LOG_CONSOLE_ENABLED"] is True
@@ -41,6 +41,16 @@ def test_user_overrides_defaults():
     assert cfg["NACOS_SERVICE_PORT"] == 9000
 
 
+def test_unknown_configuration_key_is_ignored():
+    app = Flask(__name__)
+    app.config["UNSUPPORTED_TEST_OPTION"] = True
+
+    cfg = load_config(app)
+
+    assert "UNSUPPORTED_TEST_OPTION" not in DEFAULTS
+    assert "UNSUPPORTED_TEST_OPTION" not in cfg
+
+
 def test_removed_log_file_setting_is_ignored():
     app = Flask(__name__)
     app.config["NACOS_LOG_FILE"] = "legacy-logs"
@@ -49,6 +59,40 @@ def test_removed_log_file_setting_is_ignored():
 
     assert cfg["NACOS_LOG_PATH"] == "./logs"
     assert "NACOS_LOG_FILE" not in cfg
+
+
+def test_removed_registration_switch_is_ignored():
+    app = Flask(__name__)
+    removed_key = "NACOS_REGISTER_" + "ENABLED"
+    app.config[removed_key] = False
+
+    cfg = load_config(app)
+
+    assert removed_key not in DEFAULTS
+    assert removed_key not in cfg
+
+
+def test_removed_error_strategy_switch_is_ignored():
+    app = Flask(__name__)
+    removed_key = "NACOS_FAIL_" + "FAST"
+    app.config[removed_key] = True
+
+    cfg = load_config(app)
+
+    assert removed_key not in DEFAULTS
+    assert removed_key not in cfg
+
+
+def test_removed_exit_setting_is_ignored_without_aliasing():
+    app = Flask(__name__)
+    removed_key = "NACOS_AUTO_" + "DEREGISTER"
+    app.config[removed_key] = False
+
+    cfg = load_config(app)
+
+    assert removed_key not in DEFAULTS
+    assert removed_key not in cfg
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
 
 
 def test_removed_log_directory_settings_are_ignored():
@@ -62,11 +106,32 @@ def test_removed_log_directory_settings_are_ignored():
 
 def test_bool_coercion_from_string():
     app = Flask(__name__)
-    app.config.update(NACOS_ENABLED="false", NACOS_FAIL_FAST="true")
+    app.config.update(
+        NACOS_ENABLED="false",
+        NACOS_DEREGISTER_ON_EXIT="false",
+    )
     cfg = load_config(app)
 
     assert cfg["NACOS_ENABLED"] is False
-    assert cfg["NACOS_FAIL_FAST"] is True
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(True, True), (False, False), ("true", True), ("false", False)],
+)
+def test_deregister_on_exit_uses_existing_bool_coercion(value, expected):
+    app = Flask(__name__)
+    app.config["NACOS_DEREGISTER_ON_EXIT"] = value
+
+    assert load_config(app)["NACOS_DEREGISTER_ON_EXIT"] is expected
+
+
+def test_invalid_deregister_on_exit_value_uses_default():
+    app = Flask(__name__)
+    app.config["NACOS_DEREGISTER_ON_EXIT"] = "invalid"
+
+    assert load_config(app)["NACOS_DEREGISTER_ON_EXIT"] is True
 
 
 def test_log_output_switches_are_coerced_from_strings():
@@ -108,7 +173,6 @@ def test_new_030_config_defaults():
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 5.0
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is False
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/health/nacos"
-    assert cfg["NACOS_STATUS_ENABLED"] is True
 
 
 def test_new_030_config_overrides():
@@ -164,7 +228,7 @@ def test_new_040_config_defaults():
     app = Flask(__name__)
     cfg = load_config(app)
 
-    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "first"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] is None
     assert cfg["NACOS_DISCOVERY_METADATA"] == {}
@@ -182,7 +246,7 @@ def test_new_040_config_overrides():
     )
     cfg = load_config(app)
 
-    assert "NACOS_DEREGISTER_ON_EXIT" not in cfg
+    assert cfg["NACOS_DEREGISTER_ON_EXIT"] is True
     assert cfg["NACOS_DISCOVERY_STRATEGY"] == "weight"
     assert cfg["NACOS_DISCOVERY_CLUSTER"] == "CANARY"
     assert cfg["NACOS_DISCOVERY_METADATA"] == {"version": "v1"}

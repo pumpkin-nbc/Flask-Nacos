@@ -2,7 +2,7 @@
 
 from flask_nacos import FlaskNacos
 from flask_nacos.health import HEALTH_ENDPOINT
-from tests.helpers import wait_registered
+from tests.helpers import wait_registered, wait_until
 
 
 def test_health_route_registered_when_enabled(make_app, patched_create_client):
@@ -72,24 +72,52 @@ def test_health_endpoint_disabled_status(make_app, patched_create_client):
     assert data["target_registered"] is False
 
 
-def test_health_endpoint_error_status(make_app, patched_create_client):
+def test_health_endpoint_error_status_for_runtime_registration_failure(
+    make_app, patched_create_client, fake_client
+):
+    fake_client.add_naming_instance.return_value = False
     app = make_app(
         {
             "NACOS_HEALTH_CHECK_ENABLED": True,
-            "NACOS_SERVICE_NAME": None,
             "NACOS_AUTO_REGISTER": True,
-            "NACOS_FAIL_FAST": False,
+            "NACOS_RETRY_ENABLED": False,
         }
     )
-    FlaskNacos(app)
+    nacos = FlaskNacos(app)
+    wait_until(lambda: nacos.get_status(app)["operation_running"] is False)
 
     resp = app.test_client().get("/health/nacos")
     data = resp.get_json()
     assert data["status"] == "error"
     assert data["enabled"] is True
-    assert data["client_created"] is False
+    assert data["client_created"] is True
     assert data["target_registered"] is True
-    assert data["last_error"] == "NacosValidationError"
+    assert data["last_error"] == "NacosRegistrationError"
+
+
+def test_heartbeat_failure_does_not_change_health_contract(
+    make_app, patched_create_client
+):
+    app = make_app(
+        {
+            "NACOS_HEALTH_CHECK_ENABLED": True,
+            "NACOS_AUTO_REGISTER": True,
+        }
+    )
+    nacos = FlaskNacos(app)
+    wait_registered(nacos, app)
+    runtime = app.extensions["nacos"]["_runtime"]
+    with runtime.state_lock:
+        runtime.heartbeat_state = "failing"
+        runtime.last_heartbeat_failure_at = 123.0
+        runtime.heartbeat_error_type = "ConnectionError"
+
+    data = app.test_client().get("/health/nacos").get_json()
+
+    assert data["status"] == "ok"
+    assert len(data) == 7
+    assert "heartbeat_state" not in data
+    assert nacos.get_status(app)["heartbeat_state"] == "failing"
 
 
 def test_repeated_init_app_does_not_double_register(make_app, patched_create_client):

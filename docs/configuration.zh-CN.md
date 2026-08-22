@@ -57,16 +57,16 @@ app.config.update(
 ```
 
 请填写 namespace ID，而不是控制台显示名称。根据服务端认证方式选择用户名/密码或
-AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥；认证结构在
-`init_app()` 阶段校验，`NACOS_FAIL_FAST` 决定确定性错误是否阻止状态提交。
+AK/SK，任何一种都不要硬编码。每组凭据必须完整，两种认证方式互斥。启用自动注册时，
+本地认证结构错误会在提交扩展状态前使 `init_app()` 失败；否则由首次 Client使用或显式注册
+抛出缓存的本地错误。
 
 ## 2. 服务注册
 
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
-| `NACOS_REGISTER_ENABLED` | bool | `True` | 否 | 是否允许新注册；不阻止清理已经注册的实例。 |
-| `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 自动注册总开关。 |
-| `NACOS_AUTO_DEREGISTER` | bool | `True` | 否 | 是否允许退出回调注销当前进程已确认的实例。 |
+| `NACOS_AUTO_REGISTER` | bool | `True` | 否 | 是否在初始化及 fork 后自动恢复时触发注册；不阻止显式注册。 |
+| `NACOS_DEREGISTER_ON_EXIT` | bool | `True` | 否 | 是否安装正常进程退出回调，以注销当前进程已确认的实例。 |
 | `NACOS_SERVICE_NAME` | str | `None` | 是（注册时） | 服务名。 |
 | `NACOS_SERVICE_IP` | str | `None` | 建议 | 服务 IP；未设置时自动识别。 |
 | `NACOS_SERVICE_PORT` | int | `None` | 是（注册时） | 服务端口，`1-65535`。 |
@@ -96,9 +96,15 @@ app.config.update(
 `NACOS_SERVICE_HEARTBEAT_INTERVAL` 仅在临时实例注册时传给 SDK 2.x；持久实例
 （`NACOS_SERVICE_EPHEMERAL=False`）会忽略它。初始健康标识不能让临时实例持续存活。
 
-当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录每次实际 SDK 心跳：成功请求使用
-`INFO`，失败请求使用 `ERROR`。日志经过脱敏，只包含服务身份以及失败时的异常类型，
-刻意省略响应正文和异常消息。失败会原样抛回 SDK 心跳线程，由 SDK 按配置间隔继续重试。
+当 `NACOS_LOG_ENABLED=True` 时，Flask-Nacos 会记录实际 SDK 心跳。普通成功使用 `DEBUG`。
+对每个完整 service/group/cluster/IP/port 身份，首次失败和失败类型变化使用 `WARNING`；
+相同类型持续失败最多每 60 秒再次警告一次。失败后的首次成功会删除该身份的私有状态并记录
+一次恢复 `INFO`。同一 Client 的不同身份、不同 Client 以及不同 Flask app 均不共享状态。
+
+身份提取采用 best-effort，只接受已验证 SDK 参数布局和安全标量。无法确认完整身份时，成功
+退化为无状态 `DEBUG`，每次失败使用固定 `<unknown>` 字段记录无状态 `WARNING`，不会保存
+可能碰撞的占位 key。SDK 返回值与异常保持不变，响应正文和异常消息继续省略；心跳日志不会
+修改 Lifecycle 状态或启动注册。
 
 ## 3. 服务发现
 
@@ -156,6 +162,10 @@ app.config.update(
 支持合法数字字符串；布尔值、小数尝试次数、NaN、Infinity 和越界值会立即失败且不重试。
 关闭重试时忽略重试参数；关闭配置中心时忽略请求超时。
 
+`NACOS_REQUEST_TIMEOUT` 只用于配置中心 `get_config()`。Naming 使用同步 SDK Client 自身的
+`default_timeout`，不会被该配置覆盖。退出清理快照活动 Naming RPC 的 timeout，等待其剩余
+时间加 `0.25` 秒，最多 `5.0` 秒；SDK timeout 缺失或非法时回退 `3.0` 秒。
+
 配置中心与服务发现继续只使用这些配置表达的普通有限重试。Register Worker也先使用同一有限
 尝试预算；只有预算耗尽且存在明确瞬时传输故障证据时，才进入低频生命周期自恢复。UNKNOWN
 失败到达有限上限后停止，确定性失败立即停止。`NACOS_RETRY_ENABLED=False` 时注册只执行当前
@@ -164,9 +174,8 @@ app.config.update(
 
 ## 6. 运行状态
 
-| 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
-| --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | 否 | 已弃用的无操作兼容项；计划在 2.0 删除。 |
+运行状态没有启用/关闭配置。`get_status()` 始终返回无副作用的本地快照，既不会创建
+SDK Client，也不会访问 Nacos。固定结构见[健康检查与状态](health-check.zh-CN.md)。
 
 ## 7. 生命周期
 
@@ -180,7 +189,9 @@ nacos.register_instance(app)
 
 `register_instance()` 在 Client 创建与网络 I/O 前返回 `None`。注册按 app、按进程
 single-flight；通过 `get_status()` 观察 `target_registered`、`registered`、
-`operation_running` 与 `last_error`。`NACOS_AUTO_DEREGISTER` 是唯一退出注销开关。
+`operation_running` 与 `last_error`。`NACOS_DEREGISTER_ON_EXIT` 是唯一退出注销开关；设为
+`False` 时不会安装远端注销回调，但显式 `deregister_instance()` 仍然可用。退出清理只在解释器
+正常关闭时尽力执行，强制终止无法保证回调运行。
 
 ## 8. 日志
 
@@ -197,7 +208,7 @@ single-flight；通过 `get_status()` 观察 `target_registered`、`registered`�
 | 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
 | --- | --- | --- | --- | --- |
 | `NACOS_LOG_ENABLED` | bool | `False` | 否 | Flask-Nacos 安全日志总开关；无论取值如何，SDK 原生日志始终静默。 |
-| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。非法值遵循 `NACOS_FAIL_FAST`。 |
+| `NACOS_LOG_LEVEL` | str | `"INFO"` | 否 | Flask-Nacos 安全日志级别，取值 `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`。日志启用时非法值抛出 `NacosLoggingError`。 |
 | `NACOS_LOG_CONSOLE_ENABLED` | bool | `True` | 否 | 日志启用时，向控制台输出正常日志和异常日志。 |
 | `NACOS_LOG_FILE_ENABLED` | bool | `True` | 否 | 日志启用时，写入轮转日志文件。 |
 | `NACOS_LOG_PATH` | str | `"./logs"` | 否 | Flask-Nacos 安全日志目录；仅在日志和文件输出均启用时创建。 |
@@ -244,13 +255,12 @@ nacos-sdk-python 的默认日志路径。
 `NACOS_SERVER_ADDR` 使用 `https://` 就认为传输已经安全。生产环境请仅通过受信网络连接，
 或使用能够验证 Nacos 服务端证书的 TLS 代理 / sidecar。
 
-## 9. 行为控制
+## 9. 错误行为
 
-| 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
-| --- | --- | --- | --- | --- |
-| `NACOS_FAIL_FAST` | bool | `False` | 否 | 为 `True` 时 Nacos 错误抛出异常；为 `False` 时记录日志并返回安全默认值。 |
-
-`NACOS_FAIL_FAST` 对各方法的影响详见 [API 参考](api-reference.zh-CN.md)。
+项目不再提供错误模式开关。启用自动注册时，纯本地配置错误会使初始化事务失败；非法显式
+注册会在改变生命周期状态前抛出。生命周期运行期失败留在本地状态中，同步 Client、
+Discovery 与 Config 操作则抛出各自最具体的安全领域异常。详见
+[API 参考](api-reference.zh-CN.md)。
 
 ## 配置中心
 

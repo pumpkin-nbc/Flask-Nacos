@@ -19,8 +19,7 @@ def create_app():
         NACOS_SERVICE_IP="127.0.0.1",
         NACOS_SERVICE_PORT=5000,
         NACOS_AUTO_REGISTER=True,
-        NACOS_AUTO_DEREGISTER=True,
-        NACOS_FAIL_FAST=False,
+        NACOS_DEREGISTER_ON_EXIT=True,
     )
 
     nacos.init_app(app)
