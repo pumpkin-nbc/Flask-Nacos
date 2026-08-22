@@ -41,6 +41,16 @@ def test_user_overrides_defaults():
     assert cfg["NACOS_SERVICE_PORT"] == 9000
 
 
+def test_unknown_configuration_key_is_ignored():
+    app = Flask(__name__)
+    app.config["UNSUPPORTED_TEST_OPTION"] = True
+
+    cfg = load_config(app)
+
+    assert "UNSUPPORTED_TEST_OPTION" not in DEFAULTS
+    assert "UNSUPPORTED_TEST_OPTION" not in cfg
+
+
 def test_removed_log_file_setting_is_ignored():
     app = Flask(__name__)
     app.config["NACOS_LOG_FILE"] = "legacy-logs"
@@ -163,7 +173,6 @@ def test_new_030_config_defaults():
     assert cfg["NACOS_REQUEST_TIMEOUT"] == 5.0
     assert cfg["NACOS_HEALTH_CHECK_ENABLED"] is False
     assert cfg["NACOS_HEALTH_CHECK_PATH"] == "/health/nacos"
-    assert cfg["NACOS_STATUS_ENABLED"] is True
 
 
 def test_new_030_config_overrides():

@@ -183,8 +183,8 @@
 ## 16. 如何关闭 Flask-Nacos 日志
 
 - 现象：希望扩展完全不产生日志。
-- 可能原因：Flask-Nacos 安全日志默认开启（`INFO`，并向你的 handler 传播）；SDK 原生日志
-  已始终静默。
+- 可能原因：Flask-Nacos 安全日志默认关闭；若已开启，扩展 handler 与宿主 handler 的
+  propagation 拓扑可能同时输出。SDK 原生日志始终静默。
 - 排查方法：检查 `NACOS_LOG_ENABLED`。
 - 解决建议：设置 `NACOS_LOG_ENABLED=False`。不再添加或传播 Flask-Nacos console/file
   handler；SDK 原生日志仍保持静默。

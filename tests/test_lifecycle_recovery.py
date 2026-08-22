@@ -95,6 +95,51 @@ def test_structured_codes_and_deterministic_evidence_have_safe_priority():
     assert _classify(NacosValidationError("invalid")).failure_class is FailureClass.DETERMINISTIC
 
 
+@pytest.mark.parametrize("status", [400, 401, 403])
+@pytest.mark.parametrize("field", ["status_code", "code"])
+@pytest.mark.parametrize("chain_field", [None, "__cause__", "__context__"])
+def test_structured_client_errors_are_deterministic_across_supported_locations(
+    status, field, chain_field
+):
+    class StructuredClientError(Exception):
+        pass
+
+    structured = StructuredClientError()
+    setattr(structured, field, status)
+    if chain_field is None:
+        candidate = structured
+    else:
+        candidate = RuntimeError("message content must not be classified")
+        setattr(candidate, chain_field, structured)
+
+    assert _classify(candidate).failure_class is FailureClass.DETERMINISTIC
+
+
+@pytest.mark.parametrize("status", [400, 401, 403])
+@pytest.mark.parametrize("field", ["status_code", "code"])
+def test_structured_response_errors_are_deterministic(status, field):
+    class Response:
+        pass
+
+    class StructuredClientError(Exception):
+        pass
+
+    response = Response()
+    setattr(response, field, status)
+    error = StructuredClientError()
+    error.response = response
+
+    assert _classify(error).failure_class is FailureClass.DETERMINISTIC
+
+
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_deterministic_http_evidence_wins_over_transient_evidence(status):
+    class StructuredClientError(ConnectionError):
+        status_code = status
+
+    assert _classify(StructuredClientError()).failure_class is FailureClass.DETERMINISTIC
+
+
 def test_classifier_handles_cycles_and_hostile_attributes_without_escaping():
     first = RuntimeError("first")
     second = RuntimeError("second")

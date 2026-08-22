@@ -32,6 +32,8 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
+- Removed the no-op `NACOS_STATUS_ENABLED` setting without an alias or
+  migration branch; `get_status()` remains always available and side-effect-free.
 - Removed the configuration-driven error-mode switch without an alias or
   migration branch. Active automatic registration now rejects purely local
   deterministic configuration errors transactionally; explicit registration
@@ -256,11 +258,6 @@ and version labels follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   per-app `RLock`, replacing inherited locks after a process ID change.
 - Prevented deterministic `NacosValidationError` failures from being retried.
 - Made `NACOS_CONFIG_ENABLED=False` skip configuration-center SDK calls.
-
-### Deprecated
-
-- `NACOS_STATUS_ENABLED` is retained as a no-op for 1.x compatibility and is
-  planned for removal in 2.0; `get_status()` remains consistently available.
 
 ### Stable APIs
 

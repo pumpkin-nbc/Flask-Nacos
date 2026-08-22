@@ -23,10 +23,16 @@ def test_gevent_monkey_patched_registration_lifecycle():
 
 
         class FakeClient:
+            def __init__(self):
+                self.register_calls = 0
+                self.deregister_calls = 0
+
             def add_naming_instance(self, *_args, **_kwargs):
+                self.register_calls += 1
                 return True
 
             def remove_naming_instance(self, *_args, **_kwargs):
+                self.deregister_calls += 1
                 return True
 
 
@@ -60,6 +66,18 @@ def test_gevent_monkey_patched_registration_lifecycle():
         assert status["operation_running"] is False
         assert status["last_error"] is None
         assert nacos.deregister_instance(app) is True
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            status = nacos.get_status(app)
+            if not status["registered"] and not status["operation_running"]:
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("gevent-patched deregistration did not converge")
+
+        assert fake_client.register_calls == 1
+        assert fake_client.deregister_calls == 1
         """
     )
 

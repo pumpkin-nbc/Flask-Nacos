@@ -262,11 +262,16 @@ with app.app_context():
 | `NACOS_LOG_ENABLED` | `False` | 日志总开关。 |
 | `NACOS_LOG_CONSOLE_ENABLED` | `True` | 启用后输出彩色控制台日志。 |
 | `NACOS_LOG_FILE_ENABLED` | `True` | 启用后输出轮转文件。 |
+| `NACOS_LOG_PROPAGATE` | `True` | 将记录传播给宿主 handler。 |
 | `NACOS_LOG_PATH` | `./logs` | 日志目录。 |
 | `NACOS_LOG_FILENAME` | `flask-nacos.log` | 日志文件名。 |
 
 控制台 DEBUG 蓝色、INFO 绿色、WARNING 黄色、ERROR 红色、CRITICAL 加粗红色；文件不含
 ANSI 颜色。日志总开关关闭时，即使配置路径也不会创建目录。
+
+为避免重复输出，请只选择一种日志拓扑：关闭扩展 console/file handler 并保持
+`NACOS_LOG_PROPAGATE=True`，由宿主统一处理；或在容器 stdout 场景开启扩展 console、
+关闭 file，并设置 `NACOS_LOG_PROPAGATE=False`。多个进程不要共享同一轮转文件 handler。
 
 ## Fork、Gunicorn 与退出
 

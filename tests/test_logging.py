@@ -28,8 +28,27 @@ def _reset_managed_loggers(tmp_path, monkeypatch):
     snapshot = {}
     for name in MANAGED_NAMES:
         lg = logging.getLogger(name)
-        snapshot[name] = (list(lg.handlers), lg.level, lg.propagate, lg.disabled)
-    root_snapshot = (list(root.handlers), root.level)
+        snapshot[name] = (
+            list(lg.handlers),
+            list(lg.filters),
+            [
+                (handler, handler.level, handler.formatter, list(handler.filters))
+                for handler in lg.handlers
+            ],
+            lg.level,
+            lg.propagate,
+            lg.disabled,
+        )
+    root_snapshot = (
+        list(root.handlers),
+        list(root.filters),
+        [
+            (handler, handler.level, handler.formatter, list(handler.filters))
+            for handler in root.handlers
+        ],
+        root.level,
+        logging.root.manager.disable,
+    )
 
     # Start each test from a clean slate for the managed loggers.
     for name in MANAGED_NAMES:
@@ -41,14 +60,25 @@ def _reset_managed_loggers(tmp_path, monkeypatch):
 
     yield
 
-    for name, (handlers, level, propagate, disabled) in snapshot.items():
+    for name, (handlers, filters, handler_states, level, propagate, disabled) in snapshot.items():
         lg = logging.getLogger(name)
         lg.handlers[:] = handlers
+        lg.filters[:] = filters
+        for handler, handler_level, formatter, handler_filters in handler_states:
+            handler.setLevel(handler_level)
+            handler.setFormatter(formatter)
+            handler.filters[:] = handler_filters
         lg.setLevel(level)
         lg.propagate = propagate
         lg.disabled = disabled
     root.handlers[:] = root_snapshot[0]
-    root.setLevel(root_snapshot[1])
+    root.filters[:] = root_snapshot[1]
+    for handler, handler_level, formatter, handler_filters in root_snapshot[2]:
+        handler.setLevel(handler_level)
+        handler.setFormatter(formatter)
+        handler.filters[:] = handler_filters
+    root.setLevel(root_snapshot[3])
+    logging.disable(root_snapshot[4])
 
 
 def _cfg(**overrides):
@@ -482,6 +512,42 @@ def test_propagate_true_never_enables_sdk_propagation():
     assert _flask_logger().propagate is True
     for name in nlog.SDK_LOGGER_NAMES:
         assert logging.getLogger(name).propagate is False
+
+
+def test_propagate_true_delivers_one_safe_record_to_host_handler():
+    host_buffer = StringIO()
+    host_handler = logging.StreamHandler(host_buffer)
+    root = logging.getLogger()
+    root.addHandler(host_handler)
+    root.setLevel(logging.DEBUG)
+    app, cfg = _cfg(
+        NACOS_LOG_CONSOLE_ENABLED=False,
+        NACOS_LOG_FILE_ENABLED=False,
+        NACOS_LOG_PROPAGATE=True,
+    )
+
+    nlog.configure_logger(app, cfg)
+    _flask_logger().info("host-owned-record")
+
+    assert host_buffer.getvalue().count("host-owned-record") == 1
+
+
+def test_propagate_false_blocks_host_handler():
+    host_buffer = StringIO()
+    host_handler = logging.StreamHandler(host_buffer)
+    root = logging.getLogger()
+    root.addHandler(host_handler)
+    root.setLevel(logging.DEBUG)
+    app, cfg = _cfg(
+        NACOS_LOG_CONSOLE_ENABLED=False,
+        NACOS_LOG_FILE_ENABLED=False,
+        NACOS_LOG_PROPAGATE=False,
+    )
+
+    nlog.configure_logger(app, cfg)
+    _flask_logger().info("wrapper-owned-record")
+
+    assert host_buffer.getvalue() == ""
 
 
 # 21: Flask logger remains independent --------------------------------------

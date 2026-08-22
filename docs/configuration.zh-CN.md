@@ -174,9 +174,8 @@ app.config.update(
 
 ## 6. 运行状态
 
-| 配置项 | 类型 | 默认值 | 是否必填 | 说明 |
-| --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | 否 | 已弃用的无操作兼容项；计划在 2.0 删除。 |
+运行状态没有启用/关闭配置。`get_status()` 始终返回无副作用的本地快照，既不会创建
+SDK Client，也不会访问 Nacos。固定结构见[健康检查与状态](health-check.zh-CN.md)。
 
 ## 7. 生命周期
 

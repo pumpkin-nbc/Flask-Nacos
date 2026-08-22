@@ -303,12 +303,19 @@ logging supports:
 | `NACOS_LOG_ENABLED` | `False` | Master switch. |
 | `NACOS_LOG_CONSOLE_ENABLED` | `True` | Colored console output when enabled. |
 | `NACOS_LOG_FILE_ENABLED` | `True` | Rotating file output when enabled. |
+| `NACOS_LOG_PROPAGATE` | `True` | Propagate records to host handlers. |
 | `NACOS_LOG_PATH` | `./logs` | Log directory. |
 | `NACOS_LOG_FILENAME` | `flask-nacos.log` | Log filename. |
 
 Console records use blue DEBUG, green INFO, yellow WARNING, red ERROR, and bold
 red CRITICAL. File records contain no ANSI colors. When logging is disabled,
 configured paths are not created.
+
+Choose one logging topology to avoid duplicate output: either disable the
+extension console/file handlers and keep `NACOS_LOG_PROPAGATE=True` so the host
+owns all output, or enable the extension console handler with file output off
+and set `NACOS_LOG_PROPAGATE=False` for container stdout. Do not let multiple
+processes share one rotating file handler.
 
 ## Fork, Gunicorn, and shutdown
 

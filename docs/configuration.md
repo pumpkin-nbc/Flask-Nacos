@@ -192,9 +192,9 @@ adds no public retry setting and never waits less than
 
 ## 6. Runtime status
 
-| Key | Type | Default | Required | Description |
-| --- | --- | --- | --- | --- |
-| `NACOS_STATUS_ENABLED` | bool | `True` | no | Deprecated no-op retained for 1.x compatibility; planned for removal in 2.0. |
+Runtime status has no enable/disable configuration. `get_status()` is always a
+side-effect-free local snapshot; it neither creates an SDK Client nor contacts
+Nacos. See [Health and status](health-check.md) for the fixed schemas.
 
 ## 7. Lifecycle
 

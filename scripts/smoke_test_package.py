@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 
 _CHECK_SCRIPT = """
+import os
+import sysconfig
+import compileall
+from importlib import metadata
 from pathlib import Path
 
 import flask_nacos
@@ -22,28 +26,43 @@ from flask import Flask
 from flask_nacos import FlaskNacos
 
 expected = {expected!r}
+source_root = Path({source_root!r}).resolve()
+module_path = Path(flask_nacos.__file__).resolve()
+purelib_path = Path(sysconfig.get_paths()["purelib"]).resolve()
+assert os.path.commonpath([str(module_path), str(purelib_path)]) == str(purelib_path), (
+    "flask_nacos was not imported from this environment's purelib: %s" % module_path
+)
+try:
+    imported_from_source = (
+        os.path.commonpath([str(module_path), str(source_root)]) == str(source_root)
+    )
+except ValueError:
+    imported_from_source = False
+assert not imported_from_source, (
+    "flask_nacos was imported from the source checkout: %s" % module_path
+)
+distribution = metadata.distribution("flask-nacos")
+assert distribution.metadata["Name"] == "flask-nacos"
+assert distribution.version == expected
 assert flask_nacos.__version__ == expected, (
     "version mismatch: %r != %r" % (flask_nacos.__version__, expected)
 )
 assert Path(flask_nacos.__file__).with_name("py.typed").is_file(), "py.typed missing"
+assert compileall.compile_dir(str(module_path.parent), quiet=1), "package compileall failed"
 
 app = Flask(__name__)
-removed_configuration_keys = (
-    "NACOS_AUTO_REGISTER_" + "ON_INIT",
-    "NACOS_REGISTER_" + "ENABLED",
-    "NACOS_FAIL_" + "FAST",
+app.config.update(
+    NACOS_ENABLED=False,
+    NACOS_HEALTH_CHECK_ENABLED=True,
+    UNSUPPORTED_TEST_OPTION=True,
 )
-legacy_config = {{key: False for key in removed_configuration_keys}}
-app.config.update(NACOS_ENABLED=False, **legacy_config)
 nacos = FlaskNacos(app)
 assert "nacos" in app.extensions, "app.extensions['nacos'] missing"
 with app.app_context():
     assert nacos.config["NACOS_AUTO_REGISTER"] is True, (
         "NACOS_AUTO_REGISTER must default to True"
     )
-    assert not set(removed_configuration_keys).intersection(nacos.config), (
-        "removed configuration keys must not enter the extension snapshot"
-    )
+    assert "UNSUPPORTED_TEST_OPTION" not in nacos.config
     assert nacos.client is None, "cache-only client property must remain lazy"
 
 assert nacos.register_instance(app) is None, "registration command must return None"
@@ -66,7 +85,16 @@ assert status["last_heartbeat_success_at"] is None
 assert status["last_heartbeat_failure_at"] is None
 assert status["heartbeat_error_type"] is None
 
-print("[smoke] import + typing marker + init + registration API OK (version=%s)" % expected)
+health = app.test_client().get("/health/nacos")
+assert health.status_code == 200
+health_data = health.get_json()
+assert set(health_data) == {{
+    "status", "enabled", "client_created", "target_registered",
+    "registered", "operation_running", "last_error",
+}}
+assert health_data["status"] == "disabled"
+
+print("[smoke] installed import + compile + init + status/health OK (version=%s)" % expected)
 """
 
 
@@ -137,7 +165,15 @@ def _test_artifact(kind: str, artifact: str, expected: str, parent: Path) -> boo
         )
         return False
 
-    check = subprocess.run([str(py), "-c", _CHECK_SCRIPT.format(expected=expected)], check=False)
+    check = subprocess.run(
+        [
+            str(py),
+            "-c",
+            _CHECK_SCRIPT.format(expected=expected, source_root=str(ROOT)),
+        ],
+        check=False,
+        cwd=str(parent),
+    )
     if check.returncode != 0:
         print(
             f"[smoke_test_package] FAILED - {kind} import/init check failed",
