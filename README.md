@@ -100,8 +100,8 @@ block an explicit `register_instance(app)` command.
 ## Configuration quick reference
 
 All settings are read from Flask `app.config`. This table matches the current
-code defaults; see the [configuration reference](docs/configuration.md) for
-validation rules and complete examples.
+code defaults; see the [configuration reference](https://github.com/pumpkin-nbc/Flask-Nacos/blob/master/docs/configuration.md)
+for validation rules and complete examples.
 
 | Setting | Default | Description |
 | --- | --- | --- |
